@@ -62,6 +62,7 @@ import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import android.util.Base64
 import java.security.KeyStore
+import java.util.UUID
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
@@ -248,74 +249,189 @@ private object SecureLoginPasswordStore {
     }
 }
 
-private fun firstNonBlank(vararg values: String?): String =
-    values
-        .asSequence()
-        .map { it.orEmpty().trim() }
-        .firstOrNull { it.isNotBlank() }
-        .orEmpty()
+private object KmiDeviceIdentity {
 
-private suspend fun resolveLoginUserUid(
-    appCtx: Context,
-    sp: SharedPreferences,
-    username: String
-): String {
-    val userSp = appCtx.getSharedPreferences("kmi_user", Context.MODE_PRIVATE)
-    val cleanUsername = username.trim()
+    private const val PREFS_NAME =
+        "kmi_device_identity"
 
-    val db = FirebaseFirestore.getInstance()
+    private const val KEY_DEVICE_ID =
+        "device_id"
 
-    if (cleanUsername.isNotBlank()) {
-        val usernameFields = listOf(
-            "username",
-            "userName",
-            "loginUsername",
-            "login_name",
-            "user_login",
-            "email",
-            "emailLower"
+    fun getOrCreate(
+        context: Context
+    ): String {
+
+        val prefs =
+            context.getSharedPreferences(
+                PREFS_NAME,
+                Context.MODE_PRIVATE
+            )
+
+        val existing =
+            prefs.getString(
+                KEY_DEVICE_ID,
+                null
+            )
+                ?.trim()
+                ?.takeIf {
+                    it.isNotBlank()
+                }
+
+        if (existing != null) {
+            return existing
+        }
+
+        val newDeviceId =
+            UUID.randomUUID()
+                .toString()
+
+        prefs.edit()
+            .putString(
+                KEY_DEVICE_ID,
+                newDeviceId
+            )
+            .commit()
+
+        return newDeviceId
+    }
+}
+
+private enum class DeviceBindingResult {
+    ALLOWED,
+    TRANSFER_REQUIRED
+}
+
+private suspend fun checkCurrentDevice(
+    context: Context,
+    uid: String
+): DeviceBindingResult {
+
+    if (uid.isBlank()) {
+        return DeviceBindingResult.ALLOWED
+    }
+
+    val deviceId =
+        KmiDeviceIdentity.getOrCreate(
+            context
         )
 
-        for (field in usernameFields) {
-            val snap = db.collection("users")
-                .whereEqualTo(
-                    field,
-                    if (field == "emailLower") cleanUsername.lowercase() else cleanUsername
-                )
-                .limit(1)
-                .get()
-                .await()
+    val userRef =
+        FirebaseFirestore
+            .getInstance()
+            .collection("users")
+            .document(uid)
 
-            val doc = snap.documents.firstOrNull()
-            if (doc != null) {
-                return doc.id
-            }
-        }
+    val snapshot =
+        userRef
+            .get()
+            .await()
+
+    val activeDeviceId =
+        snapshot
+            .getString("activeDeviceId")
+            .orEmpty()
+            .trim()
+
+    /*
+     * אין עדיין מכשיר רשום:
+     * זה המכשיר הראשון ולכן רושמים אותו.
+     */
+    if (activeDeviceId.isBlank()) {
+
+        userRef.set(
+            mapOf(
+                "activeDeviceId" to deviceId,
+                "activeDeviceUpdatedAt" to
+                        com.google.firebase.firestore.FieldValue.serverTimestamp()
+            ),
+            com.google.firebase.firestore.SetOptions.merge()
+        ).await()
+
+        return DeviceBindingResult.ALLOWED
     }
 
-    val localUid = firstNonBlank(
-        sp.getString("uid", null),
-        sp.getString("profile_completed_uid", null),
-        sp.getString("user_uid", null),
-        sp.getString("firebase_uid", null),
-        sp.getString("auth_uid", null),
-        userSp.getString("uid", null),
-        userSp.getString("profile_completed_uid", null),
-        userSp.getString("user_uid", null),
-        userSp.getString("firebase_uid", null),
-        userSp.getString("auth_uid", null)
-    )
-
-    if (localUid.isNotBlank()) {
-        return localUid
+    /*
+     * אותו מכשיר שכבר רשום לחשבון.
+     */
+    if (activeDeviceId == deviceId) {
+        return DeviceBindingResult.ALLOWED
     }
 
-    val authUser = FirebaseAuth.getInstance().currentUser
-    return authUser
-        ?.takeIf { !it.isAnonymous }
-        ?.uid
-        .orEmpty()
-        .trim()
+    /*
+     * קיים מכשיר אחר.
+     * לא משנים עדיין שום דבר ב־Firestore.
+     */
+    return DeviceBindingResult.TRANSFER_REQUIRED
+}
+
+internal suspend fun isCurrentDeviceStillActive(
+    context: Context,
+    uid: String
+): Boolean {
+
+    if (uid.isBlank()) {
+        return false
+    }
+
+    val currentDeviceId =
+        KmiDeviceIdentity.getOrCreate(
+            context
+        )
+
+    val snapshot =
+        FirebaseFirestore
+            .getInstance()
+            .collection("users")
+            .document(uid)
+            .get()
+            .await()
+
+    val activeDeviceId =
+        snapshot
+            .getString("activeDeviceId")
+            .orEmpty()
+            .trim()
+
+    /*
+     * אם עדיין אין activeDeviceId בשרת,
+     * לא חוסמים משתמש קיים.
+     *
+     * מצב זה חשוב גם למשתמשים קיימים
+     * שנרשמו לפני הוספת מנגנון המכשירים.
+     */
+    if (activeDeviceId.isBlank()) {
+        return true
+    }
+
+    return activeDeviceId == currentDeviceId
+}
+
+private suspend fun transferCurrentDevice(
+    context: Context,
+    uid: String
+) {
+    if (uid.isBlank()) {
+        return
+    }
+
+    val deviceId =
+        KmiDeviceIdentity.getOrCreate(
+            context
+        )
+
+    FirebaseFirestore
+        .getInstance()
+        .collection("users")
+        .document(uid)
+        .set(
+            mapOf(
+                "activeDeviceId" to deviceId,
+                "activeDeviceUpdatedAt" to
+                        com.google.firebase.firestore.FieldValue.serverTimestamp()
+            ),
+            com.google.firebase.firestore.SetOptions.merge()
+        )
+        .await()
 }
 
 @Composable
@@ -468,8 +584,29 @@ fun ExistingUserTraineeScreen(
     val fieldHeight = 52.dp
 
     // —— ניווט חד־פעמי לאחר התחברות מוצלחת ——
-    var loginSucceeded by rememberSaveable { mutableStateOf(false) }
-    var navigated by rememberSaveable { mutableStateOf(false) }
+    var loginSucceeded by rememberSaveable {
+        mutableStateOf(false)
+    }
+
+    var navigated by rememberSaveable {
+        mutableStateOf(false)
+    }
+
+    var showDeviceTransferDialog by rememberSaveable {
+        mutableStateOf(false)
+    }
+
+    var pendingTransferUid by rememberSaveable {
+        mutableStateOf("")
+    }
+
+    var deviceTransferInProgress by rememberSaveable {
+        mutableStateOf(false)
+    }
+
+    var deviceTransferError by rememberSaveable {
+        mutableStateOf(false)
+    }
 
     LaunchedEffect(loginSucceeded) {
         if (loginSucceeded && !navigated) {
@@ -489,6 +626,221 @@ fun ExistingUserTraineeScreen(
             }
         )
         return
+    }
+
+    if (showDeviceTransferDialog) {
+
+        AlertDialog(
+            onDismissRequest = {
+                if (!deviceTransferInProgress) {
+
+                    FirebaseAuth
+                        .getInstance()
+                        .signOut()
+
+                    sp.edit {
+                        putBoolean(
+                            "is_logged_in",
+                            false
+                        )
+                    }
+
+                    appCtx
+                        .getSharedPreferences(
+                            "kmi_user",
+                            Context.MODE_PRIVATE
+                        )
+                        .edit {
+                            putBoolean(
+                                "is_logged_in",
+                                false
+                            )
+                        }
+
+                    pendingTransferUid = ""
+                    deviceTransferError = false
+                    showDeviceTransferDialog = false
+                }
+            },
+            title = {
+                Text(
+                    text = tr(
+                        "החשבון פעיל במכשיר אחר",
+                        "Account active on another device"
+                    ),
+                    style =
+                        KmiTypography
+                            .sectionTitle
+                            .copy(
+                                fontWeight =
+                                    FontWeight.ExtraBold
+                            )
+                )
+            },
+            text = {
+                Column(
+                    verticalArrangement =
+                        Arrangement.spacedBy(10.dp)
+                ) {
+
+                    Text(
+                        text = tr(
+                            "ניתן להשתמש בחשבון במכשיר אחד בלבד. האם להעביר את החשבון למכשיר הזה?",
+                            "This account can be used on one device only. Transfer the account to this device?"
+                        ),
+                        style = KmiTypography.body
+                    )
+
+                    if (deviceTransferError) {
+                        Text(
+                            text = tr(
+                                "לא הצלחנו להעביר את החשבון. בדוק את החיבור לאינטרנט ונסה שוב.",
+                                "We couldn't transfer the account. Check your internet connection and try again."
+                            ),
+                            color =
+                                MaterialTheme
+                                    .colorScheme
+                                    .error,
+                            style =
+                                KmiTypography
+                                    .caption
+                                    .copy(
+                                        fontWeight =
+                                            FontWeight.Bold
+                                    )
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+
+                Button(
+                    enabled =
+                        !deviceTransferInProgress,
+                    onClick = {
+
+                        if (
+                            pendingTransferUid
+                                .isBlank()
+                        ) {
+                            return@Button
+                        }
+
+                        deviceTransferInProgress =
+                            true
+
+                        deviceTransferError =
+                            false
+
+                        scope.launch {
+
+                            runCatching {
+                                transferCurrentDevice(
+                                    context = appCtx,
+                                    uid = pendingTransferUid
+                                )
+                            }.onSuccess {
+
+                                deviceTransferInProgress =
+                                    false
+
+                                showDeviceTransferDialog =
+                                    false
+
+                                pendingTransferUid =
+                                    ""
+
+                                loginSucceeded =
+                                    true
+
+                            }.onFailure {
+
+                                deviceTransferInProgress =
+                                    false
+
+                                deviceTransferError =
+                                    true
+                            }
+                        }
+                    }
+                ) {
+
+                    Text(
+                        text =
+                            if (
+                                deviceTransferInProgress
+                            ) {
+                                tr(
+                                    "מעביר...",
+                                    "Transferring..."
+                                )
+                            } else {
+                                tr(
+                                    "העבר למכשיר הזה",
+                                    "Transfer to this device"
+                                )
+                            },
+                        style =
+                            KmiTypography
+                                .action
+                                .copy(
+                                    fontWeight =
+                                        FontWeight.Bold
+                                )
+                    )
+                }
+            },
+            dismissButton = {
+
+                TextButton(
+                    enabled =
+                        !deviceTransferInProgress,
+                    onClick = {
+
+                        FirebaseAuth
+                            .getInstance()
+                            .signOut()
+
+                        sp.edit {
+                            putBoolean(
+                                "is_logged_in",
+                                false
+                            )
+                        }
+
+                        appCtx
+                            .getSharedPreferences(
+                                "kmi_user",
+                                Context.MODE_PRIVATE
+                            )
+                            .edit {
+                                putBoolean(
+                                    "is_logged_in",
+                                    false
+                                )
+                            }
+
+                        pendingTransferUid = ""
+                        deviceTransferError = false
+                        showDeviceTransferDialog = false
+                    }
+                ) {
+                    Text(
+                        text = tr(
+                            "ביטול",
+                            "Cancel"
+                        ),
+                        style =
+                            KmiTypography.action.copy(
+                                fontWeight =
+                                    FontWeight.Bold
+                            )
+                    )
+                }
+            },
+            shape =
+                RoundedCornerShape(24.dp)
+        )
     }
 
     Scaffold(
@@ -984,8 +1336,18 @@ fun ExistingUserTraineeScreen(
                                     return@launch
                                 }
 
-                                var resolvedLoginUid =
+                                val resolvedLoginUid =
                                     firebaseUser.uid
+
+                                val deviceBindingResult =
+                                    runCatching {
+                                        checkCurrentDevice(
+                                            context = appCtx,
+                                            uid = resolvedLoginUid
+                                        )
+                                    }.getOrDefault(
+                                        DeviceBindingResult.ALLOWED
+                                    )
 
                                 var resolvedCoachRole: String
                                 var resolvedCoachActive: Boolean
@@ -1139,14 +1501,6 @@ fun ExistingUserTraineeScreen(
                                 }
 
                                 val role = if (isCoach) "coach" else "trainee"
-
-                                if (resolvedLoginUid.isBlank()) {
-                                    resolvedLoginUid = resolveLoginUserUid(
-                                        appCtx = appCtx,
-                                        sp = sp,
-                                        username = username
-                                    )
-                                }
 
                                 sp.edit {
                                     putString(
@@ -1305,7 +1659,22 @@ fun ExistingUserTraineeScreen(
 
                                 kmiPrefs.username = username
 
-                                loginSucceeded = true
+                                if (
+                                    deviceBindingResult ==
+                                    DeviceBindingResult.TRANSFER_REQUIRED
+                                ) {
+                                    pendingTransferUid =
+                                        resolvedLoginUid
+
+                                    deviceTransferError =
+                                        false
+
+                                    showDeviceTransferDialog =
+                                        true
+                                } else {
+                                    loginSucceeded =
+                                        true
+                                }
                             }
                         },
                         modifier = Modifier
@@ -1593,12 +1962,14 @@ private fun RecoveryScreen(
                         shape =
                             RoundedCornerShape(18.dp),
                         color =
-                            MaterialTheme
-                                .colorScheme
-                                .surfaceVariant
-                                .copy(alpha = 0.70f),
+                            Color.White.copy(alpha = 0.88f),
+                        border =
+                            BorderStroke(
+                                width = 1.dp,
+                                color = Color.White.copy(alpha = 0.42f)
+                            ),
                         tonalElevation = 0.dp,
-                        shadowElevation = 0.dp
+                        shadowElevation = 2.dp
                     ) {
 
                         Row(
@@ -1617,16 +1988,14 @@ private fun RecoveryScreen(
                                     RoundedCornerShape(14.dp),
                                 color =
                                     if (!isUsernameRecovery) {
-                                        MaterialTheme
-                                            .colorScheme
-                                            .surface
+                                        Color.White
                                     } else {
-                                        Color.Transparent
+                                        Color.White.copy(alpha = 0.24f)
                                     },
                                 tonalElevation = 0.dp,
                                 shadowElevation =
                                     if (!isUsernameRecovery) {
-                                        1.dp
+                                        2.dp
                                     } else {
                                         0.dp
                                     },
@@ -1681,16 +2050,14 @@ private fun RecoveryScreen(
                                     RoundedCornerShape(14.dp),
                                 color =
                                     if (isUsernameRecovery) {
-                                        MaterialTheme
-                                            .colorScheme
-                                            .surface
+                                        Color.White
                                     } else {
-                                        Color.Transparent
+                                        Color.White.copy(alpha = 0.24f)
                                     },
                                 tonalElevation = 0.dp,
                                 shadowElevation =
                                     if (isUsernameRecovery) {
-                                        1.dp
+                                        2.dp
                                     } else {
                                         0.dp
                                     },
@@ -1759,7 +2126,11 @@ private fun RecoveryScreen(
                                     "Email address"
                                 ),
                                 style =
-                                    KmiTypography.caption
+                                    KmiTypography.caption,
+                                color =
+                                    MaterialTheme
+                                        .colorScheme
+                                        .onSurface
                             )
                         },
                         modifier =
@@ -1787,22 +2158,53 @@ private fun RecoveryScreen(
                             OutlinedTextFieldDefaults
                                 .colors(
                                     focusedContainerColor =
-                                        MaterialTheme
-                                            .colorScheme
-                                            .surface,
+                                        Color.White.copy(alpha = 0.96f),
                                     unfocusedContainerColor =
+                                        Color.White.copy(alpha = 0.92f),
+                                    disabledContainerColor =
+                                        Color.White.copy(alpha = 0.92f),
+                                    focusedTextColor =
                                         MaterialTheme
                                             .colorScheme
-                                            .surface,
+                                            .onSurface,
+                                    unfocusedTextColor =
+                                        MaterialTheme
+                                            .colorScheme
+                                            .onSurface,
+                                    disabledTextColor =
+                                        MaterialTheme
+                                            .colorScheme
+                                            .onSurface
+                                            .copy(alpha = 0.82f),
                                     focusedBorderColor =
                                         MaterialTheme
                                             .colorScheme
-                                            .primary,
+                                            .primary
+                                            .copy(alpha = 0.70f),
                                     unfocusedBorderColor =
                                         MaterialTheme
                                             .colorScheme
-                                            .outlineVariant,
+                                            .outline
+                                            .copy(alpha = 0.34f),
+                                    disabledBorderColor =
+                                        MaterialTheme
+                                            .colorScheme
+                                            .outline
+                                            .copy(alpha = 0.28f),
                                     focusedLabelColor =
+                                        MaterialTheme
+                                            .colorScheme
+                                            .onSurface,
+                                    unfocusedLabelColor =
+                                        MaterialTheme
+                                            .colorScheme
+                                            .onSurface,
+                                    disabledLabelColor =
+                                        MaterialTheme
+                                            .colorScheme
+                                            .onSurface
+                                            .copy(alpha = 0.88f),
+                                    cursorColor =
                                         MaterialTheme
                                             .colorScheme
                                             .primary
@@ -2041,7 +2443,17 @@ private fun RecoveryScreen(
                                     contentColor =
                                         MaterialTheme
                                             .colorScheme
+                                            .onPrimary,
+                                    disabledContainerColor =
+                                        MaterialTheme
+                                            .colorScheme
+                                            .primary
+                                            .copy(alpha = 0.90f),
+                                    disabledContentColor =
+                                        MaterialTheme
+                                            .colorScheme
                                             .onPrimary
+                                            .copy(alpha = 0.92f)
                                 ),
                         elevation =
                             ButtonDefaults

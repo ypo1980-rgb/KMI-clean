@@ -880,6 +880,39 @@ private suspend fun completeGoogleLoginAfterFirebaseAuth(
     }
 }
 
+private fun canReturningUserEnterLocally(
+    userSp: SharedPreferences,
+    legacySp: SharedPreferences
+): Boolean {
+
+    fun readString(key: String): String {
+        return userSp
+            .getString(key, "")
+            ?.takeIf { it.isNotBlank() }
+            ?: legacySp
+                .getString(key, "")
+                ?.takeIf { it.isNotBlank() }
+            ?: ""
+    }
+
+    val email =
+        readString("email")
+            .ifBlank {
+                readString("user_email")
+            }
+            .trim()
+
+    val phone =
+        readString("phone")
+            .ifBlank {
+                readString("phone_number")
+            }
+            .filter { it.isDigit() }
+
+    return email.isNotBlank() &&
+            phone.length >= 9
+}
+
 @Composable
 fun IntroScreen(
     onContinue: () -> Unit,
@@ -931,44 +964,87 @@ fun IntroScreen(
     }
 
     /*
-     * בדיקה אוטומטית של משתמש שכבר התחבר בעבר.
-     * משתמש לא מחובר או אנונימי נשאר בזרימת הכניסה הקיימת.
+     * משתמש שכבר התחבר בעבר:
+     *
+     * אם Firebase session עדיין תקף ויש בפרופיל המקומי
+     * אימייל + טלפון תקינים, אין צורך לבצע שוב בדיקת
+     * UID / Firestore / completeness לפני הכניסה.
+     *
+     * רק אם המידע המקומי אינו מספיק מבצעים fallback
+     * לבדיקה הקיימת מול UserProfileCompletion.
      */
     LaunchedEffect(Unit) {
+
         val existingFirebaseUser =
-            FirebaseAuth.getInstance().currentUser
-                ?.takeIf { !it.isAnonymous }
+            FirebaseAuth
+                .getInstance()
+                .currentUser
+                ?.takeIf {
+                    !it.isAnonymous
+                }
 
         if (existingFirebaseUser == null) {
+
             canContinueWithoutLogin = false
             isProfileStatusLoading = false
-        } else {
-            isProfileStatusLoading = true
 
-            val profileStatus = runCatching {
-                UserProfileCompletion
-                    .checkAndPersistProfileStatus(ctx)
-            }.getOrNull()
+            return@LaunchedEffect
+        }
 
-            canContinueWithoutLogin =
-                profileStatus?.isComplete == true
+        isProfileStatusLoading = true
 
+        val canEnterLocally =
+            canReturningUserEnterLocally(
+                userSp = userSp,
+                legacySp = legacySp
+            )
+
+        if (canEnterLocally) {
+
+            canContinueWithoutLogin = true
             isProfileStatusLoading = false
 
             GoogleAuthManager.logUiStage(
                 context = ctx,
-                stage = "intro_existing_user_profile_checked",
+                stage = "intro_existing_user_local_profile_ok",
                 message =
                     "uid=${existingFirebaseUser.uid}, " +
-                            "canContinue=$canContinueWithoutLogin, " +
-                            "isComplete=${profileStatus?.isComplete}, " +
-                            "missingFields=" +
-                            profileStatus
-                                ?.missingFields
-                                .orEmpty()
-                                .joinToString("|")
+                            "canContinue=true"
             )
+
+            return@LaunchedEffect
         }
+
+        /*
+         * Fallback בלבד:
+         * מי שאין אצלו מספיק מידע מקומי עדיין יכול
+         * להיבדק בדרך הישנה ולא ננעל מחוץ לאפליקציה.
+         */
+        val profileStatus =
+            runCatching {
+                UserProfileCompletion
+                    .checkAndPersistProfileStatus(ctx)
+            }.getOrNull()
+
+        canContinueWithoutLogin =
+            profileStatus?.isComplete == true
+
+        isProfileStatusLoading = false
+
+        GoogleAuthManager.logUiStage(
+            context = ctx,
+            stage =
+                "intro_existing_user_remote_profile_checked",
+            message =
+                "uid=${existingFirebaseUser.uid}, " +
+                        "canContinue=$canContinueWithoutLogin, " +
+                        "isComplete=${profileStatus?.isComplete}, " +
+                        "missingFields=" +
+                        profileStatus
+                            ?.missingFields
+                            .orEmpty()
+                            .joinToString("|")
+        )
     }
 
     var fetchedName by remember { mutableStateOf<String?>(null) }

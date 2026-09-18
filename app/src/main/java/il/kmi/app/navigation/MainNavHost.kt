@@ -62,6 +62,7 @@ import il.kmi.app.screens.InitialLanguageScreen
 import il.kmi.app.screens.drawer.DrawerVoiceActionsBridge
 import com.google.firebase.auth.FirebaseAuth
 import il.kmi.app.screens.registration.RegistrationFormScreen
+import il.kmi.app.screens.registration.isCurrentDeviceStillActive
 import il.kmi.app.analytics.KmiUsageTracker
 import il.kmi.app.onboarding.OnboardingPreferences
 import il.kmi.app.onboarding.onboardingNavGraph
@@ -77,6 +78,7 @@ import il.kmi.app.voicecommands.VoiceCommandsBridge
 import il.kmi.app.subscription.AccessModeResolver
 import il.kmi.app.subscription.KmiAccess
 import il.kmi.app.subscription.LockedContentPolicy
+import kotlinx.coroutines.withTimeoutOrNull
 
 //==========================================================================
 
@@ -1325,62 +1327,204 @@ fun MainNavHost(
 
                         if (localProfileCompleted) {
 
-                            if (consumePendingDailyReminderAndNavigate("splash_local_profile_completed")) {
-                                Log.d(TAG_NAV, "stage=splash_navigate_daily_reminder_from_local_profile")
-                                return@KmiStartupLoadingScreen
-                            }
+                            splashScope.launch {
 
-                            if (consumePendingForumPushAndNavigate("splash_local_profile_completed")) {
-                                return@KmiStartupLoadingScreen
-                            }
+                                val currentDeviceStillActive =
+                                    runCatching {
+                                        withTimeoutOrNull(
+                                            2500L
+                                        ) {
+                                            isCurrentDeviceStillActive(
+                                                context = ctx,
+                                                uid = uid
+                                            )
+                                        } ?: true
+                                    }.getOrDefault(
+                                        true
+                                    )
 
-                            /*
-                             * הדרכה אוטומטית בפעם הראשונה בלבד.
-                             */
-                            if (!OnboardingPreferences.hasCompleted(ctx)) {
+                                /*
+                                 * כשל רשת או Firestore לא נועל משתמש.
+                                 * רק תשובה מפורשת שהמכשיר כבר אינו פעיל
+                                 * מוציאה את המשתמש מהחשבון.
+                                 */
+                                if (!currentDeviceStillActive) {
 
-                                nav.navigate(
-                                    OnboardingRoute.build(
-                                        manual = false
+                                    Log.d(
+                                        TAG_NAV,
+                                        "stage=splash_device_check, decision=sign_out, uid=$uid"
+                                    )
+
+                                    FirebaseAuth
+                                        .getInstance()
+                                        .signOut()
+
+                                    sp.edit()
+                                        .putBoolean(
+                                            "is_logged_in",
+                                            false
+                                        )
+                                        .apply()
+
+                                    userPrefsForEntry.edit()
+                                        .putBoolean(
+                                            "is_logged_in",
+                                            false
+                                        )
+                                        .apply()
+
+                                    nav.openIntroCleanFrom(
+                                        Route.Splash.route
+                                    )
+
+                                    return@launch
+                                }
+
+                                Log.d(
+                                    TAG_NAV,
+                                    "stage=splash_device_check, decision=continue, uid=$uid"
+                                )
+
+                                if (
+                                    consumePendingDailyReminderAndNavigate(
+                                        "splash_local_profile_completed"
                                     )
                                 ) {
-                                    popUpTo(Route.Splash.route) {
+                                    Log.d(
+                                        TAG_NAV,
+                                        "stage=splash_navigate_daily_reminder_from_local_profile"
+                                    )
+
+                                    return@launch
+                                }
+
+                                if (
+                                    consumePendingForumPushAndNavigate(
+                                        "splash_local_profile_completed"
+                                    )
+                                ) {
+                                    return@launch
+                                }
+
+                                /*
+                                 * הדרכה אוטומטית בפעם הראשונה בלבד.
+                                 */
+                                if (!OnboardingPreferences.hasCompleted(ctx)) {
+
+                                    nav.navigate(
+                                        OnboardingRoute.build(
+                                            manual = false
+                                        )
+                                    ) {
+                                        popUpTo(
+                                            Route.Splash.route
+                                        ) {
+                                            inclusive = true
+                                        }
+
+                                        launchSingleTop = true
+                                        restoreState = false
+                                    }
+
+                                    return@launch
+                                }
+
+                                Log.d(
+                                    TAG_NAV,
+                                    "stage=splash_navigation_decision, decision=home, source=local_profile_completed, ${authStateForLog()}"
+                                )
+
+                                nav.navigate(
+                                    Route.Home.route
+                                ) {
+                                    popUpTo(
+                                        Route.Splash.route
+                                    ) {
                                         inclusive = true
                                     }
 
                                     launchSingleTop = true
                                     restoreState = false
                                 }
-
-                                return@KmiStartupLoadingScreen
                             }
 
-                            Log.d(
-                                TAG_NAV,
-                                "stage=splash_navigation_decision, decision=home, source=local_profile_completed, ${authStateForLog()}"
-                            )
-
-                            nav.navigate(Route.Home.route) {
-                                popUpTo(Route.Splash.route) {
-                                    inclusive = true
-                                }
-
-                                launchSingleTop = true
-                                restoreState = false
-                            }
-
+                            /*
+                             * הניווט ממשיך בתוך splashScope,
+                             * ולכן אסור להמשיך לבדיקת הפרופיל המרוחקת.
+                             */
                             return@KmiStartupLoadingScreen
                         }
 
                         splashScope.launch {
+
+                            val currentDeviceStillActive =
+                                runCatching {
+                                    withTimeoutOrNull(
+                                        2500L
+                                    ) {
+                                        isCurrentDeviceStillActive(
+                                            context = ctx,
+                                            uid = uid
+                                        )
+                                    } ?: true
+                                }.getOrDefault(
+                                    true
+                                )
+
+                            /*
+                             * גם במסלול של פרופיל מרוחק:
+                             * כשל רשת אינו נועל משתמש.
+                             * רק זיהוי מפורש של מכשיר אחר
+                             * מוציא את המשתמש מהחשבון.
+                             */
+                            if (!currentDeviceStillActive) {
+
+                                Log.d(
+                                    TAG_NAV,
+                                    "stage=splash_remote_device_check, decision=sign_out, uid=$uid"
+                                )
+
+                                FirebaseAuth
+                                    .getInstance()
+                                    .signOut()
+
+                                sp.edit()
+                                    .putBoolean(
+                                        "is_logged_in",
+                                        false
+                                    )
+                                    .apply()
+
+                                userPrefsForEntry.edit()
+                                    .putBoolean(
+                                        "is_logged_in",
+                                        false
+                                    )
+                                    .apply()
+
+                                nav.openIntroCleanFrom(
+                                    Route.Splash.route
+                                )
+
+                                return@launch
+                            }
+
+                            Log.d(
+                                TAG_NAV,
+                                "stage=splash_remote_device_check, decision=continue, uid=$uid"
+                            )
+
                             Log.d(
                                 TAG_NAV,
                                 "stage=splash_remote_profile_check_start, uid=$uid, ${authStateForLog()}"
                             )
 
-                            val remoteCompletedResult = runCatching {
-                                isProfileCompletedRemotely(uid)
-                            }
+                            val remoteCompletedResult =
+                                runCatching {
+                                    isProfileCompletedRemotely(
+                                        uid
+                                    )
+                                }
 
                             remoteCompletedResult.onFailure { error ->
                                 Log.e(

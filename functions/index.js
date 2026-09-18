@@ -125,15 +125,17 @@ exports.recoverUsername = functions.https.onCall(async (data, context) => {
      * תמיכה בכל שמות השדה שכבר משמשים
      * במסך ההתחברות של האפליקציה.
      */
-    const username =
-      String(
-        user.username ||
-        user.userName ||
-        user.loginUsername ||
-        user.login_name ||
-        user.user_login ||
-        ""
-      ).trim();
+   const username =
+     String(
+       user.username ||
+       user.userName ||
+       user.loginUsername ||
+       user.login_name ||
+       user.user_login ||
+       user.email ||
+       user.emailLower ||
+       ""
+     ).trim();
 
     if (!username) {
       console.log(
