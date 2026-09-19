@@ -18,6 +18,8 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.core.content.edit
 import androidx.compose.material.icons.filled.SportsMma
 import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material.icons.filled.Replay
+import androidx.compose.material.icons.filled.Summarize
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -393,6 +395,7 @@ fun FloatingQuickMenu(
     includePractice: Boolean = true,
     includeAllLists: Boolean = true,
     includeSummary: Boolean = true,
+    includeReset: Boolean = false,
     accentColorOverride: Color? = null,
     hasFullAccess: Boolean = true,
     onLockedItemClick: () -> Unit = {},
@@ -400,6 +403,7 @@ fun FloatingQuickMenu(
     onAllLists: () -> Unit,
     onPractice: () -> Unit = {},
     onSummary: () -> Unit,
+    onReset: () -> Unit = {},
     onVoice: () -> Unit,
     @Suppress("UNUSED_PARAMETER")
     onPdf: () -> Unit
@@ -540,45 +544,73 @@ fun FloatingQuickMenu(
         includeAllLists,
         includePractice,
         includeSummary,
+        includeReset,
         onWeakPoints,
         onAllLists,
         onPractice,
         onSummary,
+        onReset,
         onVoice
     ) {
         buildList {
-        add(
-            QuickMenuItemUi(
-                title = tr("נקודות תורפה", "Weak Points"),
-                icon = Icons.Filled.Warning,
-                action = onWeakPoints,
-                isLocked = isMenuLocked
-            )
-        )
 
-        if (includeAllLists) {
-            add(
-                QuickMenuItemUi(
-                    title = tr("כל הרשימות", "All Lists"),
-                    icon =
-                        Icons.AutoMirrored.Filled
-                            .FormatListBulleted,
-                    action = onAllLists,
-                    isLocked = isMenuLocked
+            if (includeReset) {
+                add(
+                    QuickMenuItemUi(
+                        title = tr(
+                            "איפוס",
+                            "Reset"
+                        ),
+                        icon = Icons.Filled.Replay,
+                        action = onReset,
+                        isLocked = false
+                    )
                 )
-            )
-        }
+            }
 
-        if (includePractice) {
-            add(
-                QuickMenuItemUi(
-                    title = tr("תרגול", "Practice"),
-                    icon = Icons.Filled.SportsMma,
-                    action = onPractice,
-                    isLocked = isMenuLocked
+            if (includeAllLists) {
+                add(
+                    QuickMenuItemUi(
+                        title = tr(
+                            "רשימות",
+                            "Lists"
+                        ),
+                        icon =
+                            Icons.AutoMirrored.Filled
+                                .FormatListBulleted,
+                        action = onAllLists,
+                        isLocked = isMenuLocked
+                    )
                 )
-            )
-        }
+            }
+
+            if (includePractice) {
+                add(
+                    QuickMenuItemUi(
+                        title = tr(
+                            "תרגול",
+                            "Practice"
+                        ),
+                        icon = Icons.Filled.SportsMma,
+                        action = onPractice,
+                        isLocked = isMenuLocked
+                    )
+                )
+            }
+
+            if (includeSummary) {
+                add(
+                    QuickMenuItemUi(
+                        title = tr(
+                            "מסך סיכום",
+                            "Summary"
+                        ),
+                        icon = Icons.Filled.Summarize,
+                        action = onSummary,
+                        isLocked = isMenuLocked
+                    )
+                )
+            }
         }
     }
 
@@ -930,6 +962,10 @@ private fun SideRailQuickMenuPanel(
                         !isEnglish &&
                                 item.title == "כל הרשימות" ->
                             "רשימות"
+
+                        !isEnglish &&
+                                item.title == "מסך סיכום" ->
+                            "מסך\nסיכום"
 
                         isEnglish &&
                                 item.title == "Weak Points" ->

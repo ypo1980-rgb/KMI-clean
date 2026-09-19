@@ -119,6 +119,7 @@ import il.kmi.app.ui.pdf.KmiPdfFooter
 import il.kmi.app.ui.pdf.KmiPdfHeader
 import il.kmi.app.ui.scaledIconSize
 import il.yuval.ui.theme.kmiScreenBackgroundBrush
+import il.kmi.shared.domain.Explanations
 import il.kmi.shared.domain.SubTopicRegistry
 import il.kmi.shared.questions.model.util.ExerciseTitleFormatter
 
@@ -806,6 +807,8 @@ fun TrainingSummaryScreen(
                                             }
                                             .map { exercise ->
                                                 TrainingSummaryPdfExercise(
+                                                    exerciseId =
+                                                        exercise.exerciseId,
                                                     name =
                                                         exercise.name,
                                                     highlight =
@@ -813,7 +816,9 @@ fun TrainingSummaryScreen(
                                                     belt =
                                                         exerciseBeltFromId(
                                                             exercise.exerciseId
-                                                        )
+                                                        ),
+                                                    includeExplanation =
+                                                        exercise.includeExplanation
                                                 )
                                             }
                                 ),
@@ -1117,6 +1122,12 @@ fun TrainingSummaryScreen(
                                                 },
                                                 onHighlight = {
                                                     vm.setHighlight(
+                                                        ex.exerciseId,
+                                                        it
+                                                    )
+                                                },
+                                                onIncludeExplanation = {
+                                                    vm.setIncludeExplanation(
                                                         ex.exerciseId,
                                                         it
                                                     )
@@ -2827,7 +2838,8 @@ private fun exerciseBeltFromId(
 private fun SelectedExerciseEditor(
     item: SelectedExerciseUi,
     onRemove: () -> Unit,
-    onHighlight: (String) -> Unit
+    onHighlight: (String) -> Unit,
+    onIncludeExplanation: (Boolean) -> Unit
 ) {
     val context =
         LocalContext.current
@@ -3324,6 +3336,99 @@ private fun SelectedExerciseEditor(
                     }
                 }
 
+                Surface(
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                onIncludeExplanation(
+                                    !item.includeExplanation
+                                )
+                            },
+                    shape =
+                        RoundedCornerShape(
+                            16.dp
+                        ),
+                    color =
+                        if (item.includeExplanation) {
+                            beltAccentColor.copy(
+                                alpha = 0.12f
+                            )
+                        } else {
+                            MaterialTheme
+                                .colorScheme
+                                .surfaceVariant
+                                .copy(
+                                    alpha = 0.55f
+                                )
+                        },
+                    tonalElevation = 0.dp,
+                    shadowElevation = 0.dp,
+                    border =
+                        BorderStroke(
+                            width = 1.dp,
+                            color =
+                                if (item.includeExplanation) {
+                                    beltAccentColor.copy(
+                                        alpha = 0.45f
+                                    )
+                                } else {
+                                    MaterialTheme
+                                        .colorScheme
+                                        .outlineVariant
+                                }
+                        )
+                ) {
+
+                    Row(
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .padding(
+                                    horizontal = 10.dp,
+                                    vertical = 6.dp
+                                ),
+                        verticalAlignment =
+                            Alignment.CenterVertically,
+                        horizontalArrangement =
+                            if (isEnglish) {
+                                Arrangement.Start
+                            } else {
+                                Arrangement.End
+                            }
+                    ) {
+
+                        Checkbox(
+                            checked =
+                                item.includeExplanation,
+                            onCheckedChange = {
+                                onIncludeExplanation(it)
+                            }
+                        )
+
+                        Spacer(
+                            Modifier.width(6.dp)
+                        )
+
+                        Text(
+                            text =
+                                tr(
+                                    "הוסף הסבר לתרגיל ב-PDF",
+                                    "Include exercise explanation in PDF"
+                                ),
+                            style =
+                                KmiTypography.secondary.copy(
+                                    fontWeight =
+                                        FontWeight.SemiBold
+                                ),
+                            color =
+                                SummaryTextDark,
+                            textAlign =
+                                textAlignPrimary
+                        )
+                    }
+                }
+
                 if (
                     notesOpen
                 ) {
@@ -3411,9 +3516,11 @@ private fun SelectedExerciseEditor(
 // =========================
 
 private data class TrainingSummaryPdfExercise(
+    val exerciseId: String,
     val name: String,
     val highlight: String,
-    val belt: Belt?
+    val belt: Belt?,
+    val includeExplanation: Boolean
 )
 
 private data class TrainingSummaryPdfData(
@@ -4090,27 +4197,82 @@ private fun createTrainingSummaryPdf(
                             textColor
                     }
 
-                val exercisePaint =
+                val beltPaint =
                     textPaint(
-                        size = 13f,
+                        size = 11.5f,
                         color = beltColor,
                         bold = true
                     )
 
+                val exercisePaint =
+                    textPaint(
+                        size = 13f,
+                        color = textColor,
+                        bold = true
+                    )
+
+                drawTextLines(
+                    text = beltLabel,
+                    paint = beltPaint,
+                    bottomSpacing = 1f
+                )
+
                 drawTextLines(
                     text =
-                        "${index + 1}. $beltLabel · ${
-                            cleanText(
-                                exercise.name,
-                                tr(
-                                    "תרגיל ללא שם",
-                                    "Unnamed exercise"
-                                )
+                        cleanText(
+                            exercise.name,
+                            tr(
+                                "תרגיל ללא שם",
+                                "Unnamed exercise"
                             )
-                        }",
+                        ),
                     paint = exercisePaint,
                     bottomSpacing = 2f
                 )
+
+                val explanation =
+                    if (
+                        exercise.includeExplanation &&
+                        exercise.belt != null
+                    ) {
+                        Explanations.getOrNull(
+                            belt = exercise.belt,
+                            item = exercise.name,
+                            exerciseId = exercise.exerciseId
+                        )
+                            ?.replace(
+                                "[[RED_BOLD]]",
+                                ""
+                            )
+                            ?.replace(
+                                "[[/RED_BOLD]]",
+                                ""
+                            )
+                            ?.replace(
+                                "[[BLUE_BOLD]]",
+                                ""
+                            )
+                            ?.replace(
+                                "[[/BLUE_BOLD]]",
+                                ""
+                            )
+                            ?.trim()
+                    } else {
+                        null
+                    }
+
+                if (!explanation.isNullOrBlank()) {
+                    drawTextLines(
+                        text =
+                            tr(
+                                "הסבר: ",
+                                "Explanation: "
+                            ) +
+                                    explanation,
+                        paint = bodyPaint,
+                        bottomSpacing = 4f
+                    )
+                }
 
                 if (exercise.highlight.isNotBlank()) {
                     drawTextLines(
@@ -4161,15 +4323,28 @@ private fun createTrainingSummaryPdf(
         }
 
     val safeDate =
-        data.dateIso
-            .trim()
-            .replace(
-                Regex("[^0-9A-Za-zא-ת_-]"),
-                "_"
-            )
-            .ifBlank {
-                "training"
-            }
+        runCatching {
+            LocalDate
+                .parse(
+                    data.dateIso.trim()
+                )
+                .format(
+                    DateTimeFormatter.ofPattern(
+                        "dd-MM-yyyy",
+                        Locale.US
+                    )
+                )
+        }.getOrElse {
+            data.dateIso
+                .trim()
+                .replace(
+                    Regex("[^0-9A-Za-zא-ת_-]"),
+                    "_"
+                )
+                .ifBlank {
+                    "training"
+                }
+        }
 
     val fileName =
         if (isEnglish) {

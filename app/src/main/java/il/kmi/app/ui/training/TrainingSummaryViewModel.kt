@@ -20,7 +20,8 @@ data class SelectedExerciseUi(
     val topic: String,
     val difficulty: Int? = null,
     val highlight: String = "",
-    val homePractice: Boolean = false
+    val homePractice: Boolean = false,
+    val includeExplanation: Boolean = false
 )
 
 data class TrainingSummaryUiState(
@@ -166,7 +167,9 @@ class TrainingSummaryViewModel(
                                     highlight =
                                         exercise.highlight,
                                     homePractice =
-                                        exercise.homePractice
+                                        exercise.homePractice,
+                                    includeExplanation =
+                                        exercise.includeExplanation
                                 )
                     }
 
@@ -275,6 +278,30 @@ class TrainingSummaryViewModel(
         }
     }
 
+    fun setIncludeExplanation(
+        exerciseId: String,
+        includeExplanation: Boolean
+    ) {
+        _state.update { st ->
+            val cur =
+                st.selected.toMutableMap()
+
+            val ex =
+                cur[exerciseId]
+                    ?: return@update st
+
+            cur[exerciseId] =
+                ex.copy(
+                    includeExplanation =
+                        includeExplanation
+                )
+
+            st.copy(
+                selected = cur
+            )
+        }
+    }
+
     // -----------------------------
     // Save
     // -----------------------------
@@ -316,7 +343,9 @@ class TrainingSummaryViewModel(
                                     topic = ex.topic,
                                     difficulty = ex.difficulty,
                                     highlight = ex.highlight,
-                                    homePractice = ex.homePractice
+                                    homePractice = ex.homePractice,
+                                    includeExplanation =
+                                        ex.includeExplanation
                                 )
                             }
                     )

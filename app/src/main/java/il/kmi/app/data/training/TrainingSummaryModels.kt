@@ -15,7 +15,10 @@ data class TrainingSummaryExerciseEntity(
 
     val difficulty: Int? = null,     // 1..5
     val highlight: String = "",
-    val homePractice: Boolean = false
+    val homePractice: Boolean = false,
+
+    // האם לצרף את הסבר התרגיל ל-PDF
+    val includeExplanation: Boolean = false
 )
 
 data class TrainingSummaryEntity(

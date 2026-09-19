@@ -98,6 +98,9 @@ import java.util.Date
 import java.util.Locale
 import kotlin.math.ceil
 import kotlin.time.Duration.Companion.milliseconds
+import il.kmi.app.ui.FloatingQuickMenu
+import il.kmi.app.ui.QuickMenuTriggerMode
+
 
 //=================================================================================
 
@@ -276,6 +279,7 @@ fun MaterialsScreen(
     // היה: onSummary: (Belt) -> Unit,
     onSummary: (Belt, String, String?) -> Unit,
     onPractice: (Belt, String) -> Unit,
+    onAllLists: (Belt) -> Unit = {},
     onOpenHome: () -> Unit,
     subTopicFilter: String? = null,
     isCoach: Boolean = false,
@@ -2109,63 +2113,10 @@ fun MaterialsScreen(
     }
 
     /*
- * תפריט פעולות צד קומפקטי.
- *
- * במקום bottomBar קבוע שגוזל גובה,
- * הפעולות צפות מעל התוכן ונפתחות רק לפי דרישה.
- */
+   * מצב פתיחה של התפריט המהיר הגלובלי.
+   */
     var materialsActionsExpanded by rememberSaveable {
         mutableStateOf(false)
-    }
-
-    val materialsActionPositionKey =
-        "materials_actions_bottom_position_dp"
-
-    val materialsDensity =
-        LocalDensity.current
-
-    val screenHeightDp =
-        with(materialsDensity) {
-            LocalWindowInfo
-                .current
-                .containerSize
-                .height
-                .toDp()
-                .value
-        }
-
-    val minMaterialsBottomDp =
-        24f
-
-    /*
-     * שומרים מספיק מקום מעל נקודת העיגון
-     * כדי שגם הסרגל במצב פתוח יישאר כולו
-     * בתוך גבולות המסך.
-     */
-    val openActionsRailReservedHeightDp =
-        420f
-
-    val topActionsSafetyMarginDp =
-        20f
-
-    val maxMaterialsBottomDp =
-        (
-                screenHeightDp -
-                        openActionsRailReservedHeightDp -
-                        topActionsSafetyMarginDp
-                )
-            .coerceAtLeast(140f)
-
-    var materialsActionsBottomDp by rememberSaveable {
-        mutableFloatStateOf(
-            sp.getFloat(
-                materialsActionPositionKey,
-                86f
-            ).coerceIn(
-                minMaterialsBottomDp,
-                maxMaterialsBottomDp
-            )
-        )
     }
 
     val resetCurrentMaterials: () -> Unit = {
@@ -2213,6 +2164,7 @@ fun MaterialsScreen(
             itemStates[legacyStatusId] = null
         }
 
+        traineeUpdatedAtStates.clear()
         coachProgressStates.clear()
         excludedItems.clear()
 
@@ -2255,12 +2207,19 @@ fun MaterialsScreen(
             }
 
             /*
-             * מחיקת סטטוסי המאמן.
-             */
+   * מחיקת כל סטטוסי המאמן,
+   * כולל המבנה החדש והמבנה הישן.
+   */
             itemList.forEachIndexed { index, item ->
 
                 val statusId =
                     statusIdFor(
+                        index = index,
+                        item = item
+                    )
+
+                val legacyStatusId =
+                    legacyStatusIdFor(
                         index = index,
                         item = item
                     )
@@ -2270,12 +2229,37 @@ fun MaterialsScreen(
                         statusId
                     )
 
+                listOf(
+                    CoachMaterialStatus.TAUGHT,
+                    CoachMaterialStatus.PRACTICED,
+                    CoachMaterialStatus.NEEDS_REINFORCEMENT
+                ).forEach { status ->
+
+                    remove(
+                        "${progressKey}_${status.storageValue}_selected"
+                    )
+
+                    remove(
+                        "${progressKey}_${status.storageValue}_updated_at"
+                    )
+                }
+
+                // תאימות למבנה הישן
                 remove(
                     "${progressKey}_status"
                 )
 
                 remove(
                     "${progressKey}_updated_at"
+                )
+
+                // ניקוי גם של תאריך הסימון בצד המתאמן
+                remove(
+                    traineeUpdatedAtKey(statusId)
+                )
+
+                remove(
+                    traineeUpdatedAtKey(legacyStatusId)
                 )
             }
         }
@@ -2362,9 +2346,14 @@ fun MaterialsScreen(
                     title = headerTitle,
                     onBack = onBack,
                     onHome = onOpenHome,
+
+                    // סרגל הצד מקבל את צבע החגורה הנוכחית,
+                    // כמו בשאר מסכי התרגילים.
+                    quickActionsAccentOverride = belt.color,
+
                     // לא רוצים אייקון בית עליון כי הוא כבר קיים
                     showTopHome = false,
-                    showRoleStatus = false,      // מבטל את תג "מאמן" בצד
+                    showRoleStatus = false,
                     centerTitle = true,
                     alignTitleEnd = false,
                     showBottomActions = true,
@@ -2570,272 +2559,68 @@ fun MaterialsScreen(
             },
 
         floatingActionButton = {
-            Column(
-                modifier = Modifier
-                    .navigationBarsPadding()
-                    .absoluteOffset(
-                        x = 16.dp
+            FloatingQuickMenu(
+                belt = belt,
+                modifier = Modifier.absoluteOffset(
+                    x =
+                        if (isEnglish) {
+                            (-16).dp
+                        } else {
+                            16.dp
+                        }
+                ),
+                expanded = materialsActionsExpanded,
+                onExpandedChange = {
+                    materialsActionsExpanded = it
+                },
+                triggerMode =
+                    QuickMenuTriggerMode.SideRail,
+
+                includeReset = true,
+                includeAllLists = true,
+                includePractice = true,
+                includeSummary = true,
+
+                accentColorOverride = belt.color,
+                hasFullAccess = hasFullAccess,
+
+                onLockedItemClick = {
+                    onOpenSubscription()
+                },
+
+                onReset = {
+                    resetCurrentMaterials()
+                },
+
+                onAllLists = {
+                    onAllLists(
+                        belt
                     )
-                    .padding(
-                        bottom = materialsActionsBottomDp.dp
-                    ),
-                horizontalAlignment =
-                    Alignment.CenterHorizontally
-            ) {
+                },
 
-                if (materialsActionsExpanded) {
-                    Surface(
-                        modifier = Modifier.width(62.dp),
-                        shape = AbsoluteRoundedCornerShape(
-                            topLeft = 24.dp,
-                            topRight = 0.dp,
-                            bottomRight = 0.dp,
-                            bottomLeft = 24.dp
-                        ),
-                        color = Color.Transparent,
-                        tonalElevation = 0.dp,
-                        shadowElevation = 8.dp,
-                        border = BorderStroke(
-                            width = 1.dp,
-                            color = Color.White.copy(alpha = 0.30f)
+                onPractice = {
+                    if (isPracticeLocked) {
+                        onOpenSubscription()
+                    } else {
+                        onPractice(
+                            belt,
+                            topicUi
                         )
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .background(
-                                    brush = Brush.verticalGradient(
-                                        colors = listOf(
-                                            Color(0xFF4D83E6),
-                                            Color(0xFF255FC7),
-                                            Color(0xFF173E94),
-                                            Color(0xFF0C2A74)
-                                        )
-                                    )
-                                )
-                                .padding(
-                                    horizontal = 5.dp,
-                                    vertical = 7.dp
-                                )
-                        ) {
-                            Column(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalAlignment =
-                                    Alignment.CenterHorizontally,
-                                verticalArrangement =
-                                    Arrangement.spacedBy(7.dp)
-                            ) {
-                                MaterialsSideActionButton(
-                                    symbol = "↻",
-                                    label =
-                                        if (isEnglish) {
-                                            "Reset"
-                                        } else {
-                                            "איפוס"
-                                        },
-                                    containerColor = Color(0xFFD9352A),
-                                    onClick = {
-                                        materialsActionsExpanded = false
-                                        resetCurrentMaterials()
-                                    }
-                                )
-
-                                MaterialsSideActionButton(
-                                    symbol =
-                                        if (isPracticeLocked) {
-                                            "🔒"
-                                        } else {
-                                            "▶"
-                                        },
-                                    label =
-                                        if (isEnglish) {
-                                            "Practice"
-                                        } else {
-                                            "תרגול"
-                                        },
-                                    containerColor =
-                                        if (isPracticeLocked) {
-                                            Color(0xFF9A7A22)
-                                        } else {
-                                            Color(0xFF46C365)
-                                        },
-                                    onClick = {
-                                        materialsActionsExpanded = false
-
-                                        if (isPracticeLocked) {
-                                            onOpenSubscription()
-                                        } else {
-                                            onPractice(
-                                                belt,
-                                                topicUi
-                                            )
-                                        }
-                                    }
-                                )
-
-                                MaterialsSideActionButton(
-                                    symbol = "▥",
-                                    label =
-                                        if (isEnglish) {
-                                            "Summary"
-                                        } else {
-                                            "סיכום"
-                                        },
-                                    containerColor = Color(0xFF2F9CFF),
-                                    onClick = {
-                                        materialsActionsExpanded = false
-                                        onSummary(
-                                            belt,
-                                            topicUi,
-                                            subTopicFilter
-                                        )
-                                    }
-                                )
-
-                                MaterialsSideActionButton(
-                                    symbol = "×",
-                                    label = "",
-                                    containerColor = Color(0xFF7B31E8),
-                                    onClick = {
-                                        materialsActionsExpanded = false
-                                    },
-                                    showLabel = false
-                                )
-                            }
-                        }
                     }
-                } else {
-                    Surface(
-                        onClick = {
-                            materialsActionsExpanded = true
-                        },
-                        modifier = Modifier
-                            .width(38.dp)
-                            .height(88.dp)
-                            .pointerInput(
-                                minMaterialsBottomDp,
-                                maxMaterialsBottomDp,
-                                materialsDensity
-                            ) {
-                                detectDragGesturesAfterLongPress(
-                                    onDragStart = {
-                                        /*
-                                         * רק לחיצה ממושכת מתחילה גרירה.
-                                         * לחיצה רגילה עדיין פותחת את התפריט.
-                                         */
-                                    },
-                                    onDrag = { change, dragAmount ->
-                                        change.consume()
+                },
 
-                                        /*
-                                         * dragAmount.y:
-                                         * חיובי = המשתמש גורר למטה.
-                                         * שלילי = המשתמש גורר למעלה.
-                                         *
-                                         * bottomDp עובד הפוך:
-                                         * ערך גדול יותר = התפריט גבוה יותר.
-                                         */
-                                        val dragDp =
-                                            dragAmount.y /
-                                                    materialsDensity.density
+                onSummary = {
+                    onSummary(
+                        belt,
+                        topicUi,
+                        subTopicFilter
+                    )
+                },
 
-                                        materialsActionsBottomDp =
-                                            (
-                                                    materialsActionsBottomDp -
-                                                            dragDp
-                                                    )
-                                                .coerceIn(
-                                                    minMaterialsBottomDp,
-                                                    maxMaterialsBottomDp
-                                                )
-                                    },
-                                    onDragEnd = {
-                                        sp.edit {
-                                            putFloat(
-                                                materialsActionPositionKey,
-                                                materialsActionsBottomDp
-                                            )
-                                        }
-                                    },
-                                    onDragCancel = {
-                                        sp.edit {
-                                            putFloat(
-                                                materialsActionPositionKey,
-                                                materialsActionsBottomDp
-                                            )
-                                        }
-                                    }
-                                )
-                            },
-                        shape = AbsoluteRoundedCornerShape(
-                            topLeft = 20.dp,
-                            topRight = 0.dp,
-                            bottomRight = 0.dp,
-                            bottomLeft = 20.dp
-                        ),
-                        color = Color.Transparent,
-                        tonalElevation = 0.dp,
-                        shadowElevation = 7.dp,
-                        border = BorderStroke(
-                            width = 1.dp,
-                            color = Color.White.copy(alpha = 0.34f)
-                        )
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .background(
-                                    brush = Brush.verticalGradient(
-                                        colors = listOf(
-                                            Color(0xFF7EDC87),
-                                            Color(0xFF66CF75),
-                                            Color(0xFF49BB62)
-                                        )
-                                    )
-                                ),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Column(
-                                horizontalAlignment = Alignment.CenterHorizontally,
-                                verticalArrangement = Arrangement.Center
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .width(16.dp)
-                                        .height(3.dp)
-                                        .background(
-                                            color = Color.White,
-                                            shape = RoundedCornerShape(50)
-                                        )
-                                )
-
-                                Spacer(Modifier.height(5.dp))
-
-                                Box(
-                                    modifier = Modifier
-                                        .width(16.dp)
-                                        .height(3.dp)
-                                        .background(
-                                            color = Color.White,
-                                            shape = RoundedCornerShape(50)
-                                        )
-                                )
-
-                                Spacer(Modifier.height(5.dp))
-
-                                Box(
-                                    modifier = Modifier
-                                        .width(16.dp)
-                                        .height(3.dp)
-                                        .background(
-                                            color = Color.White,
-                                            shape = RoundedCornerShape(50)
-                                        )
-                                )
-                            }
-                        }
-                    }
-                }
-            }
+                onWeakPoints = {},
+                onVoice = {},
+                onPdf = {}
+            )
         },
 
         ) { innerPadding ->
@@ -4230,64 +4015,6 @@ fun MaterialsScreen(
                     }
                 }
             }
-        }
-    }
-}
-
-@Composable
-private fun MaterialsSideActionButton(
-    symbol: String,
-    label: String,
-    containerColor: Color,
-    onClick: () -> Unit,
-    showLabel: Boolean = true
-) {
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Surface(
-            onClick = onClick,
-            modifier = Modifier.size(34.dp),
-            shape = CircleShape,
-            color = containerColor,
-            tonalElevation = 0.dp,
-            shadowElevation = 2.dp,
-            border = BorderStroke(
-                width = 1.dp,
-                color = Color.White.copy(alpha = 0.72f)
-            )
-        ) {
-            Box(
-                modifier = Modifier.fillMaxSize(),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = symbol,
-                    style =
-                        KmiTypography.caption.copy(
-                            fontWeight = FontWeight.ExtraBold
-                        ),
-                    color = Color.White,
-                    textAlign = TextAlign.Center,
-                    maxLines = 1
-                )
-            }
-        }
-
-        if (showLabel && label.isNotBlank()) {
-            Spacer(Modifier.height(1.dp))
-
-            Text(
-                text = label,
-                style =
-                    KmiTypography.caption.copy(
-                        fontWeight = FontWeight.Bold
-                    ),
-                color = Color.White,
-                textAlign = TextAlign.Center,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
         }
     }
 }

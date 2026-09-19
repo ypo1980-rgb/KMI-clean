@@ -212,7 +212,7 @@ fun KmiTopBar(
     onOpenAi: (() -> Unit)? = null,
     onOpenVoiceCommands: (() -> Unit)? = null,
     quickActionsAccentOverride: Color? = null,
-    attachedHandleHorizontalOffset: Dp = 8.dp
+    attachedHandleHorizontalOffset: Dp = 0.dp
 ) {
     // 🔴 כאן היה רינדור מוקדם של CenterAlignedTopAppBar/TopAppBar – הורדנו אותו
     // כדי שלא תהיה כותרת כפולה. משלב זה והלאה נשאר הכול כמו אצלך.
@@ -2446,12 +2446,13 @@ private fun VoiceCommandsAttachedHandle(
         label = "voiceCommandsAttachedHandlePress"
     )
 
-    val handleShape = RoundedCornerShape(
-        topStart = 0.dp,
-        topEnd = 0.dp,
-        bottomStart = 18.dp,
-        bottomEnd = 18.dp
-    )
+    val handleShape =
+        AbsoluteRoundedCornerShape(
+            topLeft = 0.dp,
+            topRight = 0.dp,
+            bottomLeft = 0.dp,
+            bottomRight = 18.dp
+        )
 
     Surface(
         modifier = Modifier
@@ -2559,12 +2560,13 @@ private fun IconsRailAttachedHandle(
         label = "iconsRailAttachedHandleArrow"
     )
 
-    val handleShape = RoundedCornerShape(
-        topStart = 0.dp,
-        topEnd = 0.dp,
-        bottomStart = 18.dp,
-        bottomEnd = 18.dp
-    )
+    val handleShape =
+        AbsoluteRoundedCornerShape(
+            topLeft = 0.dp,
+            topRight = 0.dp,
+            bottomLeft = 18.dp,
+            bottomRight = 0.dp
+        )
 
     Surface(
         modifier = Modifier

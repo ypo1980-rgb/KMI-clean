@@ -765,14 +765,7 @@ fun MonthlyCalendarScreen(
                                         },
 
                                     cancelledTrainingDates =
-                                        if (
-                                            mode ==
-                                            MonthlyCalendarMode.ATTENDANCE_DATE_PICKER
-                                        ) {
-                                            cancelledTrainingDates
-                                        } else {
-                                            emptySet()
-                                        }
+                                        cancelledTrainingDates
                                 )
                             }
 
@@ -909,10 +902,7 @@ fun MonthlyCalendarScreen(
                                                 MonthlyCalendarMode
                                                     .FREE_SESSION_DATE_PICKER,
 
-                                    showCancelledTrainingLegend =
-                                        mode ==
-                                                MonthlyCalendarMode
-                                                    .ATTENDANCE_DATE_PICKER
+                                    showCancelledTrainingLegend = true
                                 )
 
                                 Spacer(Modifier.height(4.dp))

@@ -2,6 +2,7 @@ package il.kmi.app.ui.calendar
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -447,8 +448,17 @@ fun KmiCalendarMonth(
                                             ) {
                                                 onDateSelected(cellDate)
                                             },
-                                        shape = CircleShape,
+                                        shape =
+                                            if (hasCancelledTraining) {
+                                                RoundedCornerShape(8.dp)
+                                            } else {
+                                                CircleShape
+                                            },
+
                                         color = when {
+                                            hasCancelledTraining ->
+                                                colorScheme.errorContainer
+
                                             isSelected ->
                                                 selectedDayColor
 
@@ -459,6 +469,12 @@ fun KmiCalendarMonth(
                                                 Color.Transparent
                                         },
                                         border = when {
+                                            hasCancelledTraining ->
+                                                BorderStroke(
+                                                    width = 1.dp,
+                                                    color = colorScheme.error
+                                                )
+
                                             isSelected -> null
 
                                             isToday -> BorderStroke(
@@ -477,13 +493,13 @@ fun KmiCalendarMonth(
                                                 text = day.toString(),
                                                 color =
                                                     when {
+                                                        hasCancelledTraining ->
+                                                            colorScheme.onErrorContainer
+
                                                         isDateDisabled ->
                                                             colorScheme.onSurfaceVariant.copy(
                                                                 alpha = 0.38f
                                                             )
-
-                                                        hasCancelledTraining ->
-                                                            colorScheme.error
 
                                                         isSelected ->
                                                             selectedDayTextColor
@@ -538,45 +554,7 @@ fun KmiCalendarMonth(
             * מחליף את אייקון סיכום האימון.
             */
                                     when {
-                                        hasCancelledTraining -> {
-                                            Surface(
-                                                modifier = Modifier
-                                                    .align(Alignment.TopEnd)
-                                                    .padding(
-                                                        top = 1.dp,
-                                                        end = 2.dp
-                                                    )
-                                                    .size(14.dp),
-                                                shape = CircleShape,
-                                                color =
-                                                    colorScheme.error,
-                                                tonalElevation = 0.dp,
-                                                shadowElevation = 0.dp
-                                            ) {
-                                                Box(
-                                                    modifier =
-                                                        Modifier.fillMaxSize(),
-                                                    contentAlignment =
-                                                        Alignment.Center
-                                                ) {
-                                                    Text(
-                                                        text = "×",
-                                                        color =
-                                                            colorScheme.onError,
-                                                        style =
-                                                            KmiTypography.caption.copy(
-                                                                fontWeight =
-                                                                    FontWeight.Black
-                                                            ),
-                                                        textAlign =
-                                                            TextAlign.Center,
-                                                        maxLines = 1
-                                                    )
-                                                }
-                                            }
-                                        }
-
-                                        hasSummary -> {
+                                        hasSummary && !hasCancelledTraining -> {
                                             Surface(
                                                 modifier = Modifier
                                                     .align(Alignment.TopEnd)
@@ -1014,7 +992,7 @@ private fun KmiCalendarLegend(
                     colorScheme.outlineVariant
             )
     ) {
-        Row(
+        Column(
             modifier =
                 Modifier
                     .fillMaxWidth()
@@ -1022,102 +1000,121 @@ private fun KmiCalendarLegend(
                         horizontal = 12.dp,
                         vertical = 8.dp
                     ),
-            horizontalArrangement =
-                Arrangement.SpaceEvenly,
-            verticalAlignment =
-                Alignment.CenterVertically
+            verticalArrangement =
+                Arrangement.spacedBy(7.dp)
         ) {
 
-            /*
-             * אימון
-             */
-            CalendarLegendDotItem(
-                color =
-                    colorScheme.secondary,
-                text =
-                    if (isEnglish) {
-                        "Training"
-                    } else {
-                        "אימון"
-                    },
-                textColor =
-                    textColor
-            )
+            // שורה עליונה:
+            // אימון | חג / מועד
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
 
-            /*
-             * חג / מועד
-             */
-            CalendarLegendDotItem(
-                color =
-                    colorScheme.error,
-                text =
-                    if (isEnglish) {
-                        "Holiday"
-                    } else {
-                        "חג / מועד"
-                    },
-                textColor =
-                    textColor
-            )
-
-            if (showCancelledTraining) {
-                Row(
-                    verticalAlignment =
-                        Alignment.CenterVertically,
-                    horizontalArrangement =
-                        Arrangement.spacedBy(5.dp)
+                Box(
+                    modifier = Modifier.weight(1f),
+                    contentAlignment = Alignment.Center
                 ) {
-                    Surface(
-                        modifier = Modifier.size(14.dp),
-                        shape = CircleShape,
+                    CalendarLegendDotItem(
+                        color = colorScheme.secondary,
+                        text =
+                            if (isEnglish) {
+                                "Training"
+                            } else {
+                                "אימון"
+                            },
+                        textColor = textColor
+                    )
+                }
+
+                Box(
+                    modifier = Modifier.weight(1f),
+                    contentAlignment = Alignment.Center
+                ) {
+                    CalendarLegendDotItem(
                         color = colorScheme.error,
-                        tonalElevation = 0.dp,
-                        shadowElevation = 0.dp
-                    ) {
-                        Box(
-                            modifier = Modifier.fillMaxSize(),
-                            contentAlignment = Alignment.Center
+                        text =
+                            if (isEnglish) {
+                                "Holiday"
+                            } else {
+                                "חג / מועד"
+                            },
+                        textColor = textColor
+                    )
+                }
+            }
+
+            // שורה תחתונה:
+            // אימון מבוטל | סיכום אימון
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+
+                Box(
+                    modifier = Modifier.weight(1f),
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (showCancelledTraining) {
+                        Row(
+                            verticalAlignment =
+                                Alignment.CenterVertically,
+                            horizontalArrangement =
+                                Arrangement.spacedBy(5.dp)
                         ) {
+
+                            Box(
+                                modifier = Modifier
+                                    .size(14.dp)
+                                    .background(
+                                        color =
+                                            colorScheme.errorContainer,
+                                        shape =
+                                            RoundedCornerShape(4.dp)
+                                    )
+                                    .border(
+                                        width = 1.dp,
+                                        color = colorScheme.error,
+                                        shape =
+                                            RoundedCornerShape(4.dp)
+                                    )
+                            )
+
                             Text(
-                                text = "×",
-                                color = colorScheme.onError,
+                                text =
+                                    if (isEnglish) {
+                                        "Cancelled"
+                                    } else {
+                                        "אימון מבוטל"
+                                    },
+                                color = textColor,
                                 style =
                                     KmiTypography.caption.copy(
                                         fontWeight =
-                                            FontWeight.Black
+                                            FontWeight.SemiBold
                                     ),
-                                textAlign = TextAlign.Center,
                                 maxLines = 1
                             )
                         }
                     }
-
-                    Text(
-                        text =
-                            if (isEnglish) {
-                                "Cancelled"
-                            } else {
-                                "אימון מבוטל"
-                            },
-                        color = textColor,
-                        style =
-                            KmiTypography.caption.copy(
-                                fontWeight =
-                                    FontWeight.SemiBold
-                            ),
-                        maxLines = 1
-                    )
                 }
-            } else if (showSummary) {
-                CalendarLegendSummaryItem(
-                    text =
-                        if (isEnglish) {
-                            "Summary"
-                        } else {
-                            "סיכום אימון"
-                        },
-                    textColor = textColor
-                )
+
+                Box(
+                    modifier = Modifier.weight(1f),
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (showSummary) {
+                        CalendarLegendSummaryItem(
+                            text =
+                                if (isEnglish) {
+                                    "Summary"
+                                } else {
+                                    "סיכום אימון"
+                                },
+                            textColor = textColor
+                        )
+                    }
+                }
             }
         }
     }

@@ -245,6 +245,24 @@ object Explanations {
         return get(belt, item)
     }
 
+    fun getOrNull(
+        belt: Belt,
+        item: String,
+        exerciseId: String? = null
+    ): String? {
+        val explanation =
+            get(
+                belt = belt,
+                item = item,
+                exerciseId = exerciseId
+            ).trim()
+
+        return explanation
+            .takeIf {
+                isRealExplanation(it)
+            }
+    }
+
     fun getByExerciseId(
         exerciseId: String,
         fallbackBelt: Belt,
