@@ -267,7 +267,8 @@ class FirestoreTrainingSummaryRepo(
                     "topic" to e.topic,
                     "difficulty" to e.difficulty,
                     "highlight" to e.highlight,
-                    "homePractice" to e.homePractice
+                    "homePractice" to e.homePractice,
+                    "includeExplanation" to e.includeExplanation
                 )
             }
         )
@@ -288,7 +289,10 @@ class FirestoreTrainingSummaryRepo(
                 topic = (mm["topic"] as? String).orEmpty(),
                 difficulty = (mm["difficulty"] as? Number)?.toInt(),
                 highlight = (mm["highlight"] as? String).orEmpty(),
-                homePractice = (mm["homePractice"] as? Boolean) ?: false
+                homePractice = (mm["homePractice"] as? Boolean) ?: false,
+                includeExplanation =
+                    (mm["includeExplanation"] as? Boolean)
+                        ?: false
             )
         } ?: emptyList()
 

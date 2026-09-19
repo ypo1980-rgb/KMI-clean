@@ -2064,6 +2064,9 @@ fun MainNavHost(
             // ----- לוח אימונים חודשי -----
             composable(route = Route.MonthlyCalendar.route) {
 
+                val calendarPdfScope =
+                    rememberCoroutineScope()
+
                 val requestedMode =
                     nav.previousBackStackEntry
                         ?.savedStateHandle
@@ -2179,6 +2182,52 @@ fun MainNavHost(
                                 pickedDate.toString()
                             )
                         )
+                    },
+
+                    onOpenSummaryPdf = { pickedDate ->
+
+                        calendarPdfScope.launch {
+
+                            val summary =
+                                runCatching {
+                                    il.kmi.app.data.training
+                                        .FirestoreTrainingSummaryRepo()
+                                        .loadForOwnerAndDate(
+                                            ownerUid =
+                                                ownerUid,
+                                            ownerRole =
+                                                ownerRole,
+                                            dateIso =
+                                                pickedDate
+                                                    .toString()
+                                        )
+                                }.getOrNull()
+
+                            if (summary == null) {
+
+                                Toast.makeText(
+                                    ctx,
+                                    if (isEnglish) {
+                                        "Training summary could not be loaded"
+                                    } else {
+                                        "לא ניתן היה לטעון את סיכום האימון"
+                                    },
+                                    Toast.LENGTH_LONG
+                                ).show()
+
+                                return@launch
+                            }
+
+                            il.kmi.app.ui.training
+                                .openSavedTrainingSummaryPdf(
+                                    context =
+                                        ctx,
+                                    summary =
+                                        summary,
+                                    isEnglish =
+                                        isEnglish
+                                )
+                        }
                     }
                 )
             }

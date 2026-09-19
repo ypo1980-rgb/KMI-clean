@@ -38,6 +38,8 @@ import androidx.core.content.FileProvider
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.PictureAsPdf
 import il.kmi.app.training.TrainingCatalog
 import il.kmi.app.database.KmiDatabaseProvider
 import il.kmi.app.halacha.HolidayCalendarRepository
@@ -59,6 +61,11 @@ import java.time.format.DateTimeFormatter
 import java.time.format.TextStyle
 import java.util.Locale
 import kotlin.math.ceil
+import androidx.compose.material.icons.filled.AccessTime
+import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.Groups
+
+//==========================================================================
 
 private data class CalendarTrainingItem(
     val branch: String,
@@ -99,7 +106,10 @@ fun MonthlyCalendarScreen(
         branch: String,
         group: String,
         timeText: String
-    ) -> Unit
+    ) -> Unit,
+    onOpenSummaryPdf: (
+        date: LocalDate
+    ) -> Unit = {}
 ) {
     val ctx = LocalContext.current
     val langManager = remember(ctx) { AppLanguageManager(ctx) }
@@ -822,40 +832,69 @@ fun MonthlyCalendarScreen(
                                             }
 
                                             MonthlyCalendarMode.SUMMARY_DATE_PICKER -> {
-                                                val dayTrainings =
-                                                    trainingsByDate[date]
-                                                        .orEmpty()
-                                                        .sortedBy {
-                                                            it.timeText
+
+                                                val hasSummaryForDate =
+                                                    date in summaryDatesThisMonth
+
+                                                /*
+                                                 * אם כבר קיים סיכום:
+                                                 * לא פותחים אותו אוטומטית.
+                                                 * רק משאירים את התאריך מסומן
+                                                 * ומציגים את כרטיס הפעולות בתחתית.
+                                                 */
+                                                if (hasSummaryForDate) {
+
+                                                    trainingChoiceDate =
+                                                        null
+
+                                                    trainingChoices =
+                                                        emptyList()
+
+                                                } else {
+
+                                                    /*
+                                                     * אין עדיין סיכום:
+                                                     * ממשיכים להתנהגות הקיימת
+                                                     * של בחירת האימון לצורך יצירת סיכום.
+                                                     */
+                                                    val dayTrainings =
+                                                        trainingsByDate[date]
+                                                            .orEmpty()
+                                                            .sortedBy {
+                                                                it.timeText
+                                                            }
+
+                                                    when {
+                                                        dayTrainings.size == 1 -> {
+
+                                                            val training =
+                                                                dayTrainings.first()
+
+                                                            onDateClick(
+                                                                date,
+                                                                training.branch,
+                                                                training.group,
+                                                                training.timeText
+                                                            )
                                                         }
 
-                                                when {
-                                                    dayTrainings.size == 1 -> {
-                                                        val training =
-                                                            dayTrainings.first()
+                                                        dayTrainings.size > 1 -> {
 
-                                                        onDateClick(
-                                                            date,
-                                                            training.branch,
-                                                            training.group,
-                                                            training.timeText
-                                                        )
-                                                    }
+                                                            trainingChoiceDate =
+                                                                date
 
-                                                    dayTrainings.size > 1 -> {
-                                                        trainingChoiceDate =
-                                                            date
+                                                            trainingChoices =
+                                                                dayTrainings
+                                                        }
 
-                                                        trainingChoices =
-                                                            dayTrainings
-                                                    }
+                                                        else -> {
 
-                                                    else -> {
-                                                        trainingChoiceDate =
-                                                            null
+                                                            trainingChoiceDate =
+                                                                null
 
-                                                        trainingChoices =
-                                                            emptyList()
+                                                            trainingChoices =
+                                                                emptyList()
+                                                        }
                                                     }
                                                 }
                                             }
@@ -930,253 +969,736 @@ fun MonthlyCalendarScreen(
                                                 screenLocale
                                             )
 
+                                        val hasSummaryForSelectedDate =
+                                            sel in summaryDatesThisMonth
+
+                                        val cardAccent =
+                                            colorScheme.primary
+
                                         Surface(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .padding(
-                                                    horizontal = 2.dp,
-                                                    vertical = 8.dp
+                                            modifier =
+                                                Modifier
+                                                    .fillMaxWidth()
+                                                    .padding(
+                                                        horizontal = 4.dp,
+                                                        vertical = 10.dp
+                                                    ),
+                                            shape =
+                                                RoundedCornerShape(
+                                                    30.dp
                                                 ),
-                                            shape = RoundedCornerShape(26.dp),
-                                            color = informationCardColor,
+                                            color =
+                                                Color.Transparent,
                                             tonalElevation = 0.dp,
-                                            shadowElevation = 0.dp,
-                                            border = BorderStroke(
-                                                1.dp,
-                                                informationCardBorder
-                                            )
-                                        ) {
-                                            val infoParts = buildList {
-                                                if (selTrainings > 0) {
-                                                    add(
-                                                        tr(
-                                                            "$selTrainings אימון/ים",
-                                                            "$selTrainings training(s)"
+                                            shadowElevation = 8.dp,
+                                            border =
+                                                BorderStroke(
+                                                    width = 1.dp,
+                                                    color =
+                                                        cardAccent.copy(
+                                                            alpha = 0.30f
                                                         )
-                                                    )
-                                                }
-                                                if (!selHoliday.isNullOrBlank()) {
-                                                    add(selHoliday)
-                                                }
-                                            }
+                                                )
+                                        ) {
 
                                             Box(
-                                                modifier = Modifier
-                                                    .fillMaxWidth()
-                                                    .heightIn(min = 156.dp)
-                                                    .background(selectedDayBrush)
-                                                    .padding(
-                                                        start = 16.dp,
-                                                        end = 16.dp,
-                                                        top = 16.dp,
-                                                        bottom = 18.dp
-                                                    )
-                                            ) {
-                                                Column(
-                                                    modifier = Modifier
+                                                modifier =
+                                                    Modifier
                                                         .fillMaxWidth()
-                                                        .align(Alignment.TopStart)
-                                                        .padding(bottom = 76.dp)
-                                                ) {
-                                                    Text(
-                                                        text = tr(
-                                                            "יום נבחר: $dowName ${sel.dayOfMonth} $monthName ${sel.year}",
-                                                            "Selected day: $dowName ${sel.dayOfMonth} $monthName ${sel.year}"
-                                                        ),
-                                                        style =
-                                                            KmiTypography.sectionTitle.copy(
-                                                                fontWeight =
-                                                                    FontWeight.ExtraBold
-                                                            ),
-                                                        color = selectedDayTextColor,
-                                                        textAlign =
-                                                            if (isEnglish) {
-                                                                TextAlign.Start
-                                                            } else {
-                                                                TextAlign.Right
-                                                            },
-                                                        modifier = Modifier.fillMaxWidth()
-                                                    )
-
-                                                    Spacer(Modifier.height(10.dp))
-
-                                                    Text(
-                                                        text = when {
-                                                            selectedTrainingItems.isNotEmpty() -> {
-                                                                val title = tr(
-                                                                    "פירוט אימונים:",
-                                                                    "Training details:"
-                                                                )
-                                                                val rows = selectedTrainingItems
-                                                                    .sortedBy { it.timeText }
-                                                                    .joinToString("\n") { item ->
-                                                                        val branchLabel =
-                                                                            item.displayBranch(
-                                                                                isEnglish
-                                                                            )
-                                                                        val groupLabel =
-                                                                            item.displayGroup(
-                                                                                isEnglish
-                                                                            )
-
-                                                                        tr(
-                                                                            "• ${item.timeText} · $branchLabel · $groupLabel",
-                                                                            "• ${item.timeText} · $branchLabel · $groupLabel"
+                                                        .background(
+                                                            brush =
+                                                                Brush.verticalGradient(
+                                                                    colors =
+                                                                        listOf(
+                                                                            colorScheme
+                                                                                .primaryContainer
+                                                                                .copy(
+                                                                                    alpha = 0.92f
+                                                                                ),
+                                                                            colorScheme.surface,
+                                                                            colorScheme
+                                                                                .secondaryContainer
+                                                                                .copy(
+                                                                                    alpha = 0.56f
+                                                                                )
                                                                         )
-                                                                    }
-
-                                                                buildString {
-                                                                    append(title)
-                                                                    append("\n")
-                                                                    append(rows)
-
-                                                                    if (!selHoliday.isNullOrBlank()) {
-                                                                        append("\n")
-                                                                        append(
-                                                                            tr(
-                                                                                "חג / מועד: $selHoliday",
-                                                                                "Holiday: $selHoliday"
-                                                                            )
-                                                                        )
-                                                                    }
-                                                                }
-                                                            }
-
-                                                            infoParts.isEmpty() -> {
-                                                                tr(
-                                                                    "אין אירועים ביום זה.",
-                                                                    "No events on this day."
                                                                 )
-                                                            }
-
-                                                            else -> {
-                                                                infoParts.joinToString(" • ")
-                                                            }
-                                                        },
-                                                        style =
-                                                            KmiTypography.body,
-                                                        color =
-                                                            selectedDayTextColor.copy(
-                                                                alpha = 0.92f
-                                                            ),
-                                                        textAlign = if (isEnglish) TextAlign.Start else TextAlign.Right,
-                                                        modifier = Modifier.fillMaxWidth()
-                                                    )
-                                                }
-
-                                                Row(
-                                                    modifier = Modifier
-                                                        .fillMaxWidth()
-                                                        .align(
-                                                            if (isEnglish) {
-                                                                Alignment.BottomStart
-                                                            } else {
-                                                                Alignment.BottomEnd
-                                                            }
                                                         )
-                                                        .padding(top = 8.dp),
-                                                    horizontalArrangement =
-                                                        if (isEnglish) {
-                                                            Arrangement.Start
-                                                        } else {
-                                                            Arrangement.End
-                                                        }
-                                                ) {
-                                                    val hasSummaryForSelectedDate =
-                                                        sel in summaryDatesThisMonth
+                                                        .padding(
+                                                            horizontal = 18.dp,
+                                                            vertical = 18.dp
+                                                        )
+                                            ) {
 
-                                                    Button(
-                                                        enabled =
-                                                            hasSummaryForSelectedDate ||
-                                                                    selectedTrainingItems
-                                                                        .isNotEmpty(),
-                                                        onClick = {
-                                                            val dayTrainings =
+                                                Column(
+                                                    modifier =
+                                                        Modifier.fillMaxWidth(),
+                                                    verticalArrangement =
+                                                        Arrangement.spacedBy(
+                                                            14.dp
+                                                        )
+                                                ) {
+
+                                                    // -----------------------------
+                                                    // Header Premium
+                                                    // -----------------------------
+                                                    Row(
+                                                        modifier =
+                                                            Modifier.fillMaxWidth(),
+                                                        verticalAlignment =
+                                                            Alignment.CenterVertically
+                                                    ) {
+
+                                                        Column(
+                                                            modifier =
+                                                                Modifier.weight(1f),
+                                                            horizontalAlignment =
+                                                                if (isEnglish) {
+                                                                    Alignment.Start
+                                                                } else {
+                                                                    Alignment.End
+                                                                }
+                                                        ) {
+
+                                                            Text(
+                                                                text =
+                                                                    tr(
+                                                                        "יום נבחר: $dowName ${sel.dayOfMonth}",
+                                                                        "Selected day: $dowName ${sel.dayOfMonth}"
+                                                                    ),
+                                                                style =
+                                                                    KmiTypography.sectionTitle.copy(
+                                                                        fontWeight =
+                                                                            FontWeight.ExtraBold
+                                                                    ),
+                                                                color =
+                                                                    selectedDayTextColor,
+                                                                textAlign =
+                                                                    if (isEnglish) {
+                                                                        TextAlign.Start
+                                                                    } else {
+                                                                        TextAlign.Right
+                                                                    },
+                                                                modifier =
+                                                                    Modifier.fillMaxWidth()
+                                                            )
+
+                                                            Spacer(
+                                                                Modifier.height(
+                                                                    2.dp
+                                                                )
+                                                            )
+
+                                                            Text(
+                                                                text =
+                                                                    "$monthName ${sel.year}",
+                                                                style =
+                                                                    KmiTypography.cardTitle.copy(
+                                                                        fontWeight =
+                                                                            FontWeight.ExtraBold
+                                                                    ),
+                                                                color =
+                                                                    selectedDayTextColor,
+                                                                textAlign =
+                                                                    if (isEnglish) {
+                                                                        TextAlign.Start
+                                                                    } else {
+                                                                        TextAlign.Right
+                                                                    },
+                                                                modifier =
+                                                                    Modifier.fillMaxWidth()
+                                                            )
+                                                        }
+
+                                                        Spacer(
+                                                            Modifier.width(
+                                                                12.dp
+                                                            )
+                                                        )
+
+                                                        Surface(
+                                                            modifier =
+                                                                Modifier.size(
+                                                                    54.dp
+                                                                ),
+                                                            shape =
+                                                                RoundedCornerShape(
+                                                                    18.dp
+                                                                ),
+                                                            color =
+                                                                cardAccent.copy(
+                                                                    alpha = 0.14f
+                                                                ),
+                                                            tonalElevation = 0.dp,
+                                                            shadowElevation = 0.dp,
+                                                            border =
+                                                                BorderStroke(
+                                                                    1.dp,
+                                                                    cardAccent.copy(
+                                                                        alpha = 0.20f
+                                                                    )
+                                                                )
+                                                        ) {
+
+                                                            Box(
+                                                                contentAlignment =
+                                                                    Alignment.Center
+                                                            ) {
+
+                                                                Icon(
+                                                                    imageVector =
+                                                                        Icons.Filled.CalendarMonth,
+                                                                    contentDescription =
+                                                                        null,
+                                                                    tint =
+                                                                        cardAccent,
+                                                                    modifier =
+                                                                        Modifier.size(
+                                                                            27.dp
+                                                                        )
+                                                                )
+                                                            }
+                                                        }
+                                                    }
+
+                                                    // -----------------------------
+                                                    // אזור פרטי האימון
+                                                    // -----------------------------
+                                                    Surface(
+                                                        modifier =
+                                                            Modifier.fillMaxWidth(),
+                                                        shape =
+                                                            RoundedCornerShape(
+                                                                24.dp
+                                                            ),
+                                                        color =
+                                                            colorScheme.surface
+                                                                .copy(
+                                                                    alpha = 0.76f
+                                                                ),
+                                                        tonalElevation = 0.dp,
+                                                        shadowElevation = 0.dp,
+                                                        border =
+                                                            BorderStroke(
+                                                                width = 1.dp,
+                                                                color =
+                                                                    cardAccent.copy(
+                                                                        alpha = 0.10f
+                                                                    )
+                                                            )
+                                                    ) {
+
+                                                        Column(
+                                                            modifier =
+                                                                Modifier
+                                                                    .fillMaxWidth()
+                                                                    .padding(
+                                                                        horizontal = 14.dp,
+                                                                        vertical = 14.dp
+                                                                    ),
+                                                            verticalArrangement =
+                                                                Arrangement.spacedBy(
+                                                                    10.dp
+                                                                )
+                                                        ) {
+
+                                                            Text(
+                                                                text =
+                                                                    tr(
+                                                                        "פירוט אימונים:",
+                                                                        "Training details:"
+                                                                    ),
+                                                                style =
+                                                                    KmiTypography.cardTitle.copy(
+                                                                        fontWeight =
+                                                                            FontWeight.ExtraBold
+                                                                    ),
+                                                                color =
+                                                                    selectedDayTextColor,
+                                                                textAlign =
+                                                                    if (isEnglish) {
+                                                                        TextAlign.Start
+                                                                    } else {
+                                                                        TextAlign.Right
+                                                                    },
+                                                                modifier =
+                                                                    Modifier.fillMaxWidth()
+                                                            )
+
+                                                            if (
+                                                                selectedTrainingItems
+                                                                    .isNotEmpty()
+                                                            ) {
+
                                                                 selectedTrainingItems
                                                                     .sortedBy {
                                                                         it.timeText
                                                                     }
+                                                                    .forEach { training ->
 
-                                                            when {
-                                                                dayTrainings.size == 1 -> {
-                                                                    val training =
-                                                                        dayTrainings.first()
+                                                                        val branchLabel =
+                                                                            training.displayBranch(
+                                                                                isEnglish
+                                                                            )
 
-                                                                    onDateClick(
-                                                                        sel,
-                                                                        training.branch,
-                                                                        training.group,
-                                                                        training.timeText
+                                                                        val groupLabel =
+                                                                            training.displayGroup(
+                                                                                isEnglish
+                                                                            )
+
+                                                                        // שעה + סניף
+                                                                        Surface(
+                                                                            modifier =
+                                                                                Modifier.fillMaxWidth(),
+                                                                            shape =
+                                                                                RoundedCornerShape(
+                                                                                    18.dp
+                                                                                ),
+                                                                            color =
+                                                                                cardAccent.copy(
+                                                                                    alpha = 0.075f
+                                                                                ),
+                                                                            tonalElevation = 0.dp,
+                                                                            shadowElevation = 0.dp
+                                                                        ) {
+
+                                                                            Row(
+                                                                                modifier =
+                                                                                    Modifier
+                                                                                        .fillMaxWidth()
+                                                                                        .padding(
+                                                                                            horizontal = 12.dp,
+                                                                                            vertical = 11.dp
+                                                                                        ),
+                                                                                verticalAlignment =
+                                                                                    Alignment.CenterVertically
+                                                                            ) {
+
+                                                                                Column(
+                                                                                    modifier =
+                                                                                        Modifier.weight(
+                                                                                            1f
+                                                                                        ),
+                                                                                    horizontalAlignment =
+                                                                                        if (
+                                                                                            isEnglish
+                                                                                        ) {
+                                                                                            Alignment.Start
+                                                                                        } else {
+                                                                                            Alignment.End
+                                                                                        }
+                                                                                ) {
+
+                                                                                    Text(
+                                                                                        text =
+                                                                                            "${training.timeText} · $branchLabel",
+                                                                                        style =
+                                                                                            KmiTypography.body.copy(
+                                                                                                fontWeight =
+                                                                                                    FontWeight.ExtraBold
+                                                                                            ),
+                                                                                        color =
+                                                                                            selectedDayTextColor,
+                                                                                        textAlign =
+                                                                                            if (
+                                                                                                isEnglish
+                                                                                            ) {
+                                                                                                TextAlign.Start
+                                                                                            } else {
+                                                                                                TextAlign.Right
+                                                                                            },
+                                                                                        modifier =
+                                                                                            Modifier.fillMaxWidth()
+                                                                                    )
+                                                                                }
+
+                                                                                Spacer(
+                                                                                    Modifier.width(
+                                                                                        10.dp
+                                                                                    )
+                                                                                )
+
+                                                                                Surface(
+                                                                                    modifier =
+                                                                                        Modifier.size(
+                                                                                            34.dp
+                                                                                        ),
+                                                                                    shape =
+                                                                                        RoundedCornerShape(
+                                                                                            12.dp
+                                                                                        ),
+                                                                                    color =
+                                                                                        cardAccent.copy(
+                                                                                            alpha = 0.12f
+                                                                                        )
+                                                                                ) {
+
+                                                                                    Box(
+                                                                                        contentAlignment =
+                                                                                            Alignment.Center
+                                                                                    ) {
+
+                                                                                        Icon(
+                                                                                            imageVector =
+                                                                                                Icons.Filled.AccessTime,
+                                                                                            contentDescription =
+                                                                                                null,
+                                                                                            tint =
+                                                                                                cardAccent,
+                                                                                            modifier =
+                                                                                                Modifier.size(
+                                                                                                    19.dp
+                                                                                                )
+                                                                                        )
+                                                                                    }
+                                                                                }
+                                                                            }
+                                                                        }
+
+                                                                        // קבוצה
+                                                                        if (
+                                                                            groupLabel.isNotBlank()
+                                                                        ) {
+
+                                                                            Surface(
+                                                                                modifier =
+                                                                                    Modifier.fillMaxWidth(),
+                                                                                shape =
+                                                                                    RoundedCornerShape(
+                                                                                        18.dp
+                                                                                    ),
+                                                                                color =
+                                                                                    cardAccent.copy(
+                                                                                        alpha = 0.060f
+                                                                                    ),
+                                                                                tonalElevation = 0.dp,
+                                                                                shadowElevation = 0.dp
+                                                                            ) {
+
+                                                                                Row(
+                                                                                    modifier =
+                                                                                        Modifier
+                                                                                            .fillMaxWidth()
+                                                                                            .padding(
+                                                                                                horizontal = 12.dp,
+                                                                                                vertical = 11.dp
+                                                                                            ),
+                                                                                    verticalAlignment =
+                                                                                        Alignment.CenterVertically
+                                                                                ) {
+
+                                                                                    Text(
+                                                                                        text =
+                                                                                            groupLabel,
+                                                                                        style =
+                                                                                            KmiTypography.body.copy(
+                                                                                                fontWeight =
+                                                                                                    FontWeight.ExtraBold
+                                                                                            ),
+                                                                                        color =
+                                                                                            selectedDayTextColor,
+                                                                                        textAlign =
+                                                                                            if (
+                                                                                                isEnglish
+                                                                                            ) {
+                                                                                                TextAlign.Start
+                                                                                            } else {
+                                                                                                TextAlign.Right
+                                                                                            },
+                                                                                        modifier =
+                                                                                            Modifier.weight(
+                                                                                                1f
+                                                                                            )
+                                                                                    )
+
+                                                                                    Spacer(
+                                                                                        Modifier.width(
+                                                                                            10.dp
+                                                                                        )
+                                                                                    )
+
+                                                                                    Surface(
+                                                                                        modifier =
+                                                                                            Modifier.size(
+                                                                                                34.dp
+                                                                                            ),
+                                                                                        shape =
+                                                                                            RoundedCornerShape(
+                                                                                                12.dp
+                                                                                            ),
+                                                                                        color =
+                                                                                            cardAccent.copy(
+                                                                                                alpha = 0.12f
+                                                                                            )
+                                                                                    ) {
+
+                                                                                        Box(
+                                                                                            contentAlignment =
+                                                                                                Alignment.Center
+                                                                                        ) {
+
+                                                                                            Icon(
+                                                                                                imageVector =
+                                                                                                    Icons.Filled.Groups,
+                                                                                                contentDescription =
+                                                                                                    null,
+                                                                                                tint =
+                                                                                                    cardAccent,
+                                                                                                modifier =
+                                                                                                    Modifier.size(
+                                                                                                        19.dp
+                                                                                                    )
+                                                                                            )
+                                                                                        }
+                                                                                    }
+                                                                                }
+                                                                            }
+                                                                        }
+                                                                    }
+
+                                                            } else {
+
+                                                                Text(
+                                                                    text =
+                                                                        if (
+                                                                            !selHoliday
+                                                                                .isNullOrBlank()
+                                                                        ) {
+                                                                            tr(
+                                                                                "חג / מועד: $selHoliday",
+                                                                                "Holiday: $selHoliday"
+                                                                            )
+                                                                        } else {
+                                                                            tr(
+                                                                                "אין אירועים ביום זה.",
+                                                                                "No events on this day."
+                                                                            )
+                                                                        },
+                                                                    style =
+                                                                        KmiTypography.body.copy(
+                                                                            fontWeight =
+                                                                                FontWeight.SemiBold
+                                                                        ),
+                                                                    color =
+                                                                        selectedDayTextColor.copy(
+                                                                            alpha = 0.82f
+                                                                        ),
+                                                                    textAlign =
+                                                                        if (isEnglish) {
+                                                                            TextAlign.Start
+                                                                        } else {
+                                                                            TextAlign.Right
+                                                                        },
+                                                                    modifier =
+                                                                        Modifier.fillMaxWidth()
+                                                                )
+                                                            }
+
+                                                            if (
+                                                                !selHoliday
+                                                                    .isNullOrBlank() &&
+                                                                selectedTrainingItems
+                                                                    .isNotEmpty()
+                                                            ) {
+
+                                                                Text(
+                                                                    text =
+                                                                        tr(
+                                                                            "חג / מועד: $selHoliday",
+                                                                            "Holiday: $selHoliday"
+                                                                        ),
+                                                                    style =
+                                                                        KmiTypography.secondary.copy(
+                                                                            fontWeight =
+                                                                                FontWeight.Bold
+                                                                        ),
+                                                                    color =
+                                                                        selectedDayTextColor.copy(
+                                                                            alpha = 0.78f
+                                                                        ),
+                                                                    textAlign =
+                                                                        if (isEnglish) {
+                                                                            TextAlign.Start
+                                                                        } else {
+                                                                            TextAlign.Right
+                                                                        },
+                                                                    modifier =
+                                                                        Modifier.fillMaxWidth()
+                                                                )
+                                                            }
+                                                        }
+                                                    }
+
+                                                    // -----------------------------
+                                                    // פעולות
+                                                    // -----------------------------
+                                                    Row(
+                                                        modifier =
+                                                            Modifier.fillMaxWidth(),
+                                                        verticalAlignment =
+                                                            Alignment.CenterVertically,
+                                                        horizontalArrangement =
+                                                            Arrangement.spacedBy(
+                                                                10.dp
+                                                            )
+                                                    ) {
+
+                                                        Button(
+                                                            modifier =
+                                                                Modifier
+                                                                    .weight(1f)
+                                                                    .height(58.dp),
+                                                            enabled =
+                                                                hasSummaryForSelectedDate ||
+                                                                        selectedTrainingItems
+                                                                            .isNotEmpty(),
+                                                            onClick = {
+
+                                                                val dayTrainings =
+                                                                    selectedTrainingItems
+                                                                        .sortedBy {
+                                                                            it.timeText
+                                                                        }
+
+                                                                when {
+                                                                    dayTrainings.size == 1 -> {
+
+                                                                        val training =
+                                                                            dayTrainings.first()
+
+                                                                        onDateClick(
+                                                                            sel,
+                                                                            training.branch,
+                                                                            training.group,
+                                                                            training.timeText
+                                                                        )
+                                                                    }
+
+                                                                    dayTrainings.size > 1 -> {
+
+                                                                        trainingChoiceDate =
+                                                                            sel
+
+                                                                        trainingChoices =
+                                                                            dayTrainings
+                                                                    }
+
+                                                                    hasSummaryForSelectedDate -> {
+
+                                                                        onDateClick(
+                                                                            sel,
+                                                                            "",
+                                                                            "",
+                                                                            ""
+                                                                        )
+                                                                    }
+                                                                }
+                                                            },
+                                                            shape =
+                                                                RoundedCornerShape(
+                                                                    20.dp
+                                                                ),
+                                                            colors =
+                                                                ButtonDefaults.buttonColors(
+                                                                    containerColor =
+                                                                        cardAccent,
+                                                                    contentColor =
+                                                                        colorScheme.onPrimary
+                                                                ),
+                                                            elevation =
+                                                                ButtonDefaults.buttonElevation(
+                                                                    defaultElevation =
+                                                                        6.dp,
+                                                                    pressedElevation =
+                                                                        2.dp,
+                                                                    disabledElevation =
+                                                                        0.dp
+                                                                )
+                                                        ) {
+
+                                                            Text(
+                                                                text =
+                                                                    if (
+                                                                        hasSummaryForSelectedDate
+                                                                    ) {
+                                                                        tr(
+                                                                            "קריאת סיכום",
+                                                                            "Read training summary"
+                                                                        )
+                                                                    } else {
+                                                                        tr(
+                                                                            "הוספת סיכום",
+                                                                            "Add training summary"
+                                                                        )
+                                                                    },
+                                                                style =
+                                                                    KmiTypography.action.copy(
+                                                                        fontWeight =
+                                                                            FontWeight.ExtraBold
+                                                                    ),
+                                                                maxLines = 1
+                                                            )
+                                                        }
+
+                                                        if (
+                                                            hasSummaryForSelectedDate
+                                                        ) {
+
+                                                            Surface(
+                                                                modifier =
+                                                                    Modifier
+                                                                        .size(
+                                                                            58.dp
+                                                                        )
+                                                                        .clickable {
+                                                                            onOpenSummaryPdf(
+                                                                                sel
+                                                                            )
+                                                                        },
+                                                                shape =
+                                                                    RoundedCornerShape(
+                                                                        20.dp
+                                                                    ),
+                                                                color =
+                                                                    colorScheme.surface
+                                                                        .copy(
+                                                                            alpha = 0.82f
+                                                                        ),
+                                                                tonalElevation = 0.dp,
+                                                                shadowElevation = 3.dp,
+                                                                border =
+                                                                    BorderStroke(
+                                                                        width = 1.dp,
+                                                                        color =
+                                                                            cardAccent.copy(
+                                                                                alpha = 0.28f
+                                                                            )
                                                                     )
-                                                                }
+                                                            ) {
 
-                                                                dayTrainings.size > 1 -> {
-                                                                    trainingChoiceDate =
-                                                                        sel
+                                                                Box(
+                                                                    contentAlignment =
+                                                                        Alignment.Center
+                                                                ) {
 
-                                                                    trainingChoices =
-                                                                        dayTrainings
-                                                                }
-
-                                                                hasSummaryForSelectedDate -> {
-                                                                    /*
-                                                                     * הסיכום קיים, אבל האימון כבר לא נמצא
-                                                                     * בלו״ז הנוכחי.
-                                                                     *
-                                                                     * פותחים את הסיכום לפי התאריך בלבד.
-                                                                     * פרטי הסניף / הקבוצה / המאמן ייטענו
-                                                                     * מתוך הסיכום השמור.
-                                                                     */
-                                                                    onDateClick(
-                                                                        sel,
-                                                                        "",
-                                                                        "",
-                                                                        ""
+                                                                    Icon(
+                                                                        imageVector =
+                                                                            Icons.Filled.PictureAsPdf,
+                                                                        contentDescription =
+                                                                            tr(
+                                                                                "פתיחת PDF של סיכום האימון",
+                                                                                "Open training summary PDF"
+                                                                            ),
+                                                                        tint =
+                                                                            cardAccent,
+                                                                        modifier =
+                                                                            Modifier.size(
+                                                                                27.dp
+                                                                            )
                                                                     )
                                                                 }
                                                             }
-                                                        },
-                                                        shape = RoundedCornerShape(16.dp),
-                                                        contentPadding =
-                                                            PaddingValues(
-                                                                horizontal = 18.dp,
-                                                                vertical = 10.dp
-                                                            ),
-                                                        colors =
-                                                            ButtonDefaults.buttonColors(
-                                                                containerColor =
-                                                                    colorScheme.primary,
-                                                                contentColor =
-                                                                    colorScheme.onPrimary
-                                                            ),
-                                                        elevation =
-                                                            ButtonDefaults.buttonElevation(
-                                                                defaultElevation = 0.dp,
-                                                                pressedElevation = 0.dp,
-                                                                focusedElevation = 0.dp,
-                                                                hoveredElevation = 0.dp,
-                                                                disabledElevation = 0.dp
-                                                            )
-                                                    ) {
-                                                        Text(
-                                                            text =
-                                                                if (hasSummaryForSelectedDate) {
-                                                                    tr(
-                                                                        "קריאת סיכום",
-                                                                        "Read training summary"
-                                                                    )
-                                                                } else {
-                                                                    tr(
-                                                                        "הוספת סיכום",
-                                                                        "Add training summary"
-                                                                    )
-                                                                },
-                                                            style =
-                                                                KmiTypography.action.copy(
-                                                                    fontWeight =
-                                                                        FontWeight.ExtraBold
-                                                                )
-                                                        )
+                                                        }
                                                     }
                                                 }
                                             }
