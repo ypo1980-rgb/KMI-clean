@@ -29,7 +29,6 @@ import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Menu
@@ -305,7 +304,7 @@ private fun TrainingsWeekHeader(
         if (isEnglish) {
             Locale.US
         } else {
-            Locale("he", "IL")
+            Locale.forLanguageTag("he-IL")
         }
 
     val dateFormatter =
@@ -1781,7 +1780,7 @@ fun HomeScreen(
                                     val timeFormatter =
                                         SimpleDateFormat(
                                             "HH:mm",
-                                            Locale("he", "IL")
+                                            Locale.forLanguageTag("he-IL")
                                         ).apply {
                                             timeZone =
                                                 TimeZone.getTimeZone(
@@ -2054,7 +2053,7 @@ fun HomeScreen(
                     val locale = if (isEnglish) {
                         Locale.ENGLISH
                     } else {
-                        Locale("he", "IL")
+                        Locale.forLanguageTag("he-IL")
                     }
 
                     val dayFmt = SimpleDateFormat("EEEE", locale)
@@ -2453,7 +2452,7 @@ fun HomeScreen(
                     isEnglish = isEnglish,
                     accentColor = homeBeltAccent,
                     items = quickMenuItems,
-                    triggerModifier =
+                    modifier =
                         Modifier.pointerInput(
                             minHomeQuickMenuBottomDp,
                             maxHomeQuickMenuBottomDp,
@@ -2993,7 +2992,7 @@ fun HomeScreen(
                                                     val timeText = message.sentAt?.let {
                                                         SimpleDateFormat(
                                                             "dd/MM/yyyy · HH:mm",
-                                                            Locale("he", "IL")
+                                                            Locale.forLanguageTag("he-IL")
                                                         ).format(it)
                                                     }.orEmpty()
 
@@ -3351,7 +3350,7 @@ private fun HomePremiumQuickMenuPanel(
     isEnglish: Boolean,
     accentColor: Color,
     items: List<Triple<String, ImageVector, () -> Unit>>,
-    triggerModifier: Modifier = Modifier,
+    modifier: Modifier = Modifier,
     onClose: () -> Unit
 ) {
     val railShape =
@@ -3572,7 +3571,7 @@ private fun HomePremiumQuickMenuPanel(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(58.dp)
-                    .then(triggerModifier),
+                    .then(modifier),
                 shape = RoundedCornerShape(0.dp),
                 color = Color.Transparent,
                 tonalElevation = 0.dp,
@@ -3613,400 +3612,6 @@ private fun HomePremiumQuickMenuPanel(
                 }
             }
         }
-    }
-}
-
-@Composable
-private fun HomePremiumQuickMenuRow(
-    text: String,
-    icon: ImageVector,
-    isEnglish: Boolean,
-    accentColor: Color,
-    onClick: () -> Unit
-) {
-    val isLocked = text.endsWith(" 🔒")
-    val cleanText = if (isLocked) text.removeSuffix(" 🔒") else text
-    val menuAccent =
-        accentColor
-
-    val lockPulse =
-        rememberInfiniteTransition(
-            label = "homeQuickMenuLockPulse"
-        )
-
-    val lockScale by lockPulse.animateFloat(
-        initialValue = 0.90f,
-        targetValue = 1.00f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(900, easing = LinearEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "homeQuickMenuLockScale"
-    )
-
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .heightIn(min = 44.dp)
-            .clip(RoundedCornerShape(12.dp))
-            .clickable(onClick = onClick)
-            .padding(
-                horizontal = 4.dp,
-                vertical = 5.dp
-            ),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        if (isEnglish) {
-            HomePremiumQuickMenuIcon(
-                icon = icon,
-                accentColor = menuAccent
-            )
-            Spacer(Modifier.width(7.dp))
-
-            Text(
-                text = cleanText,
-                color = menuAccent,
-                fontWeight =
-                    FontWeight.SemiBold,
-                textAlign = TextAlign.Start,
-                style =
-                    KmiTypography.caption.copy(
-                        fontWeight =
-                            FontWeight.SemiBold
-                    ),
-                maxLines = 1,
-                overflow =
-                    TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f)
-            )
-
-            if (isLocked) {
-                Spacer(Modifier.width(5.dp))
-                Icon(
-                    imageVector =
-                        Icons.Filled.Lock,
-                    contentDescription = "Premium feature",
-                    tint =
-                        MaterialTheme
-                            .colorScheme
-                            .tertiary,
-                    modifier =
-                        Modifier
-                            .size(
-                                scaledIconSize(13.dp)
-                            )
-                            .graphicsLayer {
-                                scaleX = lockScale
-                                scaleY = lockScale
-                                alpha = 1f
-                            }
-                )
-            }
-        } else {
-            /*
-             * ב־RTL הרכיב הראשון מוצג בצד ימין:
-             * האייקון בצד ימין והמנעול בצד שמאל.
-             */
-            HomePremiumQuickMenuIcon(
-                icon = icon,
-                accentColor = menuAccent
-            )
-
-            Spacer(Modifier.width(7.dp))
-
-            Text(
-                text = cleanText,
-                color = menuAccent,
-                fontWeight =
-                    FontWeight.SemiBold,
-                textAlign = TextAlign.Right,
-                style =
-                    KmiTypography.caption.copy(
-                        fontWeight =
-                            FontWeight.SemiBold
-                    ),
-                maxLines = 1,
-                overflow =
-                    TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f)
-            )
-
-            if (isLocked) {
-                Spacer(Modifier.width(5.dp))
-
-                Icon(
-                    imageVector =
-                        Icons.Filled.Lock,
-                    contentDescription = "תכונת פרימיום",
-                    tint =
-                        MaterialTheme
-                            .colorScheme
-                            .tertiary,
-                    modifier =
-                        Modifier
-                            .size(
-                                scaledIconSize(13.dp)
-                            )
-                            .graphicsLayer {
-                                scaleX = lockScale
-                                scaleY = lockScale
-                                alpha = 1f
-                            }
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun QuickMenuPremiumHeader(
-    isEnglish: Boolean,
-    onClose: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    val colorScheme =
-        MaterialTheme.colorScheme
-
-    val isDarkMode =
-        colorScheme.background
-            .luminance() < 0.5f
-
-    val titleColor =
-        colorScheme.onSurface
-
-    val subtitleColor =
-        colorScheme.onSurfaceVariant
-
-    val graniteColors =
-        if (isDarkMode) {
-            listOf(
-                Color(0xFF3A373E),
-                Color(0xFF302D34),
-                Color(0xFF28252C)
-            )
-        } else {
-            listOf(
-                Color(0xFFF4F2F7),
-                Color(0xFFE3DFE8),
-                Color(0xFFD4CEDA)
-            )
-        }
-
-    Surface(
-        modifier = modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(
-            topStart = 18.dp,
-            topEnd = 18.dp,
-            bottomStart = 16.dp,
-            bottomEnd = 16.dp
-        ),
-        color = Color.Transparent,
-        tonalElevation = 0.dp,
-        shadowElevation = 2.dp
-    ) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(
-                    brush = Brush.verticalGradient(
-                        colors = graniteColors
-                    )
-                )
-                .padding(
-                    start = 10.dp,
-                    end = 10.dp,
-                    top = 9.dp,
-                    bottom = 9.dp
-                )
-        ) {
-            CompositionLocalProvider(
-                LocalLayoutDirection provides
-                        LayoutDirection.Ltr
-            ) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(min = 48.dp)
-                ) {
-                    Surface(
-                        modifier = Modifier
-                            .align(
-                                if (isEnglish) {
-                                    Alignment.CenterEnd
-                                } else {
-                                    Alignment.CenterStart
-                                }
-                            )
-                            .size(38.dp),
-                        shape = CircleShape,
-                        color =
-                            colorScheme.surface.copy(
-                                alpha = 0.94f
-                            ),
-                        border = BorderStroke(
-                            width = 1.dp,
-                            color =
-                                if (isDarkMode) {
-                                    Color(0xFF625D68)
-                                } else {
-                                    Color(0xFFC8C1CF)
-                                }
-                        ),
-                        tonalElevation = 0.dp,
-                        shadowElevation = 1.dp,
-                        onClick = onClose
-                    ) {
-                        Box(
-                            contentAlignment =
-                                Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector =
-                                    Icons.Filled.Close,
-                                contentDescription =
-                                    if (isEnglish) {
-                                        "Close quick menu"
-                                    } else {
-                                        "סגור תפריט מהיר"
-                                    },
-                                tint = titleColor,
-                                modifier =
-                                    Modifier.size(
-                                        KmiIconSize.medium
-                                    )
-                            )
-                        }
-                    }
-
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(
-                                start =
-                                    if (isEnglish) {
-                                        4.dp
-                                    } else {
-                                        50.dp
-                                    },
-                                end =
-                                    if (isEnglish) {
-                                        50.dp
-                                    } else {
-                                        4.dp
-                                    }
-                            )
-                            .align(Alignment.Center),
-                        horizontalAlignment =
-                            if (isEnglish) {
-                                Alignment.Start
-                            } else {
-                                Alignment.End
-                            }
-                    ) {
-                        Text(
-                            text =
-                                if (isEnglish) {
-                                    "Quick Menu"
-                                } else {
-                                    "תפריט מהיר"
-                                },
-                            style =
-                                KmiTypography.cardTitle.copy(
-                                    fontWeight =
-                                        FontWeight.Black
-                                ),
-                            color = titleColor,
-                            maxLines = 1,
-                            overflow =
-                                TextOverflow.Ellipsis,
-                            textAlign =
-                                if (isEnglish) {
-                                    TextAlign.Start
-                                } else {
-                                    TextAlign.Right
-                                },
-                            modifier =
-                                Modifier.fillMaxWidth()
-                        )
-
-                        Spacer(
-                            Modifier.height(1.dp)
-                        )
-
-                        Text(
-                            text =
-                                if (isEnglish) {
-                                    "Quick access to training tools"
-                                } else {
-                                    "גישה מהירה לכלי אימון"
-                                },
-                            style =
-                                KmiTypography.caption.copy(
-                                    fontWeight =
-                                        FontWeight.SemiBold
-                                ),
-                            color =
-                                subtitleColor.copy(
-                                    alpha = 0.78f
-                                ),
-                            maxLines = 1,
-                            overflow =
-                                TextOverflow.Ellipsis,
-                            textAlign =
-                                if (isEnglish) {
-                                    TextAlign.Start
-                                } else {
-                                    TextAlign.Right
-                                },
-                            modifier =
-                                Modifier.fillMaxWidth()
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun HomePremiumQuickMenuIcon(
-    icon: ImageVector,
-    accentColor: Color
-) {
-
-    Box(
-        modifier =
-            Modifier
-                .size(
-                    scaledIconSize(20.dp)
-                )
-                .background(
-                    color =
-                        accentColor.copy(
-                            alpha = 0.12f
-                        ),
-                    shape = CircleShape
-                )
-                .border(
-                    width = 1.dp,
-                    color =
-                        accentColor.copy(
-                            alpha = 0.30f
-                        ),
-                    shape = CircleShape
-                ),
-        contentAlignment =
-            Alignment.Center
-    ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = null,
-            tint = accentColor,
-            modifier =
-                Modifier.size(
-                    scaledIconSize(10.5.dp)
-                )
-        )
     }
 }
 
@@ -4187,7 +3792,7 @@ private fun TrainingCardCompact(
     val locale = if (isEnglish) {
         Locale.ENGLISH
     } else {
-        Locale("he", "IL")
+        Locale.forLanguageTag("he-IL")
     }
 
     val effectiveStartMillis =
@@ -4525,7 +4130,7 @@ private fun TrainingCardCompact(
     val trainingCardBorderColor =
         when {
             isTrainingCancelled ->
-                Color(0xFFE53935)
+                Color(0xFFEF5350)
 
             isTrainingOngoing ->
                 kmiSuccessColor()
@@ -4545,7 +4150,7 @@ private fun TrainingCardCompact(
     val trainingCardBackgroundColor =
         when {
             isTrainingCancelled ->
-                Color(0xFFFFD6D6)
+                Color(0xFFFFCDD2)
 
             isTrainingOngoing ->
                 kmiSuccessContainerColor()

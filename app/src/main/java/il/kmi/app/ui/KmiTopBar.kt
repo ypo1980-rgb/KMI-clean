@@ -87,6 +87,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import il.kmi.shared.localization.AppLanguageManager
 import il.kmi.app.voicecommands.VoiceCommandsBridge
+import il.kmi.app.voicecommands.VoiceShareBridge
 import androidx.compose.material.icons.rounded.KeyboardArrowDown
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Brush
@@ -320,9 +321,17 @@ fun KmiTopBar(
     val keyboardController = LocalSoftwareKeyboardController.current
     var hideBottomForShare by remember { mutableStateOf(false) }
 
+    /*
+     * שומר תמיד את פעולת השיתוף העדכנית שהמסך העביר,
+     * גם לאחר recomposition.
+     */
+    val currentOnShare by rememberUpdatedState(onShare)
+
     fun runKmiShare() {
-        if (onShare != null) {
-            onShare()
+        val screenShareAction = currentOnShare
+
+        if (screenShareAction != null) {
+            screenShareAction()
         } else {
             hideBottomForShare = true
             val root = (ctx as? Activity)?.window?.decorView?.rootView ?: rootView
@@ -335,6 +344,50 @@ fun KmiTopBar(
                     }
                 }
             }
+        }
+    }
+
+    /*
+     * מזהה ייחודי למופע הנוכחי של KmiTopBar.
+     * הוא מונע ממסך ישן למחוק את פעולת השיתוף
+     * של מסך חדש בזמן מעבר בין מסכים.
+     */
+    val voiceShareOwner =
+        remember {
+            Any()
+        }
+
+    val voiceShareAvailable =
+        !lockAllActions &&
+                (
+                        (
+                                showBottomActions &&
+                                        showBottomShare
+                                ) ||
+                                showTopShare
+                        )
+
+    DisposableEffect(
+        voiceShareOwner,
+        voiceShareAvailable
+    ) {
+        if (voiceShareAvailable) {
+            VoiceShareBridge.bind(
+                owner = voiceShareOwner,
+                onShare = {
+                    runKmiShare()
+                }
+            )
+        } else {
+            VoiceShareBridge.unbind(
+                owner = voiceShareOwner
+            )
+        }
+
+        onDispose {
+            VoiceShareBridge.unbind(
+                owner = voiceShareOwner
+            )
         }
     }
 

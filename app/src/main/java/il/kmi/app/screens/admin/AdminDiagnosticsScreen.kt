@@ -21,8 +21,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -33,8 +31,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Assessment
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Surface
@@ -42,9 +38,11 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.Scaffold
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.material3.MaterialTheme
+import il.kmi.app.ui.KmiPremiumDropdown
 import il.kmi.app.ui.KmiTopBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -76,7 +74,8 @@ import il.kmi.app.ui.pdf.KmiPdfHeader
 import java.text.SimpleDateFormat
 import java.util.Locale
 import java.util.concurrent.TimeUnit
-
+import java.time.LocalDate
+import java.time.ZoneId
 
 //=======================================================================
 
@@ -107,7 +106,8 @@ private enum class AdminDiagnosticsRange(
 ) {
     Today(1, "היום", "Today"),
     Week(7, "7 ימים", "7 days"),
-    Month(30, "30 ימים", "30 days")
+    Month(30, "30 ימים", "30 days"),
+    Custom(0, "מתאריך עד תאריך", "Custom dates")
 }
 
 private enum class AdminDiagnosticsType(
@@ -1002,7 +1002,11 @@ private fun createAdminDiagnosticsPdf(
 fun AdminDiagnosticsScreen(
     isEnglish: Boolean,
     onBack: () -> Unit,
-    onHome: () -> Unit
+    onHome: () -> Unit,
+    selectedFromDateIso: String = "",
+    selectedToDateIso: String = "",
+    onOpenDateRangeCalendar: () -> Unit = {},
+    onCustomDateRangeConsumed: () -> Unit = {}
 ) {
     BackHandler(
         onBack = onBack
@@ -1073,12 +1077,95 @@ fun AdminDiagnosticsScreen(
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var selectedRange by remember { mutableStateOf(AdminDiagnosticsRange.Week) }
     var selectedType by remember { mutableStateOf(AdminDiagnosticsType.All) }
+    var customFromMillis by rememberSaveable { mutableStateOf<Long?>(null) }
+    var customToMillis by rememberSaveable { mutableStateOf<Long?>(null) }
     var expandedLogGroupKey by rememberSaveable { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(
+        selectedFromDateIso,
+        selectedToDateIso
+    ) {
+        if (
+            selectedFromDateIso.isNotBlank() &&
+            selectedToDateIso.isNotBlank()
+        ) {
+            val fromDate =
+                runCatching {
+                    LocalDate.parse(selectedFromDateIso)
+                }.getOrNull()
+
+            val toDate =
+                runCatching {
+                    LocalDate.parse(selectedToDateIso)
+                }.getOrNull()
+
+            if (fromDate != null && toDate != null) {
+                val zoneId = ZoneId.systemDefault()
+
+                customFromMillis =
+                    fromDate
+                        .atStartOfDay(zoneId)
+                        .toInstant()
+                        .toEpochMilli()
+
+                customToMillis =
+                    toDate
+                        .atStartOfDay(zoneId)
+                        .toInstant()
+                        .toEpochMilli()
+
+                selectedRange = AdminDiagnosticsRange.Custom
+                onCustomDateRangeConsumed()
+            }
+        }
+    }
 
     val logs = adminLogs + googleAuthLogs
     val loading = loadingAdminLogs || loadingGoogleLogs || loadingScreens
 
-    DisposableEffect(Unit) {
+    val queryStartMillis =
+        remember(selectedRange, customFromMillis) {
+            if (selectedRange == AdminDiagnosticsRange.Custom) {
+                customFromMillis
+                    ?: System.currentTimeMillis() -
+                    TimeUnit.DAYS.toMillis(7)
+            } else {
+                System.currentTimeMillis() -
+                        TimeUnit.DAYS.toMillis(
+                            selectedRange.days.toLong()
+                        )
+            }
+        }
+
+    val queryEndExclusiveMillis =
+        remember(selectedRange, customToMillis) {
+            if (
+                selectedRange == AdminDiagnosticsRange.Custom &&
+                customToMillis != null
+            ) {
+                java.util.Calendar.getInstance().apply {
+                    timeInMillis = customToMillis!!
+                    add(java.util.Calendar.DAY_OF_MONTH, 1)
+                }.timeInMillis
+            } else {
+                System.currentTimeMillis() + 1_000L
+            }
+        }
+
+    val queryStartTimestamp =
+        remember(queryStartMillis) {
+            Timestamp(java.util.Date(queryStartMillis))
+        }
+
+    val queryEndTimestamp =
+        remember(queryEndExclusiveMillis) {
+            Timestamp(java.util.Date(queryEndExclusiveMillis))
+        }
+
+    DisposableEffect(
+        queryStartMillis,
+        queryEndExclusiveMillis
+    ) {
         loadingAdminLogs = true
         loadingGoogleLogs = true
         loadingScreens = true
@@ -1086,8 +1173,15 @@ fun AdminDiagnosticsScreen(
 
         val adminRegistration = Firebase.firestore
             .collection("adminLogs")
+            .whereGreaterThanOrEqualTo(
+                "createdAt",
+                queryStartTimestamp
+            )
+            .whereLessThan(
+                "createdAt",
+                queryEndTimestamp
+            )
             .orderBy("createdAt", Query.Direction.DESCENDING)
-            .limit(500)
             .addSnapshotListener { snapshot, error ->
                 loadingAdminLogs = false
 
@@ -1129,8 +1223,15 @@ fun AdminDiagnosticsScreen(
 
         val googleRegistration = Firebase.firestore
             .collection("google_auth_diagnostics")
+            .whereGreaterThanOrEqualTo(
+                "createdAt",
+                queryStartTimestamp
+            )
+            .whereLessThan(
+                "createdAt",
+                queryEndTimestamp
+            )
             .orderBy("createdAt", Query.Direction.DESCENDING)
-            .limit(120)
             .addSnapshotListener { snapshot, error ->
                 loadingGoogleLogs = false
 
@@ -1163,31 +1264,38 @@ fun AdminDiagnosticsScreen(
                                 combinedErrorText.contains("reauth failed", ignoreCase = true) ||
                                 combinedErrorText.contains("[16]", ignoreCase = true)
 
-                    val isError =
-                        !isRealUserCancel && (
-                                isReauth16 ||
-                                        apiStatusCode != null ||
-                                        errorClass.isNotBlank() ||
-                                        errorMessage.isNotBlank() ||
-                                        combinedErrorText.contains("failure", ignoreCase = true) ||
-                                        combinedErrorText.contains("failed", ignoreCase = true) ||
-                                        combinedErrorText.contains("exception", ignoreCase = true) ||
-                                        combinedErrorText.contains("error", ignoreCase = true) ||
-                                        combinedErrorText.contains("no_credential", ignoreCase = true) ||
-                                        combinedErrorText.contains("invalid", ignoreCase = true) ||
-                                        combinedErrorText.contains("blank", ignoreCase = true) ||
-                                        combinedErrorText.contains("לא מוגדרת", ignoreCase = true) ||
-                                        combinedErrorText.contains("אינה מוגדרת", ignoreCase = true) ||
-                                        combinedErrorText.contains("לא ניתן", ignoreCase = true) ||
-                                        combinedErrorText.contains("שגיאה", ignoreCase = true) ||
-                                        combinedErrorText.contains("תקלה", ignoreCase = true) ||
-                                        combinedErrorText.contains("כשל", ignoreCase = true)
-                                )
-
+                    /*
+                     * אירוע סיום מוצלח מקבל קדימות על פני שדות אבחון
+                     * נלווים שעלולים להכיל מילים כמו error או status.
+                     */
                     val isSuccess =
                         stage.contains("success", ignoreCase = true) ||
                                 stage.contains("firebase_success", ignoreCase = true) ||
-                                stage.contains("result_user_ready", ignoreCase = true)
+                                stage.contains("result_user_ready", ignoreCase = true) ||
+                                stage.contains("user_ready", ignoreCase = true)
+
+                    val isError =
+                        !isSuccess &&
+                                !isRealUserCancel &&
+                                (
+                                        isReauth16 ||
+                                                (apiStatusCode != null && apiStatusCode != 0L) ||
+                                                errorClass.isNotBlank() ||
+                                                errorMessage.isNotBlank() ||
+                                                combinedErrorText.contains("failure", ignoreCase = true) ||
+                                                combinedErrorText.contains("failed", ignoreCase = true) ||
+                                                combinedErrorText.contains("exception", ignoreCase = true) ||
+                                                combinedErrorText.contains("error", ignoreCase = true) ||
+                                                combinedErrorText.contains("no_credential", ignoreCase = true) ||
+                                                combinedErrorText.contains("invalid", ignoreCase = true) ||
+                                                combinedErrorText.contains("idTokenBlank=true", ignoreCase = true) ||
+                                                combinedErrorText.contains("לא מוגדרת", ignoreCase = true) ||
+                                                combinedErrorText.contains("אינה מוגדרת", ignoreCase = true) ||
+                                                combinedErrorText.contains("לא ניתן", ignoreCase = true) ||
+                                                combinedErrorText.contains("שגיאה", ignoreCase = true) ||
+                                                combinedErrorText.contains("תקלה", ignoreCase = true) ||
+                                                combinedErrorText.contains("כשל", ignoreCase = true)
+                                        )
 
                     val type = when {
                         isError -> "google_auth_error"
@@ -1313,21 +1421,39 @@ fun AdminDiagnosticsScreen(
         }
     }
 
-    val rangeStartMillis = remember(selectedRange) {
-        System.currentTimeMillis() - TimeUnit.DAYS.toMillis(selectedRange.days.toLong())
-    }
+    val filteredLogs =
+        remember(
+            logs,
+            queryStartMillis,
+            queryEndExclusiveMillis,
+            selectedType
+        ) {
+            logs.filter { log ->
+                val createdMillis =
+                    log.createdAt?.toDate()?.time ?: 0L
 
-    val filteredLogs = remember(logs, selectedRange, selectedType) {
-        logs.filter { log ->
-            val createdMillis = log.createdAt?.toDate()?.time ?: 0L
-            val inRange = createdMillis >= rangeStartMillis
-            val inType = selectedType == AdminDiagnosticsType.All ||
-                    log.type.contains(selectedType.key, ignoreCase = true) ||
-                    log.area.contains(selectedType.key, ignoreCase = true) ||
-                    log.severity.contains(selectedType.key, ignoreCase = true)
-            inRange && inType
+                val inRange =
+                    createdMillis >= queryStartMillis &&
+                            createdMillis < queryEndExclusiveMillis
+
+                val inType =
+                    selectedType == AdminDiagnosticsType.All ||
+                            log.type.contains(
+                                selectedType.key,
+                                ignoreCase = true
+                            ) ||
+                            log.area.contains(
+                                selectedType.key,
+                                ignoreCase = true
+                            ) ||
+                            log.severity.contains(
+                                selectedType.key,
+                                ignoreCase = true
+                            )
+
+                inRange && inType
+            }
         }
-    }
 
     val resetCutoffsByGroup = remember(resetVersion) {
         mapOf(
@@ -1414,6 +1540,34 @@ fun AdminDiagnosticsScreen(
                             ) ||
                             log.type.contains(
                                 "unhandled",
+                                ignoreCase = true
+                            ) ||
+                            diagnosticText.contains(
+                                "not_found",
+                                ignoreCase = true
+                            ) ||
+                            diagnosticText.contains(
+                                "no_result",
+                                ignoreCase = true
+                            ) ||
+                            diagnosticText.contains(
+                                "unresolved",
+                                ignoreCase = true
+                            ) ||
+                            diagnosticText.contains(
+                                "unsupported",
+                                ignoreCase = true
+                            ) ||
+                            diagnosticText.contains(
+                                "unknown_command",
+                                ignoreCase = true
+                            ) ||
+                            diagnosticText.contains(
+                                "לא נמצאה",
+                                ignoreCase = true
+                            ) ||
+                            diagnosticText.contains(
+                                "לא בוצעה",
                                 ignoreCase = true
                             )
                     )
@@ -1557,23 +1711,95 @@ fun AdminDiagnosticsScreen(
                 text.contains("לא ניתן", ignoreCase = true)
     }
 
-    val loginCount = visibleLogs.count { log ->
-        val text = "${log.type}\n${log.area}\n${log.message}"
+    /*
+     * כניסה נספרת פעם אחת בלבד לכל ניסיון התחברות.
+     * attemptId מונע ספירה כפולה של מספר שלבים
+     * השייכים לאותה כניסה באמצעות Google.
+     */
+    val loginCount =
+        visibleLogs
+            .filter { log ->
+                val text =
+                    buildString {
+                        append(log.type)
+                        append('\n')
+                        append(log.area)
+                        append('\n')
+                        append(log.title)
+                        append('\n')
+                        append(log.message)
+                    }
 
-        text.contains("intro_call_on_profile_complete", ignoreCase = true) ||
-                text.contains("intro_call_on_profile_missing_basic_details", ignoreCase = true) ||
-                text.contains("firebase_result_user_ready", ignoreCase = true) ||
-                text.contains("classic_firebase_success", ignoreCase = true) ||
-                text.contains("credential_manager_firebase_success", ignoreCase = true)
-    }
-
-    val searchNoResultsCount = visibleLogs.count {
-        it.type.contains("search_no_results", ignoreCase = true) ||
-                (
-                        it.type.contains("search", ignoreCase = true) &&
-                                it.type.contains("no", ignoreCase = true)
+                log.type.equals(
+                    "google_auth_success",
+                    ignoreCase = true
+                ) ||
+                        text.contains(
+                            "intro_call_on_profile_complete",
+                            ignoreCase = true
+                        ) ||
+                        text.contains(
+                            "intro_call_on_profile_missing_basic_details",
+                            ignoreCase = true
+                        ) ||
+                        text.contains(
+                            "intro_call_on_profile_missing_registration",
+                            ignoreCase = true
+                        ) ||
+                        text.contains(
+                            "firebase_result_user_ready",
+                            ignoreCase = true
+                        ) ||
+                        text.contains(
+                            "classic_firebase_success",
+                            ignoreCase = true
+                        ) ||
+                        text.contains(
+                            "credential_manager_firebase_success",
+                            ignoreCase = true
                         )
-    }
+            }
+            .distinctBy { log ->
+                log.attemptId.ifBlank {
+                    log.id
+                }
+            }
+            .size
+
+    /*
+     * המדד כולל:
+     * 1. חיפוש רגיל ללא תוצאה.
+     * 2. פקודה קולית שלא בוצעה.
+     * 3. בקשה לעוזר האישי שלא נענתה.
+     */
+    val searchNoResultsCount =
+        visibleLogs.count { log ->
+            val groupKey =
+                logGroupKey(log)
+
+            groupKey == "voice_commands" ||
+                    groupKey == "assistant_requests" ||
+                    log.type.contains(
+                        "search_no_results",
+                        ignoreCase = true
+                    ) ||
+                    (
+                            log.type.contains(
+                                "search",
+                                ignoreCase = true
+                            ) &&
+                                    (
+                                            log.type.contains(
+                                                "no_result",
+                                                ignoreCase = true
+                                            ) ||
+                                                    log.type.contains(
+                                                        "not_found",
+                                                        ignoreCase = true
+                                                    )
+                                            )
+                            )
+        }
 
     val successCount = visibleLogs.count {
         it.severity.equals("success", ignoreCase = true) ||
@@ -1603,11 +1829,38 @@ fun AdminDiagnosticsScreen(
             .take(10)
     }
 
-    val selectedRangeTitle = if (isEnglish) {
-        selectedRange.titleEn
-    } else {
-        selectedRange.titleHe
-    }
+    val selectedRangeTitle =
+        if (
+            selectedRange == AdminDiagnosticsRange.Custom &&
+            customFromMillis != null &&
+            customToMillis != null
+        ) {
+            val formatter =
+                SimpleDateFormat(
+                    "dd/MM/yyyy",
+                    Locale.getDefault()
+                )
+
+            val fromText =
+                formatter.format(
+                    java.util.Date(customFromMillis!!)
+                )
+
+            val toText =
+                formatter.format(
+                    java.util.Date(customToMillis!!)
+                )
+
+            if (isEnglish) {
+                "$fromText – $toText"
+            } else {
+                "$fromText – $toText"
+            }
+        } else if (isEnglish) {
+            selectedRange.titleEn
+        } else {
+            selectedRange.titleHe
+        }
 
     val selectedTypeTitle = if (isEnglish) {
         selectedType.titleEn
@@ -1871,6 +2124,7 @@ fun AdminDiagnosticsScreen(
                         isEnglish = isEnglish,
                         selectedRange = selectedRange,
                         onRangeSelected = { selectedRange = it },
+                        onOpenCustomDateRange = onOpenDateRangeCalendar,
                         selectedType = selectedType,
                         onTypeSelected = { selectedType = it }
                     )
@@ -2342,147 +2596,114 @@ private fun FilterRow(
     isEnglish: Boolean,
     selectedRange: AdminDiagnosticsRange,
     onRangeSelected: (AdminDiagnosticsRange) -> Unit,
+    onOpenCustomDateRange: () -> Unit,
     selectedType: AdminDiagnosticsType,
     onTypeSelected: (AdminDiagnosticsType) -> Unit
 ) {
-    val colorScheme = MaterialTheme.colorScheme
-    val isDarkMode =
-        colorScheme.background.luminance() < 0.5f
-
-    val filterContainerColor =
-        if (isDarkMode) {
-            colorScheme.surface.copy(alpha = 0.94f)
-        } else {
-            Color.White.copy(alpha = 0.94f)
-        }
-
-    val selectedFilterColor =
-        if (isDarkMode) {
-            Color(0xFF312E81)
-        } else {
-            Color(0xFFEDE4FF)
-        }
-
-    val filterBorderColor =
-        if (isDarkMode) {
-            colorScheme.outline.copy(alpha = 0.58f)
-        } else {
-            Color(0xFF37B7E8).copy(alpha = 0.70f)
-        }
-
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
 
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-            modifier = Modifier
-                .fillMaxWidth()
-                .horizontalScroll(rememberScrollState())
-        ) {
-            AdminDiagnosticsRange.entries.forEach { range ->
-                FilterChip(
-                    selected = selectedRange == range,
-                    onClick = {
-                        onRangeSelected(range)
-                    },
-                    colors = FilterChipDefaults.filterChipColors(
-                        containerColor = filterContainerColor,
-                        labelColor = colorScheme.onSurface,
-                        selectedContainerColor = selectedFilterColor,
-                        selectedLabelColor =
-                            if (isDarkMode) {
-                                Color(0xFFE0E7FF)
-                            } else {
-                                Color(0xFF111827)
-                            }
-                    ),
-                    border = BorderStroke(
-                        width = 1.dp,
-                        color =
-                            if (selectedRange == range) {
-                                if (isDarkMode) {
-                                    Color(0xFFA78BFA)
-                                } else {
-                                    Color(0xFF7C4DFF)
-                                }
-                            } else {
-                                filterBorderColor
-                            }
-                    ),
-                    label = {
-                        Text(
-                            text =
-                                if (isEnglish) {
-                                    range.titleEn
-                                } else {
-                                    range.titleHe
-                                },
-                            style =
-                                KmiTypography.caption.copy(
-                                    fontWeight = FontWeight.Bold
-                                ),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
-                )
+        val rangeOptions =
+            AdminDiagnosticsRange.entries.map { range ->
+                if (isEnglish) {
+                    range.titleEn
+                } else {
+                    range.titleHe
+                }
             }
-        }
 
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-            modifier = Modifier
-                .fillMaxWidth()
-                .horizontalScroll(rememberScrollState())
-        ) {
-            AdminDiagnosticsType.entries.forEach { type ->
-                FilterChip(
-                    selected = selectedType == type,
-                    onClick = {
-                        onTypeSelected(type)
-                    },
-                    colors = FilterChipDefaults.filterChipColors(
-                        containerColor = filterContainerColor,
-                        labelColor = colorScheme.onSurface,
-                        selectedContainerColor = selectedFilterColor,
-                        selectedLabelColor =
-                            if (isDarkMode) {
-                                Color(0xFFE0E7FF)
-                            } else {
-                                Color(0xFF111827)
-                            }
-                    ),
-                    border = BorderStroke(
-                        width = 1.dp,
-                        color =
-                            if (selectedType == type) {
-                                if (isDarkMode) {
-                                    Color(0xFFA78BFA)
-                                } else {
-                                    Color(0xFF7C4DFF)
-                                }
-                            } else {
-                                filterBorderColor
-                            }
-                    ),
-                    label = {
-                        Text(
-                            text =
-                                if (isEnglish) {
-                                    type.titleEn
-                                } else {
-                                    type.titleHe
-                                },
-                            style =
-                                KmiTypography.caption.copy(
-                                    fontWeight = FontWeight.Bold
-                                ),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
-                )
+        val selectedRangeText =
+            if (isEnglish) {
+                selectedRange.titleEn
+            } else {
+                selectedRange.titleHe
             }
-        }
+
+        KmiPremiumDropdown(
+            title =
+                if (isEnglish) {
+                    "Date range"
+                } else {
+                    "טווח תאריכים"
+                },
+            options = rangeOptions,
+            selectedValue = selectedRangeText,
+            isEnglish = isEnglish,
+            onSelected = { selectedText ->
+                val selected =
+                    AdminDiagnosticsRange.entries.firstOrNull { range ->
+                        val rangeText =
+                            if (isEnglish) {
+                                range.titleEn
+                            } else {
+                                range.titleHe
+                            }
+
+                        rangeText == selectedText
+                    }
+
+                if (selected == AdminDiagnosticsRange.Custom) {
+                    onOpenCustomDateRange()
+                } else if (selected != null) {
+                    onRangeSelected(selected)
+                }
+            },
+            modifier = Modifier.fillMaxWidth(),
+            placeholder =
+                if (isEnglish) {
+                    "Select date range"
+                } else {
+                    "בחר טווח תאריכים"
+                }
+        )
+
+        val typeOptions =
+            AdminDiagnosticsType.entries.map { type ->
+                if (isEnglish) {
+                    type.titleEn
+                } else {
+                    type.titleHe
+                }
+            }
+
+        val selectedTypeText =
+            if (isEnglish) {
+                selectedType.titleEn
+            } else {
+                selectedType.titleHe
+            }
+
+        KmiPremiumDropdown(
+            title =
+                if (isEnglish) {
+                    "Event type"
+                } else {
+                    "סוג אירוע"
+                },
+            options = typeOptions,
+            selectedValue = selectedTypeText,
+            isEnglish = isEnglish,
+            onSelected = { selectedText ->
+                AdminDiagnosticsType.entries
+                    .firstOrNull { type ->
+                        val typeText =
+                            if (isEnglish) {
+                                type.titleEn
+                            } else {
+                                type.titleHe
+                            }
+
+                        typeText == selectedText
+                    }
+                    ?.let(onTypeSelected)
+            },
+            modifier = Modifier.fillMaxWidth(),
+            placeholder =
+                if (isEnglish) {
+                    "Select event type"
+                } else {
+                    "בחר סוג אירוע"
+                }
+        )
     }
 }
 

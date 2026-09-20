@@ -34,6 +34,7 @@ import il.kmi.app.security.PinLockGate
 import il.kmi.shared.prefs.KmiPrefs
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.Modifier
+import androidx.core.content.edit
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.setValue
@@ -76,6 +77,7 @@ import il.kmi.app.voicecommands.VoiceAppCommand
 import il.kmi.app.voicecommands.VoiceDrawerDestination
 import il.kmi.app.voicecommands.VoiceCommandDiagnosticsLogger
 import il.kmi.app.voicecommands.VoiceCommandsBridge
+import il.kmi.app.voicecommands.VoiceShareBridge
 import il.kmi.app.subscription.AccessModeResolver
 import il.kmi.app.subscription.KmiAccess
 import il.kmi.app.subscription.LockedContentPolicy
@@ -122,12 +124,12 @@ private fun NavHostController.openIntroCleanFrom(sourceRoute: String) {
 private fun markInitialLanguageSelected(sp: SharedPreferences) {
     // חשוב להשתמש ב-commit כאן:
     // Google Login יכול לפתוח Activity/flow חיצוני, ולכן אנחנו רוצים שהשמירה תהיה מיידית.
-    sp.edit()
-        .putBoolean("initial_language_selected", true)
-        .putBoolean("initial_language_selected_v2", true)
-        .putBoolean("initial_language_selected_v3", true)
-        .putBoolean("initial_language_selected_v4", true)
-        .commit()
+    sp.edit(commit = true) {
+        putBoolean("initial_language_selected", true)
+        putBoolean("initial_language_selected_v2", true)
+        putBoolean("initial_language_selected_v3", true)
+        putBoolean("initial_language_selected_v4", true)
+    }
 }
 
 fun resolveVoiceBelt(query: String): Belt? {
@@ -551,7 +553,7 @@ fun MainNavHost(
         )
     }
 
-    fun consumePendingDailyReminderAndNavigate(source: String): Boolean {
+    fun consumePendingDailyReminderAndNavigate(): Boolean {
         val hasPendingDailyReminder =
             dailyReminderSp.getBoolean("has_pending_daily_reminder", false)
 
@@ -561,15 +563,14 @@ fun MainNavHost(
 
         val beltId = dailyReminderSp.getString("daily_reminder_belt_id", "").orEmpty()
         val topic = dailyReminderSp.getString("daily_reminder_topic", "").orEmpty()
-        val item = dailyReminderSp.getString("daily_reminder_item", "").orEmpty()
 
-        dailyReminderSp.edit()
-            .putBoolean("has_pending_daily_reminder", false)
-            .remove("daily_reminder_belt_id")
-            .remove("daily_reminder_topic")
-            .remove("daily_reminder_item")
-            .remove("received_at")
-            .apply()
+        dailyReminderSp.edit {
+            putBoolean("has_pending_daily_reminder", false)
+            remove("daily_reminder_belt_id")
+            remove("daily_reminder_topic")
+            remove("daily_reminder_item")
+            remove("received_at")
+        }
 
         val targetRoute = if (beltId.isNotBlank() && topic.isNotBlank()) {
             Route.TopicExercises.makeId(
@@ -589,7 +590,7 @@ fun MainNavHost(
         return true
     }
 
-    fun consumePendingForumPushAndNavigate(source: String): Boolean {
+    fun consumePendingForumPushAndNavigate(): Boolean {
         val hasPendingForumPush =
             forumPushSp.getBoolean("has_pending_forum_push", false) ||
                     sp.getBoolean("forum_open_from_push", false)
@@ -601,9 +602,9 @@ fun MainNavHost(
         // מנקים רק את הדגל הישן.
         // את forum_open_from_push ב-kmi_settings לא מנקים כאן,
         // כי ForumScreen צריך לקרוא אותו כדי לגלול להודעה הנכונה.
-        forumPushSp.edit()
-            .putBoolean("has_pending_forum_push", false)
-            .apply()
+        forumPushSp.edit {
+            putBoolean("has_pending_forum_push", false)
+        }
 
         nav.navigate(Route.Forum.route) {
             launchSingleTop = true
@@ -616,7 +617,7 @@ fun MainNavHost(
     val userPrefsForEntry = remember(ctx) {
         ctx.getSharedPreferences(
             "kmi_user",
-            android.content.Context.MODE_PRIVATE
+            Context.MODE_PRIVATE
         )
     }
 
@@ -627,7 +628,7 @@ fun MainNavHost(
     val voiceSubscriptionPrefs = remember(ctx) {
         ctx.getSharedPreferences(
             "kmi_subs",
-            android.content.Context.MODE_PRIVATE
+            Context.MODE_PRIVATE
         )
     }
 
@@ -770,9 +771,9 @@ fun MainNavHost(
                  * פתיחה ידנית של ההדרכה מסרגל הצד:
                  * בסיום חוזרים לבית ולא למסך טעינת הפתיחה.
                  */
-                sp.edit()
-                    .remove("onboarding_continue_to_splash")
-                    .apply()
+                sp.edit {
+                    remove("onboarding_continue_to_splash")
+                }
 
                 nav.navigate(
                     OnboardingRoute.build(
@@ -836,12 +837,12 @@ fun MainNavHost(
          * נשמר מחוץ ל־Compose כדי שהערך לא יתאפס
          * כאשר מחסנית הניווט נבנית מחדש.
          */
-        sp.edit()
-            .putBoolean(
+        sp.edit(commit = true) {
+            putBoolean(
                 "onboarding_continue_to_splash",
                 true
             )
-            .commit()
+        }
 
         nav.navigate(
             OnboardingRoute.build(
@@ -857,9 +858,9 @@ fun MainNavHost(
     }
 
     fun openStartupLoading() {
-        sp.edit()
-            .remove("onboarding_continue_to_splash")
-            .apply()
+        sp.edit {
+            remove("onboarding_continue_to_splash")
+        }
 
         nav.navigate(Route.Splash.route) {
             popUpTo(0) {
@@ -1013,9 +1014,8 @@ fun MainNavHost(
     ) {
         val roleListener =
             SharedPreferences
-                .OnSharedPreferenceChangeListener {
-                        _,
-                        key ->
+                .OnSharedPreferenceChangeListener { _,
+                                                    key ->
 
                     if (
                         key == "active_user_mode" ||
@@ -1114,28 +1114,27 @@ fun MainNavHost(
                     "trainee"
                 }
 
-            userPrefsForEntry
-                .edit()
-                .putBoolean(
+            userPrefsForEntry.edit {
+                putBoolean(
                     "isCoach",
                     verifiedCoach
                 )
-                .putString(
+                putString(
                     "last_active_app_role",
                     verifiedRole
                 )
-                .apply()
+            }
 
-            sp.edit()
-                .putBoolean(
+            sp.edit {
+                putBoolean(
                     "isCoach",
                     verifiedCoach
                 )
-                .putString(
+                putString(
                     "last_active_app_role",
                     verifiedRole
                 )
-                .apply()
+            }
         }
     }
 
@@ -1174,10 +1173,6 @@ fun MainNavHost(
             ownerRole = ownerRole
         )
     }
-
-    // ✅ כרגע ריק כדי שיקמפל (אחרי זה נחבר ל-ContentRepo)
-    val allExercises = remember { emptyList<il.kmi.app.ui.training.ExercisePickItem>() }
-
 
     // 🔊 שליטה בפתיחת עוזר ה־AI הקיים
     var showAssistant by remember {
@@ -1321,7 +1316,8 @@ fun MainNavHost(
 
 // ✅ קודם בודקים דגל מקומי שהרישום כבר הושלם.
 // זה מונע חזרה לטופס בגלל missing=[belt] או שדה בודד.
-                        val localProfileCompleted = isProfileCompletedLocally(sp, userPrefsForEntry, uid)
+                        val localProfileCompleted =
+                            isProfileCompletedLocally(sp, userPrefsForEntry, uid)
 
                         Log.d(
                             TAG_NAV,
@@ -1362,19 +1358,19 @@ fun MainNavHost(
                                         .getInstance()
                                         .signOut()
 
-                                    sp.edit()
-                                        .putBoolean(
+                                    sp.edit {
+                                        putBoolean(
                                             "is_logged_in",
                                             false
                                         )
-                                        .apply()
+                                    }
 
-                                    userPrefsForEntry.edit()
-                                        .putBoolean(
+                                    userPrefsForEntry.edit {
+                                        putBoolean(
                                             "is_logged_in",
                                             false
                                         )
-                                        .apply()
+                                    }
 
                                     nav.openIntroCleanFrom(
                                         Route.Splash.route
@@ -1389,9 +1385,7 @@ fun MainNavHost(
                                 )
 
                                 if (
-                                    consumePendingDailyReminderAndNavigate(
-                                        "splash_local_profile_completed"
-                                    )
+                                    consumePendingDailyReminderAndNavigate()
                                 ) {
                                     Log.d(
                                         TAG_NAV,
@@ -1402,9 +1396,7 @@ fun MainNavHost(
                                 }
 
                                 if (
-                                    consumePendingForumPushAndNavigate(
-                                        "splash_local_profile_completed"
-                                    )
+                                    consumePendingForumPushAndNavigate()
                                 ) {
                                     return@launch
                                 }
@@ -1491,19 +1483,19 @@ fun MainNavHost(
                                     .getInstance()
                                     .signOut()
 
-                                sp.edit()
-                                    .putBoolean(
+                                sp.edit {
+                                    putBoolean(
                                         "is_logged_in",
                                         false
                                     )
-                                    .apply()
+                                }
 
-                                userPrefsForEntry.edit()
-                                    .putBoolean(
+                                userPrefsForEntry.edit {
+                                    putBoolean(
                                         "is_logged_in",
                                         false
                                     )
-                                    .apply()
+                                }
 
                                 nav.openIntroCleanFrom(
                                     Route.Splash.route
@@ -1546,22 +1538,22 @@ fun MainNavHost(
 
                             if (remoteCompleted) {
 
-                                val hydrated = runCatching {
+                                runCatching {
                                     hydrateProfileLocallyFromFirestore(
                                         mainSp = sp,
                                         userSp = userPrefsForEntry,
                                         kmiPrefs = kmiPrefs,
                                         uid = uid
                                     )
-                                }.getOrDefault(false)
+                                }
 
                                 markProfileCompletedLocally(sp, userPrefsForEntry, uid)
 
-                                if (consumePendingDailyReminderAndNavigate("splash_remote_profile_completed")) {
+                                if (consumePendingDailyReminderAndNavigate()) {
                                     return@launch
                                 }
 
-                                if (consumePendingForumPushAndNavigate("splash_remote_profile_completed")) {
+                                if (consumePendingForumPushAndNavigate()) {
                                     return@launch
                                 }
 
@@ -1703,7 +1695,7 @@ fun MainNavHost(
                             }
                         }
                     },
-                    onSubmit = { fullName, phone, email, subject, message ->
+                    onSubmit = { _, _, _, _, _ ->
                         // כאן תדבר בהמשך לשרת / Firebase / Firestore
                     }
                 )
@@ -1820,7 +1812,7 @@ fun MainNavHost(
                             ?.uid
                             .orEmpty()
 
-                    android.util.Log.e(
+                    Log.e(
                         "AUTH_UID",
                         "CURRENT_FIREBASE_UID=$uid"
                     )
@@ -1852,14 +1844,14 @@ fun MainNavHost(
 
                     canManageTraineesAuthorized =
                         isActiveCoach &&
-                                coachDoc?.getBoolean(
+                                coachDoc.getBoolean(
                                     "canManageTrainees"
                                 ) == true
 
                     coachTraineesAuthorized =
                         isActiveCoach &&
                                 (
-                                        coachDoc?.getBoolean(
+                                        coachDoc.getBoolean(
                                             "canViewTrainees"
                                         ) == true ||
                                                 canManageTraineesAuthorized
@@ -2097,6 +2089,9 @@ fun MainNavHost(
                         "free_session_date_picker" ->
                             il.kmi.app.screens.MonthlyCalendarMode.FREE_SESSION_DATE_PICKER
 
+                        "admin_date_range_picker" ->
+                            il.kmi.app.screens.MonthlyCalendarMode.ADMIN_DATE_RANGE_PICKER
+
                         else ->
                             il.kmi.app.screens.MonthlyCalendarMode.VIEW_ONLY
                     }
@@ -2132,11 +2127,10 @@ fun MainNavHost(
                         }
                     },
 
-                    onDateClick = {
-                            pickedDate,
-                            branch,
-                            group,
-                            timeText ->
+                    onDateClick = { pickedDate,
+                                    branch,
+                                    group,
+                                    timeText ->
 
                         if (
                             requestedMode ==
@@ -2194,6 +2188,31 @@ fun MainNavHost(
                                 pickedDate.toString()
                             )
                         )
+                    },
+
+                    onDateRangeSelected = { fromDate,
+                                            toDate ->
+
+                        if (
+                            requestedMode ==
+                            "admin_date_range_picker"
+                        ) {
+                            nav.previousBackStackEntry
+                                ?.savedStateHandle
+                                ?.apply {
+                                    set(
+                                        "admin_diagnostics_from_date",
+                                        fromDate.toString()
+                                    )
+
+                                    set(
+                                        "admin_diagnostics_to_date",
+                                        toDate.toString()
+                                    )
+                                }
+
+                            nav.popBackStack()
+                        }
                     },
 
                     onOpenSummaryPdf = { pickedDate ->
@@ -2285,8 +2304,7 @@ fun MainNavHost(
 
                 LaunchedEffect(Unit) {
                     adminAuthorized =
-                        il.kmi.app.screens.admin.AdminAccess
-                            .isCurrentUserAdmin()
+                        AdminAccess.isCurrentUserAdmin()
                 }
 
                 when (adminAuthorized) {
@@ -2325,15 +2343,31 @@ fun MainNavHost(
             }
 
             // אזור מנהל - מרכז בקרה ולוגים 🔐
-            composable(route = "admin_diagnostics") {
+            composable(route = "admin_diagnostics") { backStackEntry ->
+
+                val selectedFromDateIso by
+                backStackEntry.savedStateHandle
+                    .getStateFlow(
+                        "admin_diagnostics_from_date",
+                        ""
+                    )
+                    .collectAsState()
+
+                val selectedToDateIso by
+                backStackEntry.savedStateHandle
+                    .getStateFlow(
+                        "admin_diagnostics_to_date",
+                        ""
+                    )
+                    .collectAsState()
+
                 var adminDiagnosticsAuthorized by remember {
                     mutableStateOf<Boolean?>(null)
                 }
 
                 LaunchedEffect(Unit) {
                     adminDiagnosticsAuthorized =
-                        il.kmi.app.screens.admin.AdminAccess
-                            .isCurrentUserAdmin()
+                        AdminAccess.isCurrentUserAdmin()
                 }
 
                 when (adminDiagnosticsAuthorized) {
@@ -2355,13 +2389,38 @@ fun MainNavHost(
                     true -> {
                         AdminDiagnosticsScreen(
                             isEnglish = isEnglish,
+                            selectedFromDateIso = selectedFromDateIso,
+                            selectedToDateIso = selectedToDateIso,
+
+                            onOpenDateRangeCalendar = {
+                                backStackEntry.savedStateHandle[
+                                    "monthly_calendar_mode"
+                                ] = "admin_date_range_picker"
+
+                                nav.navigate(Route.MonthlyCalendar.route) {
+                                    launchSingleTop = true
+                                }
+                            },
+
+                            onCustomDateRangeConsumed = {
+                                backStackEntry.savedStateHandle[
+                                    "admin_diagnostics_from_date"
+                                ] = ""
+
+                                backStackEntry.savedStateHandle[
+                                    "admin_diagnostics_to_date"
+                                ] = ""
+                            },
+
                             onBack = {
                                 nav.popBackStack()
                             },
+
                             onHome = {
                                 nav.navigate(Route.Home.route) {
                                     launchSingleTop = true
                                     restoreState = true
+
                                     popUpTo(nav.graph.startDestinationId) {
                                         inclusive = false
                                     }
@@ -2378,48 +2437,48 @@ fun MainNavHost(
             // --- NEW: Subscription graph ---
             subscriptionNavGraph(
                 nav = nav,
-                vm  = vm,
-                sp  = sp,
+                vm = vm,
+                sp = sp,
                 kmiPrefs = kmiPrefs
             )
 
             // --- NEW: Summary graph ---
             summaryNavGraph(
                 nav = nav,
-                vm  = vm,
-                sp  = sp,
+                vm = vm,
+                sp = sp,
                 kmiPrefs = kmiPrefs
             )
 
             // --- NEW: Practice graph ---
             practiceNavGraph(
                 nav = nav,
-                vm  = vm,
-                sp  = sp,
+                vm = vm,
+                sp = sp,
                 kmiPrefs = kmiPrefs
             )
 
             // --- NEW: Exam graph ---
             examNavGraph(
                 nav = nav,
-                vm  = vm,
-                sp  = sp,
+                vm = vm,
+                sp = sp,
                 kmiPrefs = kmiPrefs
             )
 
             // --- NEW: Progress graph ---
             progressNavGraph(
                 nav = nav,
-                vm  = vm,
-                sp  = sp,
+                vm = vm,
+                sp = sp,
                 kmiPrefs = kmiPrefs
             )
 
             // --- NEW: About / Forum / Legal graph ---
             aboutNavGraph(
                 nav = nav,
-                vm  = vm,
-                sp  = sp,
+                vm = vm,
+                sp = sp,
                 kmiPrefs = kmiPrefs
             )
 
@@ -2575,7 +2634,7 @@ fun MainNavHost(
                                     }
                                 }
                             },
-                            onSaveManualPayment = { traineeId, amount, method, notes ->
+                            onSaveManualPayment = { _, _, _, _ ->
                                 // כאן נחבר בהמשך ל-Firebase / Firestore
                             }
                         )
@@ -2613,7 +2672,7 @@ fun MainNavHost(
                 onDismiss = {
                     showVoiceCommands = false
                 },
-                onCommand = commandHandler@ { command, spokenText ->
+                onCommand = commandHandler@{ command, spokenText ->
                     showVoiceCommands = false
 
                     VoiceCommandDiagnosticsLogger.logTrace(
@@ -2867,6 +2926,70 @@ fun MainNavHost(
                             }
                         }
 
+                        VoiceAppCommand.ShareScreen -> {
+                            val currentRoute =
+                                nav.currentBackStackEntry
+                                    ?.destination
+                                    ?.route
+
+                            val sharePerformed =
+                                runCatching {
+                                    VoiceShareBridge.perform()
+                                }.getOrElse { throwable ->
+                                    VoiceCommandDiagnosticsLogger.logFailure(
+                                        context = ctx,
+                                        source = "main_navigation",
+                                        reason =
+                                            "voice_share_failed: " +
+                                                    throwable.message.orEmpty(),
+                                        spokenText = spokenText,
+                                        alternatives = listOf(
+                                            "command=ShareScreen"
+                                        ),
+                                        screenName = currentRoute
+                                    )
+
+                                    false
+                                }
+
+                            if (sharePerformed) {
+                                VoiceCommandDiagnosticsLogger.logTrace(
+                                    context = ctx,
+                                    stage = "share_action_dispatched",
+                                    spokenText = spokenText,
+                                    resolvedCommand = "ShareScreen",
+                                    target = currentRoute,
+                                    screenName = currentRoute
+                                )
+
+                                speakVoiceCommandFeedback(
+                                    hebrewText =
+                                        "פותח את אפשרויות השיתוף",
+                                    englishText =
+                                        "Opening sharing options"
+                                )
+                            } else {
+                                VoiceCommandDiagnosticsLogger.logFailure(
+                                    context = ctx,
+                                    source = "main_navigation",
+                                    reason =
+                                        "share_action_not_connected",
+                                    spokenText = spokenText,
+                                    alternatives = listOf(
+                                        "command=ShareScreen"
+                                    ),
+                                    screenName = currentRoute
+                                )
+
+                                speakVoiceCommandFeedback(
+                                    hebrewText =
+                                        "במסך הנוכחי אין אפשרות שיתוף",
+                                    englishText =
+                                        "Sharing is not available on the current screen"
+                                )
+                            }
+                        }
+
                         VoiceAppCommand.OpenSettings -> {
                             speakVoiceCommandFeedback(
                                 hebrewText = "מעביר למסך ההגדרות",
@@ -3000,13 +3123,12 @@ fun MainNavHost(
                             ctx.getSharedPreferences(
                                 "kmi_voice_home_actions",
                                 Context.MODE_PRIVATE
-                            )
-                                .edit()
-                                .putBoolean(
+                            ).edit {
+                                putBoolean(
                                     "open_free_trainings",
                                     true
                                 )
-                                .apply()
+                            }
 
                             speakVoiceCommandFeedback(
                                 hebrewText =
@@ -4256,13 +4378,13 @@ private suspend fun hydrateProfileLocallyFromFirestore(
         return this
     }
 
-    mainSp.edit()
-        .putProfileCore()
-        .commit()
+    mainSp.edit(commit = true) {
+        putProfileCore()
+    }
 
-    userSp.edit()
-        .putProfileCore()
-        .commit()
+    userSp.edit(commit = true) {
+        putProfileCore()
+    }
 
     kmiPrefs.fullName = fullName
     kmiPrefs.phone = phone
@@ -4282,29 +4404,29 @@ private fun markProfileCompletedLocally(
 ) {
     val completedAt = System.currentTimeMillis()
 
-    mainSp.edit()
-        .putBoolean("profile_completed", true)
-        .putBoolean("registration_complete", true)
+    mainSp.edit(commit = true) {
+        putBoolean("profile_completed", true)
+        putBoolean("registration_complete", true)
 
-        // ✅ דגל חדש: חשוב כדי שבכניסה הבאה isProfileCompletedLocally יחזיר true
-        .putBoolean("registration_form_completed", true)
-        .putInt("registration_schema_version", 2)
+        // חשוב כדי שבכניסה הבאה isProfileCompletedLocally יחזיר true
+        putBoolean("registration_form_completed", true)
+        putInt("registration_schema_version", 2)
 
-        .putString("profile_completed_uid", uid)
-        .putLong("profile_completed_at", completedAt)
-        .commit()
+        putString("profile_completed_uid", uid)
+        putLong("profile_completed_at", completedAt)
+    }
 
-    userSp.edit()
-        .putBoolean("profile_completed", true)
-        .putBoolean("registration_complete", true)
+    userSp.edit(commit = true) {
+        putBoolean("profile_completed", true)
+        putBoolean("registration_complete", true)
 
-        // ✅ דגל חדש: חשוב כדי שבכניסה הבאה isProfileCompletedLocally יחזיר true
-        .putBoolean("registration_form_completed", true)
-        .putInt("registration_schema_version", 2)
+        // חשוב כדי שבכניסה הבאה isProfileCompletedLocally יחזיר true
+        putBoolean("registration_form_completed", true)
+        putInt("registration_schema_version", 2)
 
-        .putString("profile_completed_uid", uid)
-        .putLong("profile_completed_at", completedAt)
-        .commit()
+        putString("profile_completed_uid", uid)
+        putLong("profile_completed_at", completedAt)
+    }
 
 }
 

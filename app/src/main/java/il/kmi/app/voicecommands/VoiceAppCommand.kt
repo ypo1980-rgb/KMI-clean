@@ -92,6 +92,12 @@ sealed interface VoiceAppCommand {
 
     data object GoBack : VoiceAppCommand
 
+    /*
+     * מפעיל את פעולת השיתוף של המסך הפעיל,
+     * בדיוק כמו לחיצה על אייקון השיתוף שלו.
+     */
+    data object ShareScreen : VoiceAppCommand
+
     data class OpenDrawerItem(
         val destination: VoiceDrawerDestination
     ) : VoiceAppCommand
@@ -165,6 +171,26 @@ object VoiceAppCommandParser {
         }
 
         return when {
+            containsAny(
+                normalized,
+                "שתף את המסך",
+                "שתף מסך",
+                "שתפי את המסך",
+                "שתפי מסך",
+                "שיתוף המסך",
+                "שתף את הקובץ",
+                "שתף קובץ",
+                "צור קובץ פי די אף",
+                "צור פי די אף",
+                "share the screen",
+                "share screen",
+                "share this screen",
+                "share the file",
+                "create pdf",
+                "create a pdf"
+            ) ->
+                VoiceAppCommand.ShareScreen
+
             isHomeCommand(normalized) ->
                 VoiceAppCommand.OpenHome
 

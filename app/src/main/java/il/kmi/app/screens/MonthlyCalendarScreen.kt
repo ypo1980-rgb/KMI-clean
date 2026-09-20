@@ -91,7 +91,8 @@ enum class MonthlyCalendarMode {
     VIEW_ONLY,
     SUMMARY_DATE_PICKER,
     ATTENDANCE_DATE_PICKER,
-    FREE_SESSION_DATE_PICKER
+    FREE_SESSION_DATE_PICKER,
+    ADMIN_DATE_RANGE_PICKER
 }
 
 @Composable
@@ -107,6 +108,10 @@ fun MonthlyCalendarScreen(
         group: String,
         timeText: String
     ) -> Unit,
+    onDateRangeSelected: (
+        fromDate: LocalDate,
+        toDate: LocalDate
+    ) -> Unit = { _, _ -> },
     onOpenSummaryPdf: (
         date: LocalDate
     ) -> Unit = {}
@@ -153,8 +158,22 @@ fun MonthlyCalendarScreen(
         var ym by rememberSaveable {
             mutableStateOf(YearMonth.from(today))
         }
-        var selectedDate by rememberSaveable {
-            mutableStateOf<LocalDate?>(today)
+
+        var selectedDate by rememberSaveable(mode) {
+            mutableStateOf<LocalDate?>(
+                if (
+                    mode ==
+                    MonthlyCalendarMode.ADMIN_DATE_RANGE_PICKER
+                ) {
+                    null
+                } else {
+                    today
+                }
+            )
+        }
+
+        var rangeStartDate by rememberSaveable(mode) {
+            mutableStateOf<LocalDate?>(null)
         }
 
         var firestoreSummaryDates by remember(
@@ -515,6 +534,12 @@ fun MonthlyCalendarScreen(
                                     "Training summary"
                                 )
 
+                            MonthlyCalendarMode.ADMIN_DATE_RANGE_PICKER ->
+                                tr(
+                                    "בחירת טווח תאריכים",
+                                    "Select date range"
+                                )
+
                             MonthlyCalendarMode.VIEW_ONLY ->
                                 tr(
                                     "לוח אימונים חודשי",
@@ -681,6 +706,39 @@ fun MonthlyCalendarScreen(
                             }
                     )
 
+                    if (
+                        mode ==
+                        MonthlyCalendarMode.ADMIN_DATE_RANGE_PICKER
+                    ) {
+                        Text(
+                            text =
+                                if (rangeStartDate == null) {
+                                    tr(
+                                        "בחר תאריך התחלה",
+                                        "Select start date"
+                                    )
+                                } else {
+                                    tr(
+                                        "נבחר ${rangeStartDate}. כעת בחר תאריך סיום",
+                                        "Selected ${rangeStartDate}. Now select an end date"
+                                    )
+                                },
+                            style =
+                                KmiTypography.body.copy(
+                                    fontWeight = FontWeight.Bold
+                                ),
+                            color = colorScheme.onSurface,
+                            textAlign = TextAlign.Center,
+                            modifier =
+                                Modifier
+                                    .fillMaxWidth()
+                                    .padding(
+                                        horizontal = 16.dp,
+                                        vertical = 6.dp
+                                    )
+                        )
+                    }
+
                     AnimatedContent(
                         targetState = ym,
                         transitionSpec = {
@@ -831,6 +889,26 @@ fun MonthlyCalendarScreen(
                                                 )
                                             }
 
+                                            MonthlyCalendarMode.ADMIN_DATE_RANGE_PICKER -> {
+                                                trainingChoiceDate = null
+                                                trainingChoices = emptyList()
+
+                                                val currentStart =
+                                                    rangeStartDate
+
+                                                if (
+                                                    currentStart == null ||
+                                                    date.isBefore(currentStart)
+                                                ) {
+                                                    rangeStartDate = date
+                                                } else {
+                                                    onDateRangeSelected(
+                                                        currentStart,
+                                                        date
+                                                    )
+                                                }
+                                            }
+
                                             MonthlyCalendarMode.SUMMARY_DATE_PICKER -> {
 
                                                 val hasSummaryForDate =
@@ -951,7 +1029,9 @@ fun MonthlyCalendarScreen(
                                     mode !=
                                     MonthlyCalendarMode.ATTENDANCE_DATE_PICKER &&
                                     mode !=
-                                    MonthlyCalendarMode.FREE_SESSION_DATE_PICKER
+                                    MonthlyCalendarMode.FREE_SESSION_DATE_PICKER &&
+                                    mode !=
+                                    MonthlyCalendarMode.ADMIN_DATE_RANGE_PICKER
                                 ) {
                                     selectedDate?.let { sel ->
                                         val selTrainings = trainingsCountByDate[sel] ?: 0
