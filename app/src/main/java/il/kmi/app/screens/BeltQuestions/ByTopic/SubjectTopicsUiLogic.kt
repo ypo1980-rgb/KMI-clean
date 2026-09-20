@@ -56,6 +56,7 @@ import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import il.kmi.app.domain.DefenseKind
+import il.kmi.app.domain.TopicsBySubjectRegistry
 import il.kmi.app.localization.rememberIsEnglish
 import il.kmi.app.ui.KmiTypography
 import il.kmi.app.ui.LocalAppIconScale
@@ -1429,11 +1430,33 @@ internal object SubjectTopicsUiLogic {
         @Volatile
         private var payloadByBeltId: Map<String, TopicsUiCountsPayload> = emptyMap()
 
-        fun get(belt: Belt): TopicsUiCountsPayload? =
-            payloadByBeltId[belt.id]
+        fun get(belt: Belt): TopicsUiCountsPayload? {
+            val cached =
+                payloadByBeltId[belt.id]
+                    ?: return null
 
-        fun put(belt: Belt, value: TopicsUiCountsPayload) {
-            payloadByBeltId = payloadByBeltId + (belt.id to value)
+            return cached.copy(
+                handsRootCount =
+                    cached.handsPickCounts.values.sum()
+            )
+        }
+
+        fun put(
+            belt: Belt,
+            value: TopicsUiCountsPayload
+        ) {
+            val normalized =
+                value.copy(
+                    handsRootCount =
+                        value.handsPickCounts.values.sum()
+                )
+
+            payloadByBeltId =
+                payloadByBeltId + (belt.id to normalized)
+        }
+
+        fun clear() {
+            payloadByBeltId = emptyMap()
         }
     }
 
@@ -1445,6 +1468,10 @@ internal object SubjectTopicsUiLogic {
         value: TopicsUiCountsPayload
     ) {
         TopicsUiCountsMemoryCache.put(currentBelt, value)
+    }
+
+    fun clearTopicsUiCountsCache() {
+        TopicsUiCountsMemoryCache.clear()
     }
 
     fun ensureTopicsUiCountsPreloaded(
@@ -1668,9 +1695,47 @@ internal object SubjectTopicsUiLogic {
     private fun countSubjectItemsForBelt(
         subject: SubjectTopic
     ): Int {
-        return SubjectTopicsEngine.countUiTitlesForSubject(
-            subject
-        )
+
+        val isElbowSubject =
+            subject.titleHeb.contains("מכות מרפק") ||
+                    subject.subTopicHint
+                        ?.contains("מרפק") == true ||
+                    subject.includeItemKeywords
+                        .orEmpty()
+                        .any { keyword ->
+                            keyword.contains("מרפק")
+                        }
+
+        if (isElbowSubject) {
+
+            val elbowSection =
+                HardSectionsCatalog
+                    .sectionsForSubject("hands_elbows")
+                    .orEmpty()
+                    .firstOrNull { section ->
+                        section.id == "hands_elbows"
+                    }
+                    ?: return 0
+
+            return elbowSection
+                .beltGroups
+                .flatMap { group ->
+                    group.items
+                }
+                .map { item ->
+                    item.trim()
+                }
+                .filter { item ->
+                    item.isNotBlank()
+                }
+                .distinct()
+                .size
+        }
+
+        return SubjectTopicsEngine
+            .countUiTitlesForSubject(
+                subject
+            )
     }
 
     fun buildTopicsUiCountsPayload(
@@ -1746,24 +1811,8 @@ internal object SubjectTopicsUiLogic {
                 }
             }
 
-        val handsRootCount: Int = run {
-            val base = handsBase ?: return@run 0
-            val all = linkedSetOf<String>()
-
-            handsPicksOrder.forEach { pick ->
-                val tmp = SubjectTopicsEngine.handsSubjectForPick(base, pick)
-
-                tmp.topicsByBelt.keys.forEach { belt ->
-                    SubjectTopicsEngine.resolveSectionsForSubject(belt, tmp)
-                        .asSequence()
-                        .flatMap { it.items.asSequence() }
-                        .map { it.canonicalId }
-                        .forEach { all += it }
-                }
-            }
-
-            all.size
-        }
+        val handsRootCount: Int =
+            handsPickCounts.values.sum()
 
         val uiSectionCounts: Map<String, Int> =
             subjects.associate { subject ->

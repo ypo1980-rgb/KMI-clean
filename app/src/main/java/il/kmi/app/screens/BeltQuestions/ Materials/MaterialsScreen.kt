@@ -4,7 +4,6 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.shape.AbsoluteRoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material3.*
@@ -27,8 +26,6 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.ui.draw.scale
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.runtime.rememberCoroutineScope
@@ -64,8 +61,8 @@ import java.io.File
 import java.io.FileOutputStream
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.relocation.BringIntoViewRequester
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.LocalWindowInfo
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import il.kmi.app.domain.ContentRepo
 import il.kmi.app.ui.color
 import il.kmi.app.ui.KmiIconSize
@@ -2638,114 +2635,211 @@ fun MaterialsScreen(
                     note.isNotBlank()
                 }
                 ?.let { visibleNote ->
-                    AlertDialog(
+                    Dialog(
                         onDismissRequest = {
                             nestedGeneralNoteTitle = null
                             nestedGeneralNoteText = null
                         },
-                        icon = {
-                            Surface(
-                                modifier = Modifier.size(38.dp),
-                                shape = CircleShape,
+                        properties = DialogProperties(
+                            dismissOnBackPress = true,
+                            dismissOnClickOutside = true,
+                            usePlatformDefaultWidth = false
+                        )
+                    ) {
+                        Surface(
+                            modifier = Modifier
+                                .fillMaxWidth(0.90f)
+                                .widthIn(max = 430.dp),
+                            shape = RoundedCornerShape(30.dp),
+                            color = MaterialTheme.colorScheme.surface,
+                            border = BorderStroke(
+                                width = 1.dp,
                                 color =
-                                    if (isDarkSurface) {
-                                        Color(0xFF2563EB)
-                                            .copy(alpha = 0.24f)
-                                    } else {
-                                        Color(0xFFE8F1FF)
-                                    },
-                                border = BorderStroke(
-                                    width = 1.dp,
-                                    color = Color(0xFF2563EB)
-                                        .copy(alpha = 0.40f)
-                                )
+                                    MaterialTheme.colorScheme
+                                        .outlineVariant
+                            ),
+                            tonalElevation = 0.dp,
+                            shadowElevation = 8.dp
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(
+                                    horizontal = 24.dp,
+                                    vertical = 18.dp
+                                ),
+                                horizontalAlignment =
+                                    Alignment.CenterHorizontally
                             ) {
-                                Box(
-                                    contentAlignment =
-                                        Alignment.Center
+                                Surface(
+                                    modifier = Modifier.size(38.dp),
+                                    shape = CircleShape,
+                                    color =
+                                        MaterialTheme.colorScheme
+                                            .secondaryContainer,
+                                    border = BorderStroke(
+                                        width = 1.dp,
+                                        color =
+                                            MaterialTheme.colorScheme
+                                                .secondary
+                                                .copy(alpha = 0.40f)
+                                    ),
+                                    tonalElevation = 0.dp,
+                                    shadowElevation = 0.dp
                                 ) {
-                                    Icon(
-                                        imageVector =
-                                            Icons.Filled.Info,
-                                        contentDescription = null,
-                                        tint =
-                                            if (isDarkSurface) {
-                                                Color(0xFF60A5FA)
-                                            } else {
-                                                Color(0xFF2563EB)
-                                            },
-                                        modifier =
-                                            Modifier.size(
+                                    Box(
+                                        contentAlignment =
+                                            Alignment.Center
+                                    ) {
+                                        Icon(
+                                            imageVector =
+                                                Icons.Filled.Info,
+                                            contentDescription = null,
+                                            tint =
+                                                MaterialTheme.colorScheme
+                                                    .onSecondaryContainer,
+                                            modifier = Modifier.size(
                                                 KmiIconSize.small
                                             )
-                                    )
+                                        )
+                                    }
                                 }
-                            }
-                        },
-                        title = {
-                            Text(
-                                text =
-                                    nestedGeneralNoteTitle
-                                        .orEmpty(),
-                                modifier =
-                                    Modifier.fillMaxWidth(),
-                                textAlign = TextAlign.Center,
-                                style =
-                                    KmiTypography.sectionTitle,
-                                color =
-                                    MaterialTheme
-                                        .colorScheme
-                                        .onSurface
-                            )
-                        },
-                        text = {
-                            Text(
-                                text = visibleNote,
-                                modifier =
-                                    Modifier.fillMaxWidth(),
-                                textAlign =
-                                    if (isEnglish) {
-                                        TextAlign.Left
-                                    } else {
-                                        TextAlign.Right
-                                    },
-                                style =
-                                    KmiTypography.secondary.copy(
-                                        fontWeight =
-                                            FontWeight.Medium
-                                    ),
-                                color =
-                                    MaterialTheme
-                                        .colorScheme
-                                        .onSurfaceVariant
-                            )
-                        },
-                        confirmButton = {
-                            TextButton(
-                                onClick = {
-                                    nestedGeneralNoteTitle =
-                                        null
-                                    nestedGeneralNoteText =
-                                        null
-                                }
-                            ) {
+
+                                Spacer(Modifier.height(8.dp))
+
                                 Text(
                                     text =
                                         if (isEnglish) {
-                                            "Close"
+                                            "PROFESSIONAL GUIDANCE"
                                         } else {
-                                            "סגור"
+                                            "דגשים מקצועיים"
                                         },
                                     style =
-                                        KmiTypography.action,
-                                    color = Color(0xFF2563EB)
+                                        KmiTypography.caption.copy(
+                                            fontWeight =
+                                                FontWeight.ExtraBold
+                                        ),
+                                    color =
+                                        MaterialTheme.colorScheme.secondary,
+                                    textAlign = TextAlign.Center
                                 )
+
+                                Spacer(Modifier.height(4.dp))
+
+                                Text(
+                                    text =
+                                        if (isEnglish) {
+                                            "General note: ${
+                                                nestedGeneralNoteTitle
+                                                    .orEmpty()
+                                            }"
+                                        } else {
+                                            "הערה כללית: ${
+                                                nestedGeneralNoteTitle
+                                                    .orEmpty()
+                                            }"
+                                        },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    textAlign = TextAlign.Center,
+                                    style =
+                                        KmiTypography.sectionTitle.copy(
+                                            fontWeight =
+                                                FontWeight.ExtraBold
+                                        ),
+                                    color =
+                                        MaterialTheme.colorScheme.onSurface
+                                )
+
+                                Spacer(Modifier.height(8.dp))
+
+                                HorizontalDivider(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    thickness = 1.dp,
+                                    color =
+                                        MaterialTheme.colorScheme
+                                            .outlineVariant
+                                )
+
+                                Spacer(Modifier.height(10.dp))
+
+                                Surface(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    shape = RoundedCornerShape(18.dp),
+                                    color =
+                                        MaterialTheme.colorScheme
+                                            .surfaceVariant,
+                                    border = BorderStroke(
+                                        width = 1.dp,
+                                        color =
+                                            MaterialTheme.colorScheme
+                                                .outlineVariant
+                                    ),
+                                    tonalElevation = 0.dp,
+                                    shadowElevation = 0.dp
+                                ) {
+                                    Text(
+                                        text = visibleNote,
+                                        modifier = Modifier.padding(
+                                            horizontal = 16.dp,
+                                            vertical = 14.dp
+                                        ),
+                                        textAlign =
+                                            if (isEnglish) {
+                                                TextAlign.Left
+                                            } else {
+                                                TextAlign.Right
+                                            },
+                                        style =
+                                            KmiTypography.secondary.copy(
+                                                fontWeight =
+                                                    FontWeight.Medium
+                                            ),
+                                        color =
+                                            MaterialTheme.colorScheme
+                                                .onSurfaceVariant
+                                    )
+                                }
+
+                                Spacer(Modifier.height(12.dp))
+
+                                Surface(
+                                    onClick = {
+                                        nestedGeneralNoteTitle = null
+                                        nestedGeneralNoteText = null
+                                    },
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .heightIn(min = 48.dp),
+                                    shape = RoundedCornerShape(16.dp),
+                                    color =
+                                        MaterialTheme.colorScheme.primary,
+                                    contentColor =
+                                        MaterialTheme.colorScheme.onPrimary,
+                                    tonalElevation = 0.dp,
+                                    shadowElevation = 0.dp
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(vertical = 12.dp),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text(
+                                            text =
+                                                if (isEnglish) {
+                                                    "Close"
+                                                } else {
+                                                    "סגור"
+                                                },
+                                            style =
+                                                KmiTypography.action.copy(
+                                                    fontWeight =
+                                                        FontWeight.ExtraBold
+                                                )
+                                        )
+                                    }
+                                }
                             }
-                        },
-                        shape = RoundedCornerShape(26.dp),
-                        containerColor =
-                            MaterialTheme.colorScheme.surface
-                    )
+                        }
+                    }
                 }
 
             // ===== דיאלוג הסבר בעקבות חיפוש / מידע =====

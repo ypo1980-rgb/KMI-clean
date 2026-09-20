@@ -194,11 +194,11 @@ exports.recoverUsername = functions.https.onCall(async (data, context) => {
 
     message: {
       subject:
-        "K.M.I - שחזור שם משתמש",
+        "K.A.M.I - שחזור שם משתמש",
 
       text:
         "שלום,\n\n" +
-        "שם המשתמש שלך באפליקציית K.M.I הוא:\n\n" +
+        "שם המשתמש שלך באפליקציית K.A.M.I הוא:\n\n" +
         username +
         "\n\n" +
         "אם לא ביקשת לשחזר את שם המשתמש, " +
@@ -250,6 +250,15 @@ exports.recoverPassword = functions.https.onCall(async (data, context) => {
     data && data.email
   );
 
+  const appLanguage =
+    String(
+      data && data.lang || "he"
+    )
+      .trim()
+      .toLowerCase() === "en"
+      ? "en"
+      : "he";
+
   if (!emailLower) {
     throw new functions.https.HttpsError(
       "invalid-argument",
@@ -300,7 +309,8 @@ exports.recoverPassword = functions.https.onCall(async (data, context) => {
     }
 
     const resetUrl =
-      "https://app-1c22cc8d.web.app/reset-password.html";
+      "https://app-1c22cc8d.web.app/" +
+      `reset-password.html?appLang=${appLanguage}`;
 
     const actionCodeSettings = {
       url: resetUrl,
@@ -338,7 +348,7 @@ exports.recoverPassword = functions.https.onCall(async (data, context) => {
 
       message: {
         subject:
-          "K.M.I - איפוס סיסמה",
+          "K.A.M.I - איפוס סיסמה",
 
         text:
           "שלום,\n\n" +

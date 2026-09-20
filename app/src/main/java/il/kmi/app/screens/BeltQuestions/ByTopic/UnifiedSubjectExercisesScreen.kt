@@ -65,6 +65,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -106,6 +107,9 @@ import il.kmi.shared.localization.AppLanguage
 import il.kmi.shared.localization.LocalizationRuntime
 import il.yuval.ui.theme.kmiSectionHeaderBrush
 import il.yuval.ui.theme.kmiSectionHeaderContentColor
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 
 //=========================================================================
@@ -603,6 +607,104 @@ private fun createUnifiedSubjectExercisesPdf(
     return file
 }
 
+internal object HardSubjectResolverMemoryCache {
+
+    private val lock =
+        Any()
+
+    private val resolvedResults =
+        mutableMapOf<
+                String,
+                HardSectionsResolver.NodeResult?
+                >()
+
+    private fun cacheKey(
+        subjectId: String,
+        sectionId: String?
+    ): String {
+        return buildString {
+            append(subjectId.trim())
+            append("||")
+            append(sectionId?.trim().orEmpty())
+        }
+    }
+
+    fun resolve(
+        subjectId: String,
+        sectionId: String? = null
+    ): HardSectionsResolver.NodeResult? {
+        val key =
+            cacheKey(
+                subjectId = subjectId,
+                sectionId = sectionId
+            )
+
+        synchronized(lock) {
+            if (resolvedResults.containsKey(key)) {
+                return resolvedResults[key]
+            }
+        }
+
+        val resolved =
+            HardSectionsResolver.resolve(
+                subjectId,
+                sectionId
+            )
+
+        synchronized(lock) {
+            resolvedResults[key] =
+                resolved
+        }
+
+        return resolved
+    }
+
+    private fun preloadTree(
+        subjectId: String,
+        sectionId: String? = null
+    ) {
+        when (
+            val resolved =
+                resolve(
+                    subjectId = subjectId,
+                    sectionId = sectionId
+                )
+        ) {
+            is HardSectionsResolver.NodeResult.Sections -> {
+                resolved.entries.forEach { entry ->
+                    preloadTree(
+                        subjectId = subjectId,
+                        sectionId = entry.id
+                    )
+                }
+            }
+
+            is HardSectionsResolver.NodeResult.BeltGroups,
+            null -> Unit
+        }
+    }
+
+    fun preloadAll() {
+        listOf(
+            "def_internal",
+            "def_external",
+            "knife_defense",
+            "gun_threat_defense",
+            "stick_defense",
+            "kicks_hard",
+            "knife_rifle_defense",
+            "multiple_attackers_defense",
+            "releases",
+            "releases_hugs",
+            "hands_all"
+        ).forEach { subjectId ->
+            preloadTree(
+                subjectId = subjectId
+            )
+        }
+    }
+}
+
 @Composable
 fun UnifiedSubjectExercisesScreen(
     subjectId: String,
@@ -621,7 +723,10 @@ fun UnifiedSubjectExercisesScreen(
     }
 
     val result = remember(resolverSubjectId, sectionId) {
-        HardSectionsResolver.resolve(resolverSubjectId, sectionId)
+        HardSubjectResolverMemoryCache.resolve(
+            subjectId = resolverSubjectId,
+            sectionId = sectionId
+        )
     }
 
     val combinedDefenseGroups = remember(resolverSubjectId) {
@@ -908,7 +1013,12 @@ private fun combinedDefenseGroupsFor(
     }
 
     sectionIds.forEach { sectionId ->
-        when (val resolved = HardSectionsResolver.resolve(sectionId, null)) {
+        when (
+            val resolved =
+                HardSubjectResolverMemoryCache.resolve(
+                    subjectId = sectionId
+                )
+        ) {
             is HardSectionsResolver.NodeResult.BeltGroups -> {
                 addGroups(resolved.groups)
             }
@@ -948,7 +1058,13 @@ private fun flattenNestedSectionsToBeltGroups(
     }
 
     fun collect(entry: HardSectionsResolver.SectionEntry) {
-        when (val resolved = HardSectionsResolver.resolve(subjectId, entry.id)) {
+        when (
+            val resolved =
+                HardSubjectResolverMemoryCache.resolve(
+                    subjectId = subjectId,
+                    sectionId = entry.id
+                )
+        ) {
             is HardSectionsResolver.NodeResult.BeltGroups -> {
                 addGroups(resolved.groups)
             }
@@ -1008,9 +1124,6 @@ private fun SectionsContent(
         )
     }
 
-    val marksVersion by
-    vm.marksVersion.collectAsState()
-
     val favoriteIds: Set<String> by
     FavoritesStore
         .favoritesFlow
@@ -1066,9 +1179,9 @@ private fun SectionsContent(
                 val groups =
                     when (
                         val resolved =
-                            HardSectionsResolver.resolve(
-                                resolveSubjectId,
-                                entry.id
+                            HardSubjectResolverMemoryCache.resolve(
+                                subjectId = resolveSubjectId,
+                                sectionId = entry.id
                             )
                     ) {
                         is HardSectionsResolver
@@ -1357,8 +1470,7 @@ private fun SectionsContent(
     }
 
     LaunchedEffect(
-        allExerciseRefs,
-        marksVersion
+        allExerciseRefs
     ) {
         allExerciseRefs.forEach { ref ->
 
@@ -1382,7 +1494,7 @@ private fun SectionsContent(
                     Boolean? = null
 
             for (key in topicKeys) {
-                val direct =
+                val loaded =
                     runCatching {
                         vm.getItemStatusNullable(
                             belt = ref.belt,
@@ -1391,26 +1503,6 @@ private fun SectionsContent(
                         )
                     }
                         .getOrNull()
-
-                val loaded =
-                    direct
-                        ?: runCatching {
-                            if (
-                                vm.isMastered(
-                                    belt =
-                                        ref.belt,
-                                    topic =
-                                        key,
-                                    item =
-                                        statusId
-                                )
-                            ) {
-                                true
-                            } else {
-                                null
-                            }
-                        }
-                            .getOrNull()
 
                 if (loaded != null) {
                     traineeValue =
@@ -2150,7 +2242,8 @@ private sealed interface HardBeltListRow {
     data class Exercise(
         override val belt: Belt,
         val index: Int,
-        val rawItem: String
+        val rawItem: String,
+        val statusId: String
     ) : HardBeltListRow
 }
 
@@ -2322,11 +2415,16 @@ private fun BeltGroupsContent(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
+
     val prefs = remember(context) {
-        context.getSharedPreferences("kmi_settings", Context.MODE_PRIVATE)
+        context.getSharedPreferences(
+            "kmi_settings",
+            Context.MODE_PRIVATE
+        )
     }
 
-    val marksVersion by vm.marksVersion.collectAsState()
+    val persistenceScope =
+        rememberCoroutineScope()
 
     val hardItemStates =
         remember(title) {
@@ -2609,108 +2707,132 @@ private fun BeltGroupsContent(
 
     LaunchedEffect(
         groups,
-        marksVersion
+        title,
+        isCoach
     ) {
-        groups.forEach { group ->
-            val rawItems =
-                hardItemsOf(group)
-
-            rawItems.forEach { rawItem ->
-                val statusId =
-                    hardStatusIdFor(
-                        belt = group.belt,
-                        topic = title,
-                        rawItem = rawItem
+        val cachedStatusesByBelt =
+            groups
+                .map { group ->
+                    group.belt
+                }
+                .distinct()
+                .associateWith { belt ->
+                    vm.getBeltStatusSnapshot(
+                        belt = belt
                     )
-
-                var valueFromVm: Boolean? =
-                    null
-
-                for (key in hardStatusKeysFor(title)) {
-                    val directStatus =
-                        runCatching {
-                            vm.getItemStatusNullable(
-                                belt = group.belt,
-                                topic = key,
-                                item = statusId
-                            )
-                        }
-                            .getOrNull()
-
-                    val fromKey =
-                        directStatus
-                            ?: runCatching {
-                                if (
-                                    vm.isMastered(
-                                        belt = group.belt,
-                                        topic = key,
-                                        item = statusId
-                                    )
-                                ) {
-                                    true
-                                } else {
-                                    null
-                                }
-                            }
-                                .getOrNull()
-
-                    if (fromKey != null) {
-                        valueFromVm = fromKey
-                        break
-                    }
                 }
 
-                if (valueFromVm == null) {
-                    for (key in hardStatusKeysFor(title)) {
-                        val masteredKey =
-                            "mastered_${group.belt.id}_$key"
+        val (
+            loadedItemStates,
+            loadedPartiallyKnownStates,
+            loadedCoachStates
+        ) = withContext(Dispatchers.IO) {
+            val itemStates =
+                linkedMapOf<String, Boolean?>()
 
-                        val unknownKey =
-                            "unknown_${group.belt.id}_$key"
+            val partiallyKnownStates =
+                linkedMapOf<String, Boolean>()
 
-                        val masteredSet =
-                            prefs.getStringSet(
-                                masteredKey,
-                                emptySet<String>()
-                            ) ?: emptySet()
+            val coachStates =
+                linkedMapOf<String, CoachMaterialProgress>()
 
-                        val unknownSet =
-                            prefs.getStringSet(
-                                unknownKey,
-                                emptySet<String>()
-                            ) ?: emptySet()
+            val statusKeys =
+                hardStatusKeysFor(title)
 
-                        val localValue: Boolean? =
-                            when {
-                                statusId in masteredSet ->
-                                    true
+            groups.forEach { group ->
+                val rawItems =
+                    hardItemsOf(group)
 
-                                statusId in unknownSet ->
-                                    false
+                rawItems.forEach { rawItem ->
+                    val statusId =
+                        hardStatusIdFor(
+                            belt = group.belt,
+                            topic = title,
+                            rawItem = rawItem
+                        )
 
-                                else ->
-                                    null
+                    var valueFromVm: Boolean? =
+                        null
+
+                    val beltStatuses =
+                        cachedStatusesByBelt[
+                            group.belt
+                        ]
+                            .orEmpty()
+
+                    for (key in statusKeys) {
+                        val canonicalKey =
+                            if (
+                                key.equals(
+                                    "כללי",
+                                    ignoreCase = true
+                                )
+                            ) {
+                                ""
+                            } else {
+                                key
                             }
 
-                        if (localValue != null) {
-                            valueFromVm =
-                                localValue
+                        val topicStatuses =
+                            beltStatuses[
+                                canonicalKey
+                            ]
 
-                            vm.setItemStatusNullable(
-                                belt = group.belt,
-                                topic = key,
-                                item = statusId,
-                                value = localValue
-                            )
+                        if (
+                            topicStatuses
+                                ?.containsKey(statusId) ==
+                            true
+                        ) {
+                            valueFromVm =
+                                topicStatuses[
+                                    statusId
+                                ]
 
                             break
                         }
                     }
-                }
 
-                val isPartiallyKnown =
-                    hardStatusKeysFor(title)
-                        .any { key ->
+                    if (valueFromVm == null) {
+                        for (key in statusKeys) {
+                            val masteredKey =
+                                "mastered_${group.belt.id}_$key"
+
+                            val unknownKey =
+                                "unknown_${group.belt.id}_$key"
+
+                            val masteredSet =
+                                prefs.getStringSet(
+                                    masteredKey,
+                                    emptySet<String>()
+                                ) ?: emptySet()
+
+                            val unknownSet =
+                                prefs.getStringSet(
+                                    unknownKey,
+                                    emptySet<String>()
+                                ) ?: emptySet()
+
+                            val localValue: Boolean? =
+                                when {
+                                    statusId in masteredSet ->
+                                        true
+
+                                    statusId in unknownSet ->
+                                        false
+
+                                    else ->
+                                        null
+                                }
+
+                            if (localValue != null) {
+                                valueFromVm = localValue
+                                break
+                            }
+                        }
+                    }
+
+                    val isPartiallyKnown =
+                        statusKeys.any { key ->
                             val partiallyKnownKey =
                                 "partially_known_${group.belt.id}_$key"
 
@@ -2723,28 +2845,49 @@ private fun BeltGroupsContent(
                             statusId in partiallyKnownSet
                         }
 
-                hardPartiallyKnownStates[statusId] =
-                    isPartiallyKnown
+                    partiallyKnownStates[statusId] =
+                        isPartiallyKnown
 
-                hardItemStates[statusId] =
-                    when {
-                        isPartiallyKnown ->
+                    itemStates[statusId] =
+                        if (isPartiallyKnown) {
                             false
-
-                        else ->
+                        } else {
                             valueFromVm
-                    }
+                        }
 
-                if (isCoach) {
-                    coachProgressStates[statusId] =
-                        loadCoachProgress(
-                            belt = group.belt,
-                            statusId = statusId
-                        )
+                    if (isCoach) {
+                        coachStates[statusId] =
+                            loadCoachProgress(
+                                belt = group.belt,
+                                statusId = statusId
+                            )
+                    }
                 }
             }
+
+            Triple(
+                itemStates,
+                partiallyKnownStates,
+                coachStates
+            )
         }
+
+        hardItemStates.clear()
+        hardItemStates.putAll(
+            loadedItemStates
+        )
+
+        hardPartiallyKnownStates.clear()
+        hardPartiallyKnownStates.putAll(
+            loadedPartiallyKnownStates
+        )
+
+        coachProgressStates.clear()
+        coachProgressStates.putAll(
+            loadedCoachStates
+        )
     }
+
 
     val favoriteIds: Set<String> by FavoritesStore
         .favoritesFlow
@@ -2771,26 +2914,31 @@ private fun BeltGroupsContent(
             groups,
             title
         ) {
-        buildList {
-            groups.forEach { group ->
-                add(
-                    HardBeltListRow.BeltHeader(
-                        belt = group.belt
-                    )
-                )
-
-                hardItemsOf(group).forEachIndexed { index, rawItem ->
+            buildList {
+                groups.forEach { group ->
                     add(
-                        HardBeltListRow.Exercise(
-                            belt = group.belt,
-                            index = index,
-                            rawItem = rawItem
+                        HardBeltListRow.BeltHeader(
+                            belt = group.belt
                         )
                     )
+
+                    hardItemsOf(group).forEachIndexed { index, rawItem ->
+                        add(
+                            HardBeltListRow.Exercise(
+                                belt = group.belt,
+                                index = index,
+                                rawItem = rawItem,
+                                statusId = hardStatusIdFor(
+                                    belt = group.belt,
+                                    topic = title,
+                                    rawItem = rawItem
+                                )
+                            )
+                        )
+                    }
                 }
             }
         }
-    }
 
     val listState = rememberLazyListState()
 
@@ -2804,97 +2952,65 @@ private fun BeltGroupsContent(
         }
     }
 
-    val currentStickyGroup = groups.firstOrNull { it.belt == currentStickyBelt }
-    val currentStickyItems: List<String> =
-        currentStickyGroup?.let { hardItemsOf(it) }.orEmpty()
+    val currentStickyExercises =
+        remember(
+            flatRows,
+            currentStickyBelt
+        ) {
+            flatRows
+                .filterIsInstance<HardBeltListRow.Exercise>()
+                .filter { row ->
+                    row.belt == currentStickyBelt
+                }
+        }
 
-    val currentGroupTotalCount = currentStickyItems.size
+    val currentGroupTotalCount =
+        currentStickyExercises.size
 
     val currentGroupKnownCount =
-        currentStickyItems.count { rawItem ->
-            hardItemStates[
-                hardStatusIdFor(
-                    currentStickyBelt,
-                    title,
-                    rawItem
-                )
-            ] == true
+        currentStickyExercises.count { row ->
+            hardItemStates[row.statusId] == true
         }
 
     val currentGroupUnknownCount =
-        currentStickyItems.count { rawItem ->
-            val statusId =
-                hardStatusIdFor(
-                    currentStickyBelt,
-                    title,
-                    rawItem
-                )
-
-            hardItemStates[statusId] == false &&
-                    hardPartiallyKnownStates[statusId] != true
+        currentStickyExercises.count { row ->
+            hardItemStates[row.statusId] == false &&
+                    hardPartiallyKnownStates[row.statusId] != true
         }
 
     val currentGroupFavoriteCount =
-        currentStickyItems.count { rawItem ->
-            hardFavoriteIdFor(
-                currentStickyBelt,
-                title,
-                rawItem
-            ) in favoriteIds
+        currentStickyExercises.count { row ->
+            row.statusId in favoriteIds
         }
 
     val currentGroupUnmarkedCount =
-        currentStickyItems.count { rawItem ->
-            hardItemStates[
-                hardStatusIdFor(
-                    currentStickyBelt,
-                    title,
-                    rawItem
-                )
-            ] == null
+        currentStickyExercises.count { row ->
+            hardItemStates[row.statusId] == null
         }
 
-    val currentGroupTaughtCount = currentStickyItems.count { rawItem ->
-        val statusId =
-            hardStatusIdFor(
-                currentStickyBelt,
-                title,
-                rawItem
-            )
+    val currentGroupTaughtCount =
+        currentStickyExercises.count { row ->
+            coachProgressStates[row.statusId]
+                ?.isSelected(
+                    CoachMaterialStatus.TAUGHT
+                ) == true
+        }
 
-        coachProgressStates[statusId]
-            ?.isSelected(
-                CoachMaterialStatus.TAUGHT
-            ) == true
-    }
+    val currentGroupPracticedCount =
+        currentStickyExercises.count { row ->
+            coachProgressStates[row.statusId]
+                ?.isSelected(
+                    CoachMaterialStatus.PRACTICED
+                ) == true
+        }
 
-    val currentGroupPracticedCount = currentStickyItems.count { rawItem ->
-        val statusId =
-            hardStatusIdFor(
-                currentStickyBelt,
-                title,
-                rawItem
-            )
-
-        coachProgressStates[statusId]
-            ?.isSelected(
-                CoachMaterialStatus.PRACTICED
-            ) == true
-    }
-
-    val currentGroupReinforcementCount = currentStickyItems.count { rawItem ->
-        val statusId =
-            hardStatusIdFor(
-                currentStickyBelt,
-                title,
-                rawItem
-            )
-
-        coachProgressStates[statusId]
-            ?.isSelected(
-                CoachMaterialStatus.NEEDS_REINFORCEMENT
-            ) == true
-    }
+    val currentGroupReinforcementCount =
+        currentStickyExercises.count { row ->
+            coachProgressStates[row.statusId]
+                ?.isSelected(
+                    CoachMaterialStatus.NEEDS_REINFORCEMENT
+                ) == true
+        }
 
     val currentGroupCoachUnmarkedCount =
         currentGroupTotalCount -
@@ -2943,13 +3059,22 @@ private fun BeltGroupsContent(
         ) {
             itemsIndexed(
                 items = flatRows,
-                key = { index, row ->
+                key = { _, row ->
                     when (row) {
                         is HardBeltListRow.BeltHeader ->
-                            "hard_belt_header_${row.belt.id}_$index"
+                            "hard_belt_header_${row.belt.id}"
 
                         is HardBeltListRow.Exercise ->
-                            "hard_row_${row.belt.id}_${row.index}_${row.rawItem}_$index"
+                            "hard_row_${row.belt.id}_${row.statusId}"
+                    }
+                },
+                contentType = { _, row ->
+                    when (row) {
+                        is HardBeltListRow.BeltHeader ->
+                            "belt_header"
+
+                        is HardBeltListRow.Exercise ->
+                            "exercise"
                     }
                 }
             ) { index, row ->
@@ -3003,18 +3128,8 @@ private fun BeltGroupsContent(
                     is HardBeltListRow.Exercise -> {
                         val belt = row.belt
                         val rawItem = row.rawItem
-
-                        val statusId = hardStatusIdFor(
-                            belt = belt,
-                            topic = title,
-                            rawItem = rawItem
-                        )
-
-                        val favoriteId = hardFavoriteIdFor(
-                            belt = belt,
-                            topic = title,
-                            rawItem = rawItem
-                        )
+                        val statusId = row.statusId
+                        val favoriteId = row.statusId
 
                         val mastered =
                             hardItemStates[statusId]
@@ -3063,9 +3178,12 @@ private fun BeltGroupsContent(
                                 hardItemStates[statusId] =
                                     nextValue
 
-                                hardStatusKeysFor(
-                                    topic = title
-                                ).forEach { key ->
+                                val statusKeys =
+                                    hardStatusKeysFor(
+                                        topic = title
+                                    )
+
+                                statusKeys.forEach { key ->
                                     vm.setItemStatusNullable(
                                         belt = belt,
                                         topic = key,
@@ -3074,12 +3192,16 @@ private fun BeltGroupsContent(
                                     )
                                 }
 
-                                setHardLocalStatus(
-                                    belt = belt,
-                                    topic = title,
-                                    statusId = statusId,
-                                    value = nextValue
-                                )
+                                persistenceScope.launch(
+                                    Dispatchers.IO
+                                ) {
+                                    setHardLocalStatus(
+                                        belt = belt,
+                                        topic = title,
+                                        statusId = statusId,
+                                        value = nextValue
+                                    )
+                                }
                             },
                             onToggleFavorite = {
                                 FavoritesStore.toggle(
@@ -3626,11 +3748,8 @@ private fun HardExerciseRowCard(
     }
 
     Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(
-                RoundedCornerShape(16.dp)
-            ),
+        modifier =
+            Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
         color = MaterialTheme.colorScheme.surface,
         tonalElevation = 0.dp,
@@ -3833,8 +3952,8 @@ private fun HardMasterToggle(
         shape = CircleShape,
         color = bg,
         border = BorderStroke(1.5.dp, border),
-        tonalElevation = 2.dp,
-        shadowElevation = 4.dp
+        tonalElevation = 0.dp,
+        shadowElevation = 0.dp
     ) {
         Box(
             modifier = Modifier.fillMaxSize(),

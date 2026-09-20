@@ -1,8 +1,10 @@
 package il.kmi.app.domain
 
 import il.kmi.shared.domain.Belt
+import il.kmi.shared.domain.TopicsEngine
 import il.kmi.shared.domain.ContentRepo as SharedContentRepo
 import il.kmi.shared.questions.model.util.ExerciseTitleFormatter
+import il.kmi.shared.domain.content.ExerciseIdentityRegistry
 import il.kmi.shared.domain.content.HardSectionsCatalog
 
 
@@ -55,61 +57,112 @@ object ExerciseCountProvider {
         }
     }
 
-    private fun hardSectionExerciseCountForTopic(topicTitle: String): Int {
-        val cleanTopic = normalize(topicTitle)
+    private fun hardSectionExerciseKeysForTopic(
+        belt: Belt,
+        topicTitle: String
+    ): Set<String> {
+        val cleanTopic =
+            normalize(topicTitle)
 
-        val candidates = listOfNotNull(
-            hardSectionIdForTopic(cleanTopic),
-            cleanTopic
-        )
-            .map { normalize(it) }
-            .filter { it.isNotBlank() }
-            .distinct()
-
-        fun countDeep(
-            s: HardSectionsCatalog.Section
-        ): Int {
-            val ownItemsCount = s.beltGroups
-                .flatMap { group -> group.items }
-                .map { normalizeItem(it) }
-                .filter { it.isNotBlank() }
+        val candidates =
+            listOfNotNull(
+                hardSectionIdForTopic(cleanTopic),
+                cleanTopic
+            )
+                .map { candidate ->
+                    normalize(candidate)
+                }
+                .filter { candidate ->
+                    candidate.isNotBlank()
+                }
                 .distinct()
-                .size
 
-            val childItemsCount = s.subSections.sumOf { child ->
-                countDeep(child)
+        fun collectDeep(
+            section: HardSectionsCatalog.Section,
+            destination: MutableSet<String>
+        ) {
+            section.beltGroups
+                .asSequence()
+                .filter { group ->
+                    group.belt == belt
+                }
+                .flatMap { group ->
+                    group.items.asSequence()
+                }
+                .map { item ->
+                    exerciseIdentityKey(
+                        belt = belt,
+                        topicTitle = cleanTopic,
+                        rawItem = item
+                    )
+                }
+                .filter { identityKey ->
+                    identityKey.isNotBlank()
+                }
+                .forEach { identityKey ->
+                    destination += identityKey
+                }
+
+            section.subSections.forEach { child ->
+                collectDeep(
+                    section = child,
+                    destination = destination
+                )
             }
-
-            return ownItemsCount + childItemsCount
         }
 
         for (candidate in candidates) {
-            val sectionsForSubject = runCatching {
-                HardSectionsCatalog.sectionsForSubject(candidate)
-            }.getOrNull()
+            val subjectItems =
+                linkedSetOf<String>()
 
-            val countFromSubject = sectionsForSubject
+            runCatching {
+                HardSectionsCatalog
+                    .sectionsForSubject(candidate)
+            }
+                .getOrNull()
                 .orEmpty()
-                .sumOf { section -> countDeep(section) }
+                .forEach { section ->
+                    collectDeep(
+                        section = section,
+                        destination = subjectItems
+                    )
+                }
 
-            if (countFromSubject > 0) {
-                return countFromSubject
+            if (subjectItems.isNotEmpty()) {
+                return subjectItems
             }
 
-            val sectionById = runCatching {
-                HardSectionsCatalog.findAnySectionById(candidate)
-            }.getOrNull()
+            val sectionItems =
+                linkedSetOf<String>()
 
-            val countFromSection = sectionById?.let { section ->
-                countDeep(section)
-            } ?: 0
+            runCatching {
+                HardSectionsCatalog
+                    .findAnySectionById(candidate)
+            }
+                .getOrNull()
+                ?.let { section ->
+                    collectDeep(
+                        section = section,
+                        destination = sectionItems
+                    )
+                }
 
-            if (countFromSection > 0) {
-                return countFromSection
+            if (sectionItems.isNotEmpty()) {
+                return sectionItems
             }
         }
 
-        return 0
+        return emptySet()
+    }
+
+    private fun hardSectionExerciseCountForTopic(
+        belt: Belt,
+        topicTitle: String
+    ): Int {
+        return hardSectionExerciseKeysForTopic(
+            belt = belt,
+            topicTitle = topicTitle
+        ).size
     }
 
     private fun normalize(value: String): String =
@@ -129,6 +182,28 @@ object ExerciseCountProvider {
             .ifBlank { value }
 
         return normalize(display)
+    }
+
+    private fun exerciseIdentityKey(
+        belt: Belt,
+        topicTitle: String,
+        rawItem: String
+    ): String {
+        val cleanItem = normalizeItem(rawItem)
+
+        if (cleanItem.isBlank()) {
+            return ""
+        }
+
+        return ExerciseIdentityRegistry
+            .resolve(
+                belt = belt,
+                hebrewTitle = cleanItem,
+                topicKey = normalize(topicTitle)
+            )
+            .id
+            .trim()
+            .ifBlank { cleanItem }
     }
 
     private fun SharedContentRepo.SubTopic.totalExercisesCountDeep(): Int {
@@ -156,9 +231,11 @@ object ExerciseCountProvider {
             )
         }
 
-        val hardCount = hardSectionExerciseCountForTopic(
-            cleanTopic
-        )
+        val hardCount =
+            hardSectionExerciseCountForTopic(
+                belt = belt,
+                topicTitle = cleanTopic
+            )
 
         if (hardCount > 0) {
             return ExerciseCountStats(
@@ -178,30 +255,201 @@ object ExerciseCountProvider {
                         normalize(sub.title) != cleanTopic
             }
 
-        val directItems = runCatching {
+        val directExerciseKeys = runCatching {
             SharedContentRepo.getAllItemsFor(
                 belt = belt,
                 topicTitle = cleanTopic,
                 subTopicTitle = null
             )
         }.getOrDefault(emptyList())
-            .map { normalizeItem(it) }
-            .filter { it.isNotBlank() }
-            .distinct()
+            .asSequence()
+            .map { item ->
+                exerciseIdentityKey(
+                    belt = belt,
+                    topicTitle = cleanTopic,
+                    rawItem = item
+                )
+            }
+            .filter { identityKey ->
+                identityKey.isNotBlank()
+            }
+            .toSet()
 
-        val deepSubTopicItemsCount = subTopics.sumOf { sub ->
-            sub.totalExercisesCountDeep()
+        val subTopicExerciseKeys =
+            linkedSetOf<String>()
+
+        subTopics.forEach { subTopic ->
+            collectSubTopicExerciseKeys(
+                belt = belt,
+                topicTitle = cleanTopic,
+                subTopic = subTopic,
+                destination = subTopicExerciseKeys
+            )
         }
 
         val exerciseCount = when {
-            deepSubTopicItemsCount > 0 -> deepSubTopicItemsCount
-            else -> directItems.size
+            subTopicExerciseKeys.isNotEmpty() ->
+                subTopicExerciseKeys.size
+
+            else ->
+                directExerciseKeys.size
         }
 
         return ExerciseCountStats(
             subTopicCount = subTopics.size,
             exerciseCount = exerciseCount
         )
+    }
+
+    fun beltStats(
+        belt: Belt
+    ): ExerciseCountStats {
+        val exerciseKeys =
+            linkedSetOf<String>()
+
+        val subTopicTitles =
+            linkedSetOf<String>()
+
+        TopicsEngine
+            .topicTitlesFor(belt)
+            .asSequence()
+            .map { topicTitle ->
+                normalize(topicTitle)
+            }
+            .filter { topicTitle ->
+                topicTitle.isNotBlank()
+            }
+            .distinct()
+            .forEach { topicTitle ->
+                val hardItems =
+                    hardSectionExerciseKeysForTopic(
+                        belt = belt,
+                        topicTitle = topicTitle
+                    )
+
+                if (hardItems.isNotEmpty()) {
+                    exerciseKeys.addAll(hardItems)
+                } else {
+                    runCatching {
+                        SharedContentRepo.getAllItemsFor(
+                            belt = belt,
+                            topicTitle = topicTitle,
+                            subTopicTitle = null
+                        )
+                    }
+                        .getOrDefault(emptyList())
+                        .asSequence()
+                        .map { item ->
+                            exerciseIdentityKey(
+                                belt = belt,
+                                topicTitle = topicTitle,
+                                rawItem = item
+                            )
+                        }
+                        .filter { identityKey ->
+                            identityKey.isNotBlank()
+                        }
+                        .forEach { identityKey ->
+                            exerciseKeys += identityKey
+                        }
+
+                    runCatching {
+                        SharedContentRepo.getSubTopicsFor(
+                            belt = belt,
+                            topicTitle = topicTitle
+                        )
+                    }
+                        .getOrDefault(emptyList())
+                        .forEach { subTopic ->
+                            val cleanSubTopicTitle =
+                                normalize(
+                                    subTopic.title
+                                )
+
+                            if (
+                                cleanSubTopicTitle.isNotBlank() &&
+                                cleanSubTopicTitle != topicTitle
+                            ) {
+                                subTopicTitles +=
+                                    cleanSubTopicTitle
+                            }
+
+                            collectSubTopicExerciseKeys(
+                                belt = belt,
+                                topicTitle = topicTitle,
+                                subTopic = subTopic,
+                                destination = exerciseKeys
+                            )
+                        }
+                }
+            }
+
+        val knownExerciseCount =
+            ExerciseIdentityRegistry
+                .allKnown()
+                .asSequence()
+                .filter { exercise ->
+                    exercise.belt == belt
+                }
+                .map { exercise ->
+                    exercise.id.trim()
+                }
+                .filter { exerciseId ->
+                    exerciseId.isNotBlank()
+                }
+                .distinct()
+                .count()
+
+        return ExerciseCountStats(
+            subTopicCount = subTopicTitles.size,
+            exerciseCount = knownExerciseCount
+                .takeIf { it > 0 }
+                ?: exerciseKeys.size
+        )
+    }
+
+    private fun collectSubTopicExerciseKeys(
+        belt: Belt,
+        topicTitle: String,
+        subTopic: SharedContentRepo.SubTopic,
+        destination: MutableSet<String>
+    ) {
+        val topicKey = buildString {
+            append(topicTitle)
+
+            val cleanSubTopicTitle =
+                normalize(subTopic.title)
+
+            if (cleanSubTopicTitle.isNotBlank()) {
+                append("__")
+                append(cleanSubTopicTitle)
+            }
+        }
+
+        subTopic.items
+            .asSequence()
+            .map { item ->
+                exerciseIdentityKey(
+                    belt = belt,
+                    topicTitle = topicKey,
+                    rawItem = item
+                )
+            }
+            .filter { identityKey ->
+                identityKey.isNotBlank()
+            }
+            .forEach { identityKey ->
+                destination += identityKey
+            }
+
+        subTopic.subTopics.forEach { child ->
+            collectSubTopicExerciseKeys(
+                belt = belt,
+                topicTitle = topicKey,
+                subTopic = child,
+                destination = destination
+            )
+        }
     }
 
     fun subTopicStats(

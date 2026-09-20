@@ -843,7 +843,7 @@ private suspend fun completeGoogleLoginAfterFirebaseAuth(
         message = "profileComplete=${profileStatus.isComplete}, canEnterApp=${profileStatus.canEnterApp}"
     )
 
-    if (profileStatus.isComplete) {
+    if (profileStatus.canEnterApp) {
         GoogleAuthManager.logUiStage(
             context = ctx,
             stage = "intro_call_on_profile_complete"
@@ -1027,7 +1027,7 @@ fun IntroScreen(
             }.getOrNull()
 
         canContinueWithoutLogin =
-            profileStatus?.isComplete == true
+            profileStatus?.canEnterApp == true
 
         isProfileStatusLoading = false
 

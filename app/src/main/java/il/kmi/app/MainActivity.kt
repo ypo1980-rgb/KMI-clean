@@ -15,8 +15,12 @@ import androidx.activity.compose.setContent
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.*
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
+import androidx.lifecycle.lifecycleScope
 import il.kmi.shared.localization.AppLanguageManager
 import il.kmi.app.subscription.BillingRepository
+import il.kmi.app.screens.BeltQuestions.ByTopic.HardSubjectResolverMemoryCache
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
 // Firebase
 import com.google.firebase.Timestamp
@@ -136,18 +140,18 @@ class MainActivity : androidx.fragment.app.FragmentActivity() {
             trainingSummaryLocalRepo = trainingSummaryLocalRepo
         )
 
-
-        // ✅ לא מבצעים Firebase Anonymous Auth בפתיחת האפליקציה.
-        // התחברות Google צריכה להתחיל ממצב נקי, ורק לאחר התחברות אמיתית
-        // נסנכרן FCM ופרטי משתמש.
+        /*
+         * מכינים מראש ברקע את כל מבני התרגילים הכוללים
+         * תתי־נושאים. כך הכניסה למסך והגלילה אינן צריכות
+         * להפעיל את HardSectionsResolver בזמן אמת.
+         */
+        lifecycleScope.launch(
+            Dispatchers.Default
+        ) {
+            HardSubjectResolverMemoryCache.preloadAll()
+        }
         setupFcmTokenSync(userSp)
-
-        // ✅ מעקב שימוש אמיתי:
-        // פעם אחת בכל יצירת MainActivity נרשמת פתיחת אפליקציה
-        // ומתעדכן זמן השימוש האחרון במסמך המשתמש האמיתי.
         trackAppOpenForCurrentUser(userSp)
-
-
 
         // -------------------- UI --------------------
         setContent {

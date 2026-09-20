@@ -3426,6 +3426,34 @@ private fun HomePremiumQuickMenuPanel(
                             cleanTitle
                     }
 
+                val iconTint =
+                    when (cleanTitle) {
+                        "ארכיון אימונים",
+                        "Training Archive" ->
+                            Color(0xFF6D4CFF)
+
+                        "אימונים חופשיים",
+                        "Free Trainings" ->
+                            Color(0xFF00897B)
+
+                        else ->
+                            Color(0xFF1976D2)
+                    }
+
+                val iconBackground =
+                    when (cleanTitle) {
+                        "ארכיון אימונים",
+                        "Training Archive" ->
+                            Color(0xFFF0ECFF)
+
+                        "אימונים חופשיים",
+                        "Free Trainings" ->
+                            Color(0xFFE0F2F1)
+
+                        else ->
+                            Color(0xFFE3F2FD)
+                    }
+
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -3442,15 +3470,13 @@ private fun HomePremiumQuickMenuPanel(
                     Surface(
                         modifier = Modifier.size(27.dp),
                         shape = CircleShape,
-                        color = Color.White.copy(
-                            alpha = 0.16f
-                        ),
+                        color = iconBackground,
                         tonalElevation = 0.dp,
-                        shadowElevation = 0.dp,
+                        shadowElevation = 2.dp,
                         border = BorderStroke(
                             width = 1.dp,
-                            color = Color.White.copy(
-                                alpha = 0.58f
+                            color = iconTint.copy(
+                                alpha = 0.28f
                             )
                         )
                     ) {
@@ -3461,7 +3487,7 @@ private fun HomePremiumQuickMenuPanel(
                             Icon(
                                 imageVector = item.second,
                                 contentDescription = null,
-                                tint = Color.White,
+                                tint = iconTint,
                                 modifier =
                                     Modifier.size(13.dp)
                             )

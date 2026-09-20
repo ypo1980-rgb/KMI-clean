@@ -3034,7 +3034,9 @@ private data class HardStickyExerciseRow(
     val belt: Belt,
     val indexInBelt: Int,
     val rawItem: String,
-    val displayItem: String
+    val displayItem: String,
+    val statusId: String,
+    val statusKeys: List<String>
 )
 
 @Composable
@@ -3632,26 +3634,50 @@ private fun HardBeltGroupsStickyContent(
     var noteEditorBeltId by rememberSaveable { mutableStateOf<String?>(null) }
     var noteDraft by rememberSaveable { mutableStateOf("") }
 
-    val flatRows = remember(groups, isEnglish) {
-        groups.flatMap { group: HardStickyBeltGroup ->
-            group.items.mapIndexed { index: Int, raw: String ->
-                val original = raw.trim()
+    val flatRows =
+        remember(
+            groups,
+            isEnglish,
+            topicKey
+        ) {
+            groups
+                .flatMap { group: HardStickyBeltGroup ->
+                    group.items.mapIndexed {
+                            index: Int,
+                            raw: String ->
 
-                HardStickyExerciseRow(
-                    belt = group.belt,
-                    indexInBelt = index,
-                    rawItem = original,
-                    displayItem = exerciseTitleForUi(
-                        raw = original,
-                        isEnglish = isEnglish
-                    )
-                )
-            }
-        }.filter { row ->
-            row.rawItem.isNotBlank() &&
-                    row.displayItem.isNotBlank()
+                        val original =
+                            raw.trim()
+
+                        val statusId =
+                            statusIdFor(
+                                belt = group.belt,
+                                rawItem = original
+                            )
+
+                        HardStickyExerciseRow(
+                            belt = group.belt,
+                            indexInBelt = index,
+                            rawItem = original,
+                            displayItem =
+                                exerciseTitleForUi(
+                                    raw = original,
+                                    isEnglish = isEnglish
+                                ),
+                            statusId = statusId,
+                            statusKeys =
+                                statusKeysFor(
+                                    belt = group.belt,
+                                    rawItem = original
+                                )
+                        )
+                    }
+                }
+                .filter { row ->
+                    row.rawItem.isNotBlank() &&
+                            row.displayItem.isNotBlank()
+                }
         }
-    }
 
     LaunchedEffect(
         isCoach,
@@ -3662,20 +3688,14 @@ private fun HardBeltGroupsStickyContent(
             val loaded: Map<String, CoachMaterialProgress> =
                 buildMap {
                     flatRows.forEach { row ->
-                        val statusId =
-                            statusIdFor(
-                                row.belt,
-                                row.rawItem
-                            )
-
                         put(
                             coachMapKey(
                                 row.belt,
-                                statusId
+                                row.statusId
                             ),
                             loadCoachProgress(
                                 row.belt,
-                                statusId
+                                row.statusId
                             )
                         )
                     }
@@ -3691,11 +3711,12 @@ private fun HardBeltGroupsStickyContent(
         topicKey
     ) {
         flatRows.forEach { row ->
-            val statusId = statusIdFor(row.belt, row.rawItem)
+            val statusId =
+                row.statusId
 
             var valueFromVm: Boolean? = null
 
-            for (key in statusKeysFor(row.belt, row.rawItem)) {
+            for (key in row.statusKeys) {
                 val fromKey: Boolean? =
                     runCatching {
                         vm.getItemStatusNullable(
@@ -3721,7 +3742,7 @@ private fun HardBeltGroupsStickyContent(
             }
 
             if (valueFromVm == null) {
-                for (key in statusKeysFor(row.belt, row.rawItem)) {
+                for (key in row.statusKeys) {
                     val masteredKey = "mastered_${row.belt.id}_${key}"
                     val unknownKey = "unknown_${row.belt.id}_${key}"
 
@@ -3753,10 +3774,7 @@ private fun HardBeltGroupsStickyContent(
             }
 
             val isPartiallyKnown =
-                statusKeysFor(
-                    row.belt,
-                    row.rawItem
-                ).any { key ->
+                row.statusKeys.any { key ->
                     val partiallyKnownKey =
                         "partially_known_${row.belt.id}_${key}"
 
@@ -3873,10 +3891,7 @@ private fun HardBeltGroupsStickyContent(
             coachProgressStates[
                 coachMapKey(
                     row.belt,
-                    statusIdFor(
-                        row.belt,
-                        row.rawItem
-                    )
+                    row.statusId
                 )
             ]?.isSelected(
                 CoachMaterialStatus.TAUGHT
@@ -3888,10 +3903,7 @@ private fun HardBeltGroupsStickyContent(
             coachProgressStates[
                 coachMapKey(
                     row.belt,
-                    statusIdFor(
-                        row.belt,
-                        row.rawItem
-                    )
+                    row.statusId
                 )
             ]?.isSelected(
                 CoachMaterialStatus.PRACTICED
@@ -3903,13 +3915,11 @@ private fun HardBeltGroupsStickyContent(
             coachProgressStates[
                 coachMapKey(
                     row.belt,
-                    statusIdFor(
-                        row.belt,
-                        row.rawItem
-                    )
+                    row.statusId
                 )
             ]?.isSelected(
-                CoachMaterialStatus.NEEDS_REINFORCEMENT
+                CoachMaterialStatus
+                    .NEEDS_REINFORCEMENT
             ) == true
         }
 
@@ -3919,54 +3929,91 @@ private fun HardBeltGroupsStickyContent(
                 coachProgressStates[
                     coachMapKey(
                         row.belt,
-                        statusIdFor(
-                            row.belt,
-                            row.rawItem
-                        )
+                        row.statusId
                     )
                 ]
 
             progress == null ||
-                    progress.selectedStatuses.isEmpty()
+                    progress
+                        .selectedStatuses
+                        .isEmpty()
         }
 
-    val currentKnownCount = currentRows.count { row ->
-        itemStates[statusIdFor(row.belt, row.rawItem)] == true
-    }
+    val currentKnownCount =
+        currentRows.count { row ->
+            itemStates[row.statusId] == true
+        }
 
     val currentUnknownCount =
         currentRows.count { row ->
-            val statusId =
-                statusIdFor(
-                    row.belt,
-                    row.rawItem
-                )
-
-            itemStates[statusId] == false &&
-                    partiallyKnownStates[statusId] != true
+            itemStates[row.statusId] == false &&
+                    partiallyKnownStates[
+                        row.statusId
+                    ] != true
         }
 
-    val currentUnmarkedCount = currentRows.count { row ->
-        itemStates[statusIdFor(row.belt, row.rawItem)] == null
-    }
+    val currentUnmarkedCount =
+        currentRows.count { row ->
+            itemStates[row.statusId] == null
+        }
 
-    val currentFavorites = prefs.getStringSet(
-        favKeyFor(currentStickyBelt),
-        emptySet<String>()
-    ) ?: emptySet()
+    val favoritesByBelt =
+        remember(
+            groups,
+            actionKeyPart,
+            refreshKey
+        ) {
+            groups.associate { group ->
+                group.belt to
+                        (
+                                prefs.getStringSet(
+                                    favKeyFor(group.belt),
+                                    emptySet<String>()
+                                ) ?: emptySet()
+                                )
+                            .toSet()
+            }
+        }
 
-    val currentExcluded = prefs.getStringSet(
-        excludedKeyFor(currentStickyBelt),
-        emptySet<String>()
-    ) ?: emptySet()
+    val excludedByBelt =
+        remember(
+            groups,
+            actionKeyPart,
+            refreshKey
+        ) {
+            groups.associate { group ->
+                group.belt to
+                        (
+                                prefs.getStringSet(
+                                    excludedKeyFor(
+                                        group.belt
+                                    ),
+                                    emptySet<String>()
+                                ) ?: emptySet()
+                                )
+                            .toSet()
+            }
+        }
 
-    val currentFavoriteCount = currentRows.count { row ->
-        currentFavorites.contains(statusIdFor(row.belt, row.rawItem))
-    }
+    val currentFavorites =
+        favoritesByBelt[
+            currentStickyBelt
+        ].orEmpty()
 
-    val currentExcludedCount = currentRows.count { row ->
-        currentExcluded.contains(statusIdFor(row.belt, row.rawItem))
-    }
+    val currentExcluded =
+        excludedByBelt[
+            currentStickyBelt
+        ].orEmpty()
+
+    val currentFavoriteCount =
+        currentRows.count { row ->
+            row.statusId in currentFavorites
+        }
+
+    val currentExcludedCount =
+        currentRows.count { row ->
+            row.statusId in currentExcluded
+        }
 
     Column(
         modifier = modifier
@@ -4005,22 +4052,33 @@ private fun HardBeltGroupsStickyContent(
                     "subtopic_sticky_${row.belt.id}_${row.indexInBelt}_${row.rawItem}_$index"
                 }
             ) { index, row ->
-                val statusId = statusIdFor(row.belt, row.rawItem)
-                val mastered = itemStates[statusId]
+                val statusId =
+                    row.statusId
 
-                val favSet = prefs.getStringSet(
-                    favKeyFor(row.belt),
-                    emptySet<String>()
-                ) ?: emptySet()
+                val mastered =
+                    itemStates[statusId]
 
-                val excludedSet = prefs.getStringSet(
-                    excludedKeyFor(row.belt),
-                    emptySet<String>()
-                ) ?: emptySet()
+                val favSet =
+                    favoritesByBelt[
+                        row.belt
+                    ].orEmpty()
 
-                val noteText = remember(row.belt.id, statusId, refreshKey) {
-                    loadNoteFor(row.belt, statusId)
-                }
+                val excludedSet =
+                    excludedByBelt[
+                        row.belt
+                    ].orEmpty()
+
+                val noteText =
+                    remember(
+                        row.belt.id,
+                        statusId,
+                        refreshKey
+                    ) {
+                        loadNoteFor(
+                            row.belt,
+                            statusId
+                        )
+                    }
 
                 val shouldShowInlineBeltHeader =
                     row.indexInBelt == 0 &&
@@ -4076,11 +4134,9 @@ private fun HardBeltGroupsStickyContent(
                     }
 
                 val traineeUpdatedAt =
-                    traineeUpdatedAtStates[statusId]
-                        ?: loadTraineeUpdatedAt(
-                            belt = row.belt,
-                            statusId = statusId
-                        )
+                    traineeUpdatedAtStates[
+                        statusId
+                    ] ?: 0L
 
                 val traineeDateText =
                     if (
@@ -4162,11 +4218,9 @@ private fun HardBeltGroupsStickyContent(
                              */
                             yield()
 
-                            statusKeysFor(
-                                row.belt,
-                                row.rawItem
-                            ).forEach { key ->
-                                vm.setItemStatusNullable(
+                            row.statusKeys
+                                .forEach { key ->
+                                    vm.setItemStatusNullable(
                                     belt = row.belt,
                                     topic = key,
                                     item = statusId,

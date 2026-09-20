@@ -2555,21 +2555,11 @@ internal fun TopicsBySubjectCard(
     val handsRootCard = remember(
         handsRootCount,
         handsPickCounts,
-        currentBelt,
         isEnglish
     ) {
-        val uniqueHandsCount = uniqueExerciseCountForTopics(
-            "עבודות ידיים",
-            "עבודת ידיים"
-        )
-
-        val fallbackHandsCount =
+        val displayedHandsCount =
             handsPickCounts.values.sum().takeIf { it > 0 }
                 ?: handsRootCount
-
-        val displayedHandsCount =
-            uniqueHandsCount.takeIf { it > 0 }
-                ?: fallbackHandsCount
 
         val base = SubjectTopicsUiLogic.buildHandsRootCard(
             handsRootCount = displayedHandsCount,

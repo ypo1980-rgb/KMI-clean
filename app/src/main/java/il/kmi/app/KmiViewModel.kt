@@ -16,6 +16,8 @@ import il.kmi.app.data.training.TrainingSummaryLocalRepo
 import il.kmi.app.screens.BeltQuestions.ByTopic.SubjectTopicsUiLogic
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.async
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.Job
@@ -264,8 +266,7 @@ class KmiViewModel(
             }
                 .awaitAll()
 
-        loadedGroups.forEach {
-                (canonicalTopic, loadedItems) ->
+        loadedGroups.forEach { (canonicalTopic, loadedItems) ->
 
             loadedItems.forEach { (item, value) ->
                 putCache(
@@ -561,14 +562,11 @@ class KmiViewModel(
         topic: String,
         item: String
     ): Boolean {
-        val t =
-            canonicalTopicKey(topic)
-
-        return ds.isItemMastered(
+        return getItemStatusNullable(
             belt = belt,
-            topic = t,
+            topic = topic,
             item = item
-        )
+        ) == true
     }
 
     /**
@@ -596,7 +594,9 @@ class KmiViewModel(
         _marksVersion.value =
             _marksVersion.value + 1L
 
-        viewModelScope.launch {
+        scheduleProgressRecalculation()
+
+        viewModelScope.launch(Dispatchers.IO) {
             when (value) {
                 null ->
                     ds.clearItemStatus(
@@ -613,8 +613,6 @@ class KmiViewModel(
                         mastered = value
                     )
             }
-
-            recalcProgress()
         }
     }
 
@@ -800,6 +798,30 @@ class KmiViewModel(
     private val progressSyncJobs =
         mutableMapOf<String, Job>()
 
+    private var progressRecalculationJob: Job? = null
+
+    private fun scheduleProgressRecalculation() {
+        progressRecalculationJob?.cancel()
+
+        progressRecalculationJob = viewModelScope.launch {
+            delay(350)
+
+            val cacheSnapshot =
+                masteredItems.mapValues { (_, beltMap) ->
+                    beltMap.mapValues { (_, topicMap) ->
+                        topicMap.toMap()
+                    }
+                }
+
+            val calculatedProgress = withContext(Dispatchers.Default) {
+                calculateProgress(cacheSnapshot)
+            }
+
+            _progress.value = calculatedProgress
+            progressRecalculationJob = null
+        }
+    }
+
     private fun scheduleBeltProgressSync(
         belt: Belt
     ) {
@@ -914,33 +936,75 @@ class KmiViewModel(
         }
     }
 
-/*
+    /*
 
- * מסנכרן את כל נתוני ההתקדמות המקומיים של המשתמש
- */
-/*
- * מסנכרן את כל נתוני ההתקדמות המקומיים של המשתמש
- * ל-Firestore לאחר שהמשתמש מזוהה.
- *
- * כך גם משתמש קיים אינו חייב לפתוח את מסך הסיכום
- * או לשנות סימון כדי להיכלל בנתוני ההשוואה.
- */
-fun syncAllBeltProgressToFirestore() {
-    viewModelScope.launch {
+     * מסנכרן את כל נתוני ההתקדמות המקומיים של המשתמש
+     */
+    /*
+     * מסנכרן את כל נתוני ההתקדמות המקומיים של המשתמש
+     * ל-Firestore לאחר שהמשתמש מזוהה.
+     *
+     * כך גם משתמש קיים אינו חייב לפתוח את מסך הסיכום
+     * או לשנות סימון כדי להיכלל בנתוני ההשוואה.
+     */
+    fun syncAllBeltProgressToFirestore() {
+        viewModelScope.launch {
 
-        val firebaseUser =
-            com.google.firebase.auth.FirebaseAuth
-                .getInstance()
-                .currentUser
+            val firebaseUser =
+                com.google.firebase.auth.FirebaseAuth
+                    .getInstance()
+                    .currentUser
 
-        if (
-            firebaseUser == null ||
-            firebaseUser.isAnonymous
-        ) {
-            return@launch
+            if (
+                firebaseUser == null ||
+                firebaseUser.isAnonymous
+            ) {
+                return@launch
+            }
+
+            val belts =
+                listOf(
+                    Belt.WHITE,
+                    Belt.YELLOW,
+                    Belt.ORANGE,
+                    Belt.GREEN,
+                    Belt.BLUE,
+                    Belt.BROWN,
+                    Belt.BLACK
+                )
+
+            belts.forEach { belt ->
+                runCatching {
+                    syncBeltProgressToFirestore(
+                        belt = belt
+                    )
+                }
+            }
         }
+    }
 
-        val belts =
+    private fun recalcProgress() {
+        val cacheSnapshot =
+            masteredItems.mapValues { (_, beltMap) ->
+                beltMap.mapValues { (_, topicMap) ->
+                    topicMap.toMap()
+                }
+            }
+
+        _progress.value =
+            calculateProgress(cacheSnapshot)
+    }
+
+    private fun calculateProgress(
+        cacheSnapshot: Map<
+                String,
+                Map<String, Map<String, Boolean?>>
+                >
+    ): Map<Belt, Int> {
+        val newProgress =
+            mutableMapOf<Belt, Int>()
+
+        val beltsInOrder: List<Belt> =
             listOf(
                 Belt.WHITE,
                 Belt.YELLOW,
@@ -951,76 +1015,81 @@ fun syncAllBeltProgressToFirestore() {
                 Belt.BLACK
             )
 
-        belts.forEach { belt ->
-            runCatching {
-                syncBeltProgressToFirestore(
-                    belt = belt
-                )
+        for (belt: Belt in beltsInOrder) {
+            val entries =
+                getCatalogEntriesForBelt(belt)
+
+            val total =
+                entries.size
+
+            if (total == 0) {
+                newProgress[belt] = 0
+                continue
             }
+
+            val learned: Set<String> =
+                cacheSnapshot[belt.id]
+                    ?.values
+                    ?.flatMap { topicMap ->
+                        topicMap
+                            .filterValues { value ->
+                                value == true
+                            }
+                            .keys
+                    }
+                    ?.map { item ->
+                        item.trim()
+                    }
+                    ?.filter { item ->
+                        item.isNotBlank()
+                    }
+                    ?.toSet()
+                    ?: emptySet()
+
+            val masteredCount =
+                entries.count { entry ->
+                    val canonicalFromRaw =
+                        il.kmi.app.domain.CanonicalIds
+                            .canonicalFor(
+                                belt = belt,
+                                topicTitle =
+                                    entry.topicTitle,
+                                displayItem =
+                                    entry.rawItem
+                            )
+
+                    val canonicalFromDisplay =
+                        il.kmi.app.domain.CanonicalIds
+                            .canonicalFor(
+                                belt = belt,
+                                topicTitle =
+                                    entry.topicTitle,
+                                displayItem =
+                                    entry.displayItem
+                            )
+
+                    val candidates =
+                        setOf(
+                            entry.rawItem.trim(),
+                            entry.displayItem.trim(),
+                            canonicalFromRaw.trim(),
+                            canonicalFromDisplay.trim()
+                        )
+                            .filter { candidate ->
+                                candidate.isNotBlank()
+                            }
+
+                    candidates.any { candidate ->
+                        candidate in learned
+                    }
+                }
+
+            newProgress[belt] =
+                (masteredCount * 100) / total
         }
+
+        return newProgress
     }
-}
-
-private fun recalcProgress() {
-    val newProgress = mutableMapOf<Belt, Int>()
-
-    val beltsInOrder: List<Belt> = listOf(
-        Belt.WHITE,
-        Belt.YELLOW,
-        Belt.ORANGE,
-        Belt.GREEN,
-        Belt.BLUE,
-        Belt.BROWN,
-        Belt.BLACK
-    )
-
-    // נחשב לפי סדר החגורות שלך
-    for (belt: Belt in beltsInOrder) {
-        val entries = getCatalogEntriesForBelt(belt)
-        val total = entries.size
-        if (total == 0) {
-            newProgress[belt] = 0
-            continue
-        }
-
-        val learned: Set<String> =
-            masteredItems[belt.id]
-                ?.values
-                ?.flatMap { topicMap -> topicMap.filterValues { it == true }.keys }
-                ?.map { it.trim() }
-                ?.filter { it.isNotBlank() }
-                ?.toSet()
-                ?: emptySet()
-
-        val masteredCount = entries.count { entry ->
-            val canonicalFromRaw = il.kmi.app.domain.CanonicalIds.canonicalFor(
-                belt = belt,
-                topicTitle = entry.topicTitle,
-                displayItem = entry.rawItem
-            )
-
-            val canonicalFromDisplay = il.kmi.app.domain.CanonicalIds.canonicalFor(
-                belt = belt,
-                topicTitle = entry.topicTitle,
-                displayItem = entry.displayItem
-            )
-
-            val candidates = setOf(
-                entry.rawItem.trim(),
-                entry.displayItem.trim(),
-                canonicalFromRaw.trim(),
-                canonicalFromDisplay.trim()
-            ).filter { it.isNotBlank() }
-
-            candidates.any { candidate -> candidate in learned }
-        }
-
-        val percent = (masteredCount * 100) / total
-        newProgress[belt] = percent
-    }
-
-    _progress.value = newProgress
-}
 
     private var hasStartedStatusesPreload =
         false
@@ -1033,7 +1102,7 @@ private fun recalcProgress() {
         hasStartedStatusesPreload =
             true
 
-        viewModelScope.launch {
+        viewModelScope.launch(Dispatchers.IO) {
             val belts =
                 listOf(
                     Belt.WHITE,
@@ -1112,10 +1181,12 @@ private fun recalcProgress() {
                 )
             }
 
-            recalcProgress()
+            withContext(Dispatchers.Main.immediate) {
+                scheduleProgressRecalculation()
 
-            _marksVersion.value =
-                _marksVersion.value + 1L
+                _marksVersion.value =
+                    _marksVersion.value + 1L
+            }
         }
     }
 
@@ -1149,7 +1220,6 @@ private fun recalcProgress() {
     }
 
     init {
-        recalcProgress()
         preloadTopicsBySubjectCounts()
         preloadAllItemStatuses()
     }
@@ -1159,19 +1229,19 @@ private fun recalcProgress() {
 // Factory עבור KmiViewModel (להישאר באותו קובץ)
 // ─────────────────────────────────────────────
 class KmiViewModelFactory(
-private val dataStoreManager: DataStoreManager,
-private val spTrainingSummary: SharedPreferences,
+    private val dataStoreManager: DataStoreManager,
+    private val spTrainingSummary: SharedPreferences,
 ) : androidx.lifecycle.ViewModelProvider.Factory {
 
-@Suppress("UNCHECKED_CAST")
-override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T {
-    if (modelClass.isAssignableFrom(KmiViewModel::class.java)) {
-        val localRepo = TrainingSummaryLocalRepo(spTrainingSummary)
-        return KmiViewModel(
-            ds = dataStoreManager,
-            trainingSummaryLocalRepo = localRepo
-        ) as T
+    @Suppress("UNCHECKED_CAST")
+    override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T {
+        if (modelClass.isAssignableFrom(KmiViewModel::class.java)) {
+            val localRepo = TrainingSummaryLocalRepo(spTrainingSummary)
+            return KmiViewModel(
+                ds = dataStoreManager,
+                trainingSummaryLocalRepo = localRepo
+            ) as T
+        }
+        throw IllegalArgumentException("Unknown ViewModel class: ${modelClass.name}")
     }
-    throw IllegalArgumentException("Unknown ViewModel class: ${modelClass.name}")
-}
 }

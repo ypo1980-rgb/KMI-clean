@@ -15,6 +15,7 @@ import androidx.navigation.compose.rememberNavController
 import il.kmi.app.KmiViewModel
 import il.kmi.app.Route
 import il.kmi.app.screens.IntroScreen
+import il.kmi.app.screens.registration.AccountRecoveryScreen
 import il.kmi.app.screens.registration.RegistrationNavHost
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.platform.LocalContext
@@ -85,6 +86,8 @@ import kotlinx.coroutines.withTimeoutOrNull
 private const val APP_ENTRY_ROUTE = "app_entry"
 private const val GOOGLE_PROFILE_COMPLETION_ROUTE = "google_profile_completion"
 private const val PROFILE_EDIT_ROUTE = "profile_edit"
+private const val PROFILE_ACCOUNT_RECOVERY_ROUTE =
+    "profile_account_recovery"
 
 private const val TAG_NAV = "KMI_NAV"
 
@@ -1985,6 +1988,15 @@ fun MainNavHost(
                 )
             }
 
+            // --- שחזור חשבון מתוך מסך "הפרופיל שלי" ---
+            composable(PROFILE_ACCOUNT_RECOVERY_ROUTE) {
+                AccountRecoveryScreen(
+                    onBack = {
+                        nav.popBackStack()
+                    }
+                )
+            }
+
             // --- NEW: Legal graph ---
             legalNavGraph(nav = nav)
 
@@ -2252,6 +2264,12 @@ fun MainNavHost(
                     },
                     onEditProfile = {
                         nav.navigate(PROFILE_EDIT_ROUTE) {
+                            launchSingleTop = true
+                            restoreState = false
+                        }
+                    },
+                    onOpenAccountRecovery = {
+                        nav.navigate(PROFILE_ACCOUNT_RECOVERY_ROUTE) {
                             launchSingleTop = true
                             restoreState = false
                         }

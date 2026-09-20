@@ -620,7 +620,7 @@ fun ExistingUserTraineeScreen(
     }
 
     if (showRecoveryDialog) {
-        RecoveryScreen(
+        AccountRecoveryScreen(
             onBack = {
                 showRecoveryDialog = false
             }
@@ -1786,7 +1786,7 @@ fun ExistingUserTraineeScreen(
 }
 
 @Composable
-private fun RecoveryScreen(
+internal fun AccountRecoveryScreen(
     onBack: () -> Unit
 ) {
     val ctx = LocalContext.current
@@ -2395,7 +2395,13 @@ private fun RecoveryScreen(
                                                     .call(
                                                         mapOf(
                                                             "email" to
-                                                                    cleanEmail
+                                                                    cleanEmail,
+                                                            "lang" to
+                                                                    if (isEnglish) {
+                                                                        "en"
+                                                                    } else {
+                                                                        "he"
+                                                                    }
                                                         )
                                                     )
                                                     .await()

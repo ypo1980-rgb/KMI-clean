@@ -87,7 +87,9 @@ private data class QuickMenuItemUi(
     val title: String,
     val icon: ImageVector,
     val action: () -> Unit,
-    val isLocked: Boolean
+    val isLocked: Boolean,
+    val iconTint: Color,
+    val iconBackground: Color
 )
 
 @Composable
@@ -563,7 +565,9 @@ fun FloatingQuickMenu(
                         ),
                         icon = Icons.Filled.Replay,
                         action = onReset,
-                        isLocked = false
+                        isLocked = false,
+                        iconTint = Color(0xFFD32F2F),
+                        iconBackground = Color(0xFFFFEBEE)
                     )
                 )
             }
@@ -579,7 +583,9 @@ fun FloatingQuickMenu(
                             Icons.AutoMirrored.Filled
                                 .FormatListBulleted,
                         action = onAllLists,
-                        isLocked = isMenuLocked
+                        isLocked = isMenuLocked,
+                        iconTint = Color(0xFF6D4CFF),
+                        iconBackground = Color(0xFFF0ECFF)
                     )
                 )
             }
@@ -593,7 +599,9 @@ fun FloatingQuickMenu(
                         ),
                         icon = Icons.Filled.SportsMma,
                         action = onPractice,
-                        isLocked = isMenuLocked
+                        isLocked = isMenuLocked,
+                        iconTint = Color(0xFF00897B),
+                        iconBackground = Color(0xFFE0F2F1)
                     )
                 )
             }
@@ -607,7 +615,9 @@ fun FloatingQuickMenu(
                         ),
                         icon = Icons.Filled.Summarize,
                         action = onSummary,
-                        isLocked = isMenuLocked
+                        isLocked = isMenuLocked,
+                        iconTint = Color(0xFF1976D2),
+                        iconBackground = Color(0xFFE3F2FD)
                     )
                 )
             }
@@ -982,6 +992,8 @@ private fun SideRailQuickMenuPanel(
                 SideRailQuickMenuAction(
                     title = displayTitle,
                     icon = item.icon,
+                    iconTint = item.iconTint,
+                    iconBackground = item.iconBackground,
                     isLocked = lockedForUi,
                     onClick = {
                         onItemClick {
@@ -1072,6 +1084,102 @@ private fun SideRailQuickMenuPanel(
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun SideRailQuickMenuAction(
+    title: String,
+    icon: ImageVector,
+    iconTint: Color,
+    iconBackground: Color,
+    isLocked: Boolean,
+    onClick: () -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(
+                onClick = onClick
+            )
+            .padding(
+                vertical = 3.dp
+            ),
+        horizontalAlignment =
+            Alignment.CenterHorizontally
+    ) {
+
+        Surface(
+            modifier =
+                Modifier.size(27.dp),
+            shape = CircleShape,
+            color = iconBackground,
+            tonalElevation = 0.dp,
+            shadowElevation = 2.dp,
+            border = BorderStroke(
+                width = 1.dp,
+                color =
+                    iconTint.copy(
+                        alpha = 0.28f
+                    )
+            )
+        ) {
+            Box(
+                contentAlignment =
+                    Alignment.Center
+            ) {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = null,
+                    tint = iconTint,
+                    modifier =
+                        Modifier.size(13.dp)
+                )
+            }
+        }
+
+        Spacer(
+            Modifier.height(2.dp)
+        )
+
+        Text(
+            text = title,
+            style =
+                KmiTypography.caption.copy(
+                    fontSize =
+                        KmiTypography.caption.fontSize *
+                                0.78f,
+                    fontWeight =
+                        FontWeight.Bold
+                ),
+            color = Color.White,
+            textAlign = TextAlign.Center,
+            maxLines =
+                if (title.contains("\n")) {
+                    2
+                } else {
+                    1
+                },
+            overflow =
+                TextOverflow.Ellipsis
+        )
+
+        if (isLocked) {
+            Spacer(
+                Modifier.height(1.dp)
+            )
+
+            Icon(
+                imageVector =
+                    Icons.Filled.Lock,
+                contentDescription = null,
+                tint = Color.White,
+                modifier =
+                    Modifier.size(
+                        KmiIconSize.tiny
+                    )
+            )
         }
     }
 }

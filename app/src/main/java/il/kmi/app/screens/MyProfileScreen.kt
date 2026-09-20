@@ -17,9 +17,6 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Visibility
-import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -60,10 +57,8 @@ import com.google.firebase.ktx.Firebase
 import kotlinx.coroutines.tasks.await
 import il.kmi.shared.localization.AppLanguage
 import il.kmi.shared.localization.AppLanguageManager
-import il.kmi.app.ui.KmiIconSize
 import il.kmi.app.ui.KmiTopBar
 import il.kmi.app.ui.KmiTypography
-import il.yuval.ui.theme.kmiSectionHeaderBrush
 import il.kmi.app.ui.pdf.KmiPdfHeader
 import il.kmi.app.ui.pdf.KmiPdfFooter
 import il.kmi.app.R
@@ -599,7 +594,8 @@ fun MyProfileScreen(
     kmiPrefs: KmiPrefs,
     onClose: () -> Unit,
     onHome: () -> Unit = onClose,
-    onEditProfile: () -> Unit = {}
+    onEditProfile: () -> Unit = {},
+    onOpenAccountRecovery: () -> Unit = {}
 ) {
     // עזר: בוחר מחרוזת לא ריקה מהמקורות הנתונים
     fun prefStr(primary: String?, vararg fallbacks: String?): String {
@@ -1716,6 +1712,8 @@ fun MyProfileScreen(
                             info = info,
                             isEnglish = isEnglish,
                             onEditProfile = onEditProfile,
+                            onOpenAccountRecovery =
+                                onOpenAccountRecovery,
                             modifier =
                                 Modifier.padding(
                                     horizontal = 20.dp
@@ -1916,6 +1914,7 @@ private fun UserProfileCard(
     info: UserProfileInfo,
     isEnglish: Boolean,
     onEditProfile: () -> Unit,
+    onOpenAccountRecovery: () -> Unit,
     onClose: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -2041,10 +2040,9 @@ private fun UserProfileCard(
                 value = info.accountUserName,
                 isEnglish = isEnglish
             )
-            PasswordRow(
-                label = profileTr(isEnglish, "סיסמה", "Password"),
-                password = info.password,
-                isEnglish = isEnglish
+            ChangePasswordRow(
+                isEnglish = isEnglish,
+                onClick = onOpenAccountRecovery
             )
 
             // מפריד קטן לפני השורה התחתונה
@@ -2451,115 +2449,34 @@ private tailrec fun android.content.Context.findActivity(): android.app.Activity
     }
 
 /**
- * שורת סיסמה עם הצגה/הסתרה (טופ־לבל)
+ * מעבר למסך שחזור החשבון המשותף.
  */
 @Composable
-private fun PasswordRow(
-    label: String,
-    password: String,
-    isEnglish: Boolean
+private fun ChangePasswordRow(
+    isEnglish: Boolean,
+    onClick: () -> Unit
 ) {
-    var visible by remember {
-        mutableStateOf(false)
-    }
-
-    val isDarkMode =
-        MaterialTheme.colorScheme.surface.luminance() < 0.5f
-
-    val labelColor =
-        if (isDarkMode) {
-            MaterialTheme.colorScheme.onSurfaceVariant
-        } else {
-            Color(0xFF52627A)
-        }
-
-    val valueColor =
-        if (isDarkMode) {
-            MaterialTheme.colorScheme.onSurface
-        } else {
-            Color(0xFF111827)
-        }
-
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(vertical = 6.dp),
-        verticalAlignment = Alignment.CenterVertically
+    TextButton(
+        onClick = onClick,
+        contentPadding = PaddingValues(
+            horizontal = 0.dp,
+            vertical = 6.dp
+        ),
+        modifier = Modifier.fillMaxWidth()
     ) {
         Text(
-            text = label,
-            style = KmiTypography.secondary.copy(
-                fontWeight = FontWeight.Medium
+            text = profileTr(
+                isEnglish,
+                "שחזור סיסמה",
+                "Password recovery"
             ),
-            color = labelColor,
-            textAlign = profileTextAlign(isEnglish)
+            modifier = Modifier.fillMaxWidth(),
+            style = KmiTypography.action.copy(
+                fontWeight = FontWeight.Bold
+            ),
+            color = MaterialTheme.colorScheme.primary,
+            textAlign = TextAlign.Start
         )
-
-        Spacer(Modifier.weight(1f))
-
-        Row(
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text =
-                    if (visible) {
-                        password
-                    } else {
-                        "••••••••"
-                    },
-                style = KmiTypography.cardTitle.copy(
-                    fontWeight = FontWeight.Bold
-                ),
-                color = valueColor,
-                textAlign =
-                    if (isEnglish) {
-                        TextAlign.Right
-                    } else {
-                        TextAlign.Left
-                    },
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(
-                    weight = 1f,
-                    fill = false
-                )
-            )
-
-            Spacer(Modifier.width(8.dp))
-
-            IconButton(
-                onClick = {
-                    visible = !visible
-                }
-            ) {
-                Icon(
-                    imageVector =
-                        if (visible) {
-                            Icons.Outlined.VisibilityOff
-                        } else {
-                            Icons.Outlined.Visibility
-                        },
-                    contentDescription =
-                        if (visible) {
-                            profileTr(
-                                isEnglish,
-                                "הסתר סיסמה",
-                                "Hide password"
-                            )
-                        } else {
-                            profileTr(
-                                isEnglish,
-                                "הצג סיסמה",
-                                "Show password"
-                            )
-                        },
-                    tint = labelColor,
-                    modifier = Modifier.size(
-                        KmiIconSize.medium
-                    )
-                )
-            }
-        }
     }
 }
 

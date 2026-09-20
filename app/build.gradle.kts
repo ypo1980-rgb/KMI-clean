@@ -6,7 +6,6 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
     id("com.google.gms.google-services")
     id("com.google.firebase.crashlytics")
-    // id("org.jetbrains.kotlin.kapt")   ← מיותר אם לא משתמשים בשום kapt
     id("com.google.devtools.ksp")
 }
 
@@ -36,8 +35,8 @@ android {
         applicationId = "il.kmi.training"
         minSdk = 24
         targetSdk = 36
-        versionCode = 161
-        versionName = "1.0.19"
+        versionCode = 162
+        versionName = "1.0.20"
         vectorDrawables.useSupportLibrary = true
 
         testInstrumentationRunner =

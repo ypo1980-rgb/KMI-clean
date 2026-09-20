@@ -59,9 +59,9 @@ internal object SubjectTopicsEngine {
 
             "מכות מרפק" -> base.copy(
                 titleHeb = "${base.titleHeb} - $p",
-                subTopicHint = p,
+                subTopicHint = "מרפק",
                 topicsByBelt = mapOf(
-                    Belt.GREEN to listOf("מכות מרפק")
+                    Belt.YELLOW to listOf("מכות מרפק")
                 )
             )
 
@@ -85,5 +85,8 @@ internal fun SubjectTopic.toSharedSubject(): SharedSubjectTopic =
         id = this.id,
         titleHeb = this.titleHeb,
         topicsByBelt = this.topicsByBelt,
-        subTopicHint = this.subTopicHint
+        subTopicHint = this.subTopicHint,
+        includeItemKeywords = this.includeItemKeywords.orEmpty(),
+        requireAllItemKeywords = this.requireAllItemKeywords.orEmpty(),
+        excludeItemKeywords = this.excludeItemKeywords.orEmpty()
     )

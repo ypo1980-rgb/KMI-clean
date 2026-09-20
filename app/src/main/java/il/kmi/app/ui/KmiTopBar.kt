@@ -1370,7 +1370,10 @@ fun KmiTopBar(
                 .background(topBarDividerColor)
         )
 
-        if (showQuickActions) {
+        if (
+            showQuickActions &&
+            !quickActionsExpanded
+        ) {
             Popup(
                 alignment = AbsoluteAlignment.TopRight,
                 offset = IntOffset(
@@ -1389,12 +1392,11 @@ fun KmiTopBar(
                 )
             ) {
                 IconsRailAttachedHandle(
-                    expanded = quickActionsExpanded,
+                    expanded = false,
                     accentColor =
                         effectiveQuickActionsAccentColor,
                     onToggle = {
-                        quickActionsExpanded =
-                            !quickActionsExpanded
+                        quickActionsExpanded = true
                     }
                 )
             }
@@ -1482,8 +1484,12 @@ fun KmiTopBar(
             Popup(
                 alignment = AbsoluteAlignment.TopRight,
                 offset = IntOffset(
-                    x = with(density) { (-2).dp.roundToPx() },
-                    y = with(density) { (topBarHeight + 36.dp).roundToPx() }
+                    x = with(density) {
+                        attachedHandleHorizontalOffset.roundToPx()
+                    },
+                    y = with(density) {
+                        (topBarHeight - 1.dp).roundToPx()
+                    }
                 ),
                 properties = PopupProperties(
                     focusable = false,
@@ -1501,7 +1507,7 @@ fun KmiTopBar(
                 ) {
                     val quickActionsShape =
                         AbsoluteRoundedCornerShape(
-                            topLeft = 22.dp,
+                            topLeft = 0.dp,
                             topRight = 0.dp,
                             bottomLeft = 22.dp,
                             bottomRight = 0.dp
@@ -1546,6 +1552,40 @@ fun KmiTopBar(
                                     Arrangement.spacedBy(3.dp),
                                 horizontalAlignment = Alignment.CenterHorizontally
                             ) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(28.dp)
+                                        .clickable(
+                                            interactionSource =
+                                                remember {
+                                                    MutableInteractionSource()
+                                                },
+                                            indication = null
+                                        ) {
+                                            quickActionsExpanded = false
+                                        },
+                                    contentAlignment =
+                                        Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector =
+                                            Icons.Rounded.KeyboardArrowDown,
+                                        contentDescription =
+                                            if (isEnglish) {
+                                                "Close icons rail"
+                                            } else {
+                                                "סגור סרגל אייקונים"
+                                            },
+                                        tint = Color.White,
+                                        modifier =
+                                            Modifier
+                                                .size(KmiIconSize.medium)
+                                                .graphicsLayer {
+                                                    rotationZ = 180f
+                                                }
+                                    )
+                                }
                                 VerticalQuickActionItem(
                                     icon = Icons.Filled.Search,
                                     label = if (isEnglish) "Search" else "חיפוש",

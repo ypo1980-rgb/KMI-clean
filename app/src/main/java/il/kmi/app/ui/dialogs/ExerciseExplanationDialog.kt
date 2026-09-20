@@ -444,23 +444,25 @@ fun ExerciseExplanationDialog(
                 }
             }
         },
-        text = {
-            Column(
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(
-                        color = cardBackground,
-                        shape = RoundedCornerShape(24.dp)
-                    )
-                    .border(
-                        width = 1.dp,
-                        color = softBorderColor,
-                        shape = RoundedCornerShape(24.dp)
-                    )
-                    .padding(horizontal = 12.dp, vertical = 12.dp)
-            ) {
-                StyledExplanationText(
+            text = {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 420.dp)
+                        .background(
+                            color = cardBackground,
+                            shape = RoundedCornerShape(24.dp)
+                        )
+                        .border(
+                            width = 1.dp,
+                            color = softBorderColor,
+                            shape = RoundedCornerShape(24.dp)
+                        )
+                        .verticalScroll(rememberScrollState())
+                        .padding(horizontal = 12.dp, vertical = 12.dp)
+                ) {
+                    StyledExplanationText(
                     raw = explanation,
                     style = scaledTextStyle(
                         KmiTypography.body
