@@ -15,6 +15,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -37,6 +39,7 @@ import java.util.Locale
 internal fun HomeCoachNoticesCard(
     homeNotices: List<HomeNotice>,
     hasRecentCoachMessages: Boolean,
+    unreadCount: Int,
     isEnglish: Boolean,
     onOpen: () -> Unit
 ) {
@@ -173,56 +176,76 @@ internal fun HomeCoachNoticesCard(
                             Modifier.weight(1f)
                     )
 
-                    if (homeNotices.isNotEmpty()) {
-                        Surface(
-                            onClick = {
-                                onOpen()
-                            },
-                            shape =
-                                CircleShape,
-                            color =
-                                MaterialTheme
-                                    .colorScheme
-                                    .primary
-                                    .copy(alpha = 0.14f),
-                            border =
-                                BorderStroke(
-                                    width = 1.dp,
-                                    color =
-                                        MaterialTheme
-                                            .colorScheme
-                                            .primary
-                                            .copy(alpha = 0.40f)
-                                ),
-                            modifier =
-                                Modifier.size(
-                                    scaledIconSize(32.dp)
-                                )
-                        ) {
-                            Box(
-                                contentAlignment =
-                                    Alignment.Center
-                            ) {
-                                Icon(
-                                    imageVector =
-                                        Icons.Filled.Email,
-                                    contentDescription =
-                                        if (isEnglish) {
-                                            "Messages and events"
-                                        } else {
-                                            "הודעות ואירועים"
-                                        },
-                                    tint =
-                                        MaterialTheme
-                                            .colorScheme
-                                            .primary,
-                                    modifier =
-                                        Modifier.size(
-                                            scaledIconSize(
-                                                17.dp
-                                            )
+                    if (
+                        homeNotices.isNotEmpty() ||
+                        unreadCount > 0
+                    ) {
+                        BadgedBox(
+                            badge = {
+                                if (unreadCount > 0) {
+                                    Badge {
+                                        Text(
+                                            text =
+                                                if (unreadCount > 99) {
+                                                    "99+"
+                                                } else {
+                                                    unreadCount.toString()
+                                                }
                                         )
-                                )
+                                    }
+                                }
+                            }
+                        ) {
+                            Surface(
+                                onClick = {
+                                    onOpen()
+                                },
+                                shape =
+                                    CircleShape,
+                                color =
+                                    MaterialTheme
+                                        .colorScheme
+                                        .primary
+                                        .copy(alpha = 0.14f),
+                                border =
+                                    BorderStroke(
+                                        width = 1.dp,
+                                        color =
+                                            MaterialTheme
+                                                .colorScheme
+                                                .primary
+                                                .copy(alpha = 0.40f)
+                                    ),
+                                modifier =
+                                    Modifier.size(
+                                        scaledIconSize(32.dp)
+                                    )
+                            ) {
+                                Box(
+                                    contentAlignment =
+                                        Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector =
+                                            Icons.Filled.Email,
+                                        contentDescription =
+                                            if (isEnglish) {
+                                                "Messages and events"
+                                            } else {
+                                                "הודעות ואירועים"
+                                            },
+                                        tint =
+                                            MaterialTheme
+                                                .colorScheme
+                                                .primary,
+                                        modifier =
+                                            Modifier.size(
+                                                scaledIconSize(
+                                                    17.dp
+                                                )
+                                            )
+                                    )
+                                }
                             }
                         }
                     }

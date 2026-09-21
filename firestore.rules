@@ -993,40 +993,173 @@ match /branches/{branchId}/forumRooms/{roomId} {
   }
 }
 
-    // =========================
-    // הודעות שידור למתאמנים
-    // coachBroadcasts/{broadcastId}
-    // =========================
-    match /coachBroadcasts/{broadcastId} {
+  // =========================
+  // הודעות שידור למתאמנים
+  // coachBroadcasts/{broadcastId}
+  // coachBroadcasts/{broadcastId}/recipients/{uid}
+  // =========================
+  match /coachBroadcasts/{broadcastId} {
 
-      // קריאה:
-      // 1. מתאמן שנמצא ברשימת היעד (targetUids array)
-      // 2. או המאמן שכתב את ההודעה (authorUid)
+    // קריאת המסמך הראשי:
+    // רק המאמן שיצר את ההודעה או אדמין.
+    //
+    // מתאמן אינו קורא את המסמך הראשי,
+    // משום שהוא כולל מידע על כלל הנמענים.
+    // המתאמן קורא רק את הרשומה האישית שלו
+    // תחת recipients/{uid}.
+    allow read: if isSignedIn()
+              && (
+                   isAdmin()
+                   || request.auth.uid == resource.data.authorUid
+                 );
+
+    // יצירת הודעת שידור:
+    // רק מאמן מורשה עם הרשאת שליחת הודעות.
+    allow create: if isSignedIn()
+               && isAuthorizedCoach()
+               && get(
+                 /databases/$(database)/documents/authorizedCoaches/$(request.auth.uid)
+               ).data.canSendBroadcasts == true
+               && request.auth.uid == request.resource.data.authorUid;
+
+    // שינוי / מחיקת ההודעה הראשית:
+    // רק המאמן שיצר אותה או אדמין.
+    allow update, delete: if isSignedIn()
+                       && (
+                            isAdmin()
+                            || (
+                                 isAuthorizedCoach()
+                                 && get(
+                                   /databases/$(database)/documents/authorizedCoaches/$(request.auth.uid)
+                                 ).data.canSendBroadcasts == true
+                                 && request.auth.uid == resource.data.authorUid
+                               )
+                          );
+
+    // =========================
+    // מצב אישי של כל נמען
+    // =========================
+    match /recipients/{uid} {
+
+      // המשתמש קורא רק את רשומת הנמען שלו.
+      // המאמן שיצר את ההודעה והאדמין רשאים גם לקרוא.
       allow read: if isSignedIn()
-                  && (
-                       request.auth.uid in resource.data.targetUids ||
-                       request.auth.uid == resource.data.authorUid
-                     );
+                && (
+                     request.auth.uid == uid
+                     || isAdmin()
+                     || (
+                          isAuthorizedCoach()
+                          && get(
+                            /databases/$(database)/documents/coachBroadcasts/$(broadcastId)
+                          ).data.authorUid == request.auth.uid
+                        )
+                   );
 
-      // יצירה:
-      // רק המאמן שכותב את ההודעה (authorUid בשדה הדוקומנט החדש)
-   allow create: if isSignedIn()
-              && isAuthorizedCoach()
-              && get(
-                /databases/$(database)/documents/authorizedCoaches/$(request.auth.uid)
-              ).data.canSendBroadcasts == true
-              && request.auth.uid == request.resource.data.authorUid;
+      // יצירת רשומת נמען:
+      // רק המאמן שיצר את הודעת השידור,
+      // ורק עבור UID שנמצא ברשימת היעד.
+      allow create: if isSignedIn()
+                 && isAuthorizedCoach()
+                 && get(
+                   /databases/$(database)/documents/authorizedCoaches/$(request.auth.uid)
+                 ).data.canSendBroadcasts == true
 
-   // עדכון / מחיקה:
-   // רק מאמן מורשה עם canSendBroadcasts,
-   // ורק על הודעה שהוא עצמו יצר.
-   allow update, delete: if isSignedIn()
-                      && isAuthorizedCoach()
-                      && get(
-                        /databases/$(database)/documents/authorizedCoaches/$(request.auth.uid)
-                      ).data.canSendBroadcasts == true
-                      && request.auth.uid == resource.data.authorUid;
-}
+                 && exists(
+                   /databases/$(database)/documents/coachBroadcasts/$(broadcastId)
+                 )
+
+                 && get(
+                   /databases/$(database)/documents/coachBroadcasts/$(broadcastId)
+                 ).data.authorUid == request.auth.uid
+
+                 && get(
+                   /databases/$(database)/documents/coachBroadcasts/$(broadcastId)
+                 ).data.targetUids is list
+
+                 && uid in get(
+                   /databases/$(database)/documents/coachBroadcasts/$(broadcastId)
+                 ).data.targetUids
+
+                 && request.resource.data.uid == uid
+                 && request.resource.data.broadcastId == broadcastId
+
+                 && request.resource.data.read == false
+                 && request.resource.data.deleted == false;
+
+      // המתאמן רשאי לשנות רק את מצב ההודעה האישי שלו:
+      // נקרא / תאריך קריאה / נמחק / תאריך מחיקה.
+      //
+      // אסור לו לשנות uid, broadcastId,
+      // שם, אימייל, טלפון, createdAt וכו'.
+      allow update: if isSignedIn()
+                 && request.auth.uid == uid
+
+                 && resource.data.uid == uid
+                 && request.resource.data.uid == uid
+
+                 && resource.data.broadcastId == broadcastId
+                 && request.resource.data.broadcastId == broadcastId
+
+                 && request.resource.data
+                      .diff(resource.data)
+                      .affectedKeys()
+                      .hasOnly([
+                        "read",
+                        "readAt",
+                        "deleted",
+                        "deletedAt"
+                      ])
+
+                 && request.resource.data.read is bool
+                 && request.resource.data.deleted is bool;
+
+      // לא מוחקים פיזית הודעות מתיבת המשתמש.
+      // "מחיקה" היא soft-delete באמצעות deleted=true.
+      allow delete: if false;
+    }
+  }
+
+  // =========================
+  // Collection Group – recipients
+  //
+  // מאפשר למרכז ההודעות לבצע:
+  // collectionGroup("recipients")
+  // ולשלוף רק רשומות ששייכות למשתמש המחובר.
+  // =========================
+  match /{path=**}/recipients/{uid} {
+
+    // מרכז ההודעות מבצע Collection Group Query
+    // עם סינון לפי השדה uid.
+    //
+    // לכן הרשאת הקריאה חייבת להתאים
+    // בדיוק לתנאי השאילתה בצד Android.
+    allow read: if isSignedIn()
+              && resource.data.uid == request.auth.uid;
+
+    // הכתיבה ממשיכה להיות מנוהלת
+    // על ידי ה-rule הספציפי של coachBroadcasts.
+    allow create, delete: if false;
+
+    // המשתמש רשאי לשנות רק את מצב ההודעה שלו.
+    allow update: if isSignedIn()
+               && request.auth.uid == uid
+
+               && resource.data.uid == uid
+               && request.resource.data.uid == uid
+
+               && request.resource.data
+                    .diff(resource.data)
+                    .affectedKeys()
+                    .hasOnly([
+                      "read",
+                      "readAt",
+                      "deleted",
+                      "deletedAt"
+                    ])
+
+               && request.resource.data.read is bool
+               && request.resource.data.deleted is bool;
+  }
 
     // =========================
     // רשימת מספרי טלפון מורשים

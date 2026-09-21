@@ -32,6 +32,7 @@ import il.kmi.app.screens.BeltQuestions.ByTopic.BeltQuestionsByTopicScreen
 import il.kmi.app.screens.ExercisesTabsScreen
 import il.kmi.app.screens.FavoritesScreen
 import il.kmi.app.screens.HomeScreen
+import il.kmi.app.messages.ui.MessageCenterScreen
 import il.kmi.app.screens.PracticeByTopicsSelection
 import il.kmi.app.screens.TrainingArchiveNavigationStore
 import il.kmi.app.screens.TrainingArchiveScreen
@@ -267,6 +268,15 @@ fun NavGraphBuilder.homeNavGraph(
                         launchSingleTop = true
                         restoreState = false
                     }
+                },
+
+                onOpenMessageCenter = {
+                    nav.navigate(
+                        Route.MessageCenter.route
+                    ) {
+                        launchSingleTop = true
+                        restoreState = true
+                    }
                 }
             )
 
@@ -318,6 +328,30 @@ fun NavGraphBuilder.homeNavGraph(
                 )
             }
         }
+    }
+
+    composable(Route.MessageCenter.route) {
+        val context =
+            LocalContext.current
+
+        val languageManager =
+            remember(context) {
+                AppLanguageManager(context)
+            }
+
+        val isEnglish =
+            languageManager.getCurrentLanguage() ==
+                    AppLanguage.ENGLISH
+
+        MessageCenterScreen(
+            isEnglish = isEnglish,
+            onBack = {
+                nav.popBackStack()
+            },
+            onMessageClick = {
+                // ההודעה המלאה נפתחת בתוך MessageCenterScreen
+            }
+        )
     }
 
     composable(

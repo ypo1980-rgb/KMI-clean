@@ -288,7 +288,6 @@ fun persistCoachBroadcast(
         ?: "מאמן"
 
     val nowMillis = System.currentTimeMillis()
-    val expiresAtMillis = nowMillis + 30L * 24L * 60L * 60L * 1000L
 
     val docRef = db.collection("coachBroadcasts").document()
     val broadcastId = docRef.id
@@ -299,9 +298,25 @@ fun persistCoachBroadcast(
         // סוג הודעה — חשוב ל־Cloud Function / Android Intent
         "type" to "coach_broadcast",
 
+        // המאמן שיצר את ההודעה נשמר לצורכי מערכת ובקרה.
         "authorUid" to currentUid,
         "coachUid" to currentUid,
         "coachName" to coachName,
+
+        // זהות השולח — עברית / אנגלית.
+        // senderName נשאר לצורכי תאימות למסכים ישנים.
+        "senderName" to "צוות ק.מ.י",
+        "senderNameHe" to "צוות ק.מ.י",
+        "senderNameEn" to "K.M.I Team",
+
+        // כותרות ברירת מחדל למרכז ההודעות / Push.
+        "titleHe" to "הודעה מצוות ק.מ.י",
+        "titleEn" to "Message from K.M.I Team",
+
+        // מאפייני מרכז ההודעות.
+        "messageType" to "general",
+        "priority" to "normal",
+        "inAppEnabled" to true,
 
         "region" to cleanRegion,
         "branch" to cleanBranch,
@@ -342,20 +357,118 @@ fun persistCoachBroadcast(
         "createdAtMillis" to nowMillis,
         "sentAtMillis" to nowMillis,
 
-        // TTL: Firestore ימחק את ההודעה אוטומטית אחרי 30 יום
-        "expiresAt" to Timestamp(Date(expiresAtMillis)),
-        "expiresAtMillis" to expiresAtMillis,
-
+        // ההודעה נשמרת במרכז ההודעות ואינה נמחקת אוטומטית.
         "source" to "android_coach_broadcast"
     )
 
     docRef
-        .set(data.filterValues { it != null }, SetOptions.merge())
+        .set(
+            data.filterValues { it != null },
+            SetOptions.merge()
+        )
         .addOnSuccessListener {
-            onResult(true, null)
+
+            /*
+             * לכל נמען נוצרת רשומה אישית.
+             *
+             * מכאן נוכל לבנות:
+             * - נקרא / לא נקרא
+             * - badge של הודעות חדשות
+             * - מחיקה אישית מהתיבה
+             * - תאריך קריאה
+             */
+            val recipientTasks =
+                cleanTargetUids.map { uid ->
+
+                    val recipientSnapshot =
+                        cleanTargetRecipients
+                            .firstOrNull { recipient ->
+                                recipient["uid"]
+                                    .orEmpty()
+                                    .trim() == uid
+                            }
+
+                    val recipientData =
+                        hashMapOf<String, Any?>(
+                            "uid" to uid,
+                            "broadcastId" to broadcastId,
+
+                            // זהות השולח לפי שפת האפליקציה
+                            "senderNameHe" to "צוות ק.מ.י",
+                            "senderNameEn" to "K.M.I Team",
+
+                            // כותרת ההודעה לפי שפה
+                            "titleHe" to "הודעה מצוות ק.מ.י",
+                            "titleEn" to "Message from K.M.I Team",
+
+                            // תוכן ההודעה
+                            "message" to cleanMessage,
+                            "text" to cleanMessage,
+                            "body" to cleanMessage,
+
+                            // סיווג
+                            "messageType" to "general",
+                            "priority" to "normal",
+
+                            // שיוך
+                            "region" to cleanRegion,
+                            "branch" to cleanBranch,
+                            "groups" to cleanTargetGroups,
+
+                            // Snapshot של הנמען עצמו בלבד
+                            "name" to
+                                    recipientSnapshot
+                                        ?.get("name")
+                                        .orEmpty(),
+
+                            "email" to
+                                    recipientSnapshot
+                                        ?.get("email")
+                                        .orEmpty(),
+
+                            "phone" to
+                                    recipientSnapshot
+                                        ?.get("phone")
+                                        .orEmpty(),
+
+                            // מצב אישי בתיבת ההודעות
+                            "read" to false,
+                            "readAt" to null,
+
+                            "deleted" to false,
+                            "deletedAt" to null,
+
+                            // זמנים
+                            "createdAt" to
+                                    FieldValue.serverTimestamp(),
+
+                            "createdAtMillis" to nowMillis
+                        )
+
+                    docRef
+                        .collection("recipients")
+                        .document(uid)
+                        .set(
+                            recipientData,
+                            SetOptions.merge()
+                        )
+                }
+
+            if (recipientTasks.isEmpty()) {
+                onResult(true, null)
+            } else {
+                com.google.android.gms.tasks.Tasks
+                    .whenAll(recipientTasks)
+                    .addOnSuccessListener {
+                        onResult(true, null)
+                    }
+                    .addOnFailureListener { error ->
+                        onResult(false, error)
+                    }
+            }
         }
-        .addOnFailureListener { e ->
-            onResult(false, e)
+        .addOnFailureListener { error ->
+            onResult(false, error)
         }
 }
 

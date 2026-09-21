@@ -45,6 +45,8 @@ sealed class Route(val route: String) {
 
     object CoachBroadcast : Route("coachBroadcast")
 
+    object MessageCenter : Route("message_center")
+
     object Materials : Route("materials/{beltId}/{topic}?coach={coach}") {
         fun make(belt: Belt, topic: String, coach: Boolean = false) =
             "materials/${belt.id}/${enc(topic)}?coach=$coach"

@@ -5,6 +5,7 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.graphics.BitmapFactory
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
@@ -14,6 +15,8 @@ import il.kmi.app.FcmTokenManager
 import il.kmi.app.MainActivity
 import il.kmi.app.R
 import il.kmi.app.notifications.CoachGate
+import il.kmi.shared.localization.AppLanguage
+import il.kmi.shared.localization.AppLanguageManager
 
 /**
  * שירות שמקבל הודעות מ-FCM ומציג התראות למשתמש.
@@ -39,6 +42,13 @@ class KmiFirebaseMessagingService : FirebaseMessagingService() {
 
     override fun onMessageReceived(message: RemoteMessage) {
         super.onMessageReceived(message)
+
+        val languageManager =
+            AppLanguageManager(applicationContext)
+
+        val isEnglish =
+            languageManager.getCurrentLanguage() ==
+                    AppLanguage.ENGLISH
 
         val data = message.data
 
@@ -84,8 +94,17 @@ class KmiFirebaseMessagingService : FirebaseMessagingService() {
         }
 
         // כותרת + טקסט – קודם מ-notification, אם אין אז מה-data, ואם אין אז ברירת מחדל
-        val titleFromPayload = message.notification?.title
-            ?: data["title"]
+        val titleFromPayload =
+            message.notification?.title
+                ?: if (isEnglish) {
+                    data["titleEn"]
+                        ?: data["senderNameEn"]
+                        ?: data["title"]
+                } else {
+                    data["titleHe"]
+                        ?: data["senderNameHe"]
+                        ?: data["title"]
+                }
 
         val bodyFromPayload = message.notification?.body
             ?: data["body"]
@@ -93,14 +112,43 @@ class KmiFirebaseMessagingService : FirebaseMessagingService() {
             ?: data["message"]   // ✅ תמיכה נוספת
 
         val title = titleFromPayload ?: when (type) {
-            "coach_broadcast" -> "הודעה חדשה מהמאמן"
-            "forum_message" -> "הודעה חדשה בפורום"
-            else -> "ק.מ.י"
+            "coach_broadcast" ->
+                if (isEnglish) {
+                    "K.M.I Team"
+                } else {
+                    "צוות ק.מ.י"
+                }
+
+            "forum_message" ->
+                if (isEnglish) {
+                    "New forum message"
+                } else {
+                    "הודעה חדשה בפורום"
+                }
+
+            else ->
+                if (isEnglish) {
+                    "K.M.I"
+                } else {
+                    "ק.מ.י"
+                }
         }
 
         val body = bodyFromPayload ?: when (type) {
-            "coach_broadcast" -> "המאמן שלח הודעה חדשה."
-            "forum_message" -> "נוספה הודעה חדשה בפורום."
+            "coach_broadcast" ->
+                if (isEnglish) {
+                    "A new message was received from the K.M.I Team"
+                } else {
+                    "התקבלה הודעה חדשה מצוות ק.מ.י"
+                }
+
+            "forum_message" ->
+                if (isEnglish) {
+                    "A new message was added to the forum."
+                } else {
+                    "נוספה הודעה חדשה בפורום."
+                }
+
             else -> ""
         }
 
@@ -112,7 +160,8 @@ class KmiFirebaseMessagingService : FirebaseMessagingService() {
             type = type,
             title = title,
             body = body,
-            data = data
+            data = data,
+            isEnglish = isEnglish
         )
     }
 
@@ -120,7 +169,8 @@ class KmiFirebaseMessagingService : FirebaseMessagingService() {
         type: String,
         title: String,
         body: String,
-        data: Map<String, String>
+        data: Map<String, String>,
+        isEnglish: Boolean
     ) {
         val context = applicationContext
 
@@ -205,8 +255,33 @@ class KmiFirebaseMessagingService : FirebaseMessagingService() {
                 putExtra(CoachGate.EXTRA_TEXT, gateText)
 
                 val gateFrom =
-                    firstDataString("coachName", "coach_name", "from", "senderName", "sender_name")
-                        .ifBlank { "המאמן" }
+                    if (isEnglish) {
+                        firstDataString(
+                            "senderNameEn",
+                            "sender_name_en",
+                            "senderName",
+                            "sender_name",
+                            "coachName",
+                            "coach_name",
+                            "from"
+                        )
+                            .ifBlank {
+                                "K.M.I Team"
+                            }
+                    } else {
+                        firstDataString(
+                            "senderNameHe",
+                            "sender_name_he",
+                            "senderName",
+                            "sender_name",
+                            "coachName",
+                            "coach_name",
+                            "from"
+                        )
+                            .ifBlank {
+                                "צוות ק.מ.י"
+                            }
+                    }
 
                 putExtra(CoachGate.EXTRA_FROM, gateFrom)
 
@@ -247,14 +322,48 @@ class KmiFirebaseMessagingService : FirebaseMessagingService() {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        val builder = NotificationCompat.Builder(context, CHANNEL_ID)
-            .setSmallIcon(R.mipmap.ic_launcher) // אייקון ברירת מחדל של האפליקציה
-            .setContentTitle(title.ifBlank { "ק.מ.י" })
-            .setContentText(body)
-            .setStyle(NotificationCompat.BigTextStyle().bigText(body))
-            .setAutoCancel(true)
-            .setContentIntent(pendingIntent)
-            .setPriority(NotificationCompat.PRIORITY_HIGH)
+        val kmiLogo =
+            BitmapFactory.decodeResource(
+                context.resources,
+                R.drawable.kami_logo
+            )
+
+        val builder =
+            NotificationCompat.Builder(
+                context,
+                CHANNEL_ID
+            )
+                /*
+                 * Small Icon של Android חייב להיות אייקון מערכת מתאים.
+                 * משאירים את אייקון האפליקציה עבור שורת הסטטוס.
+                 */
+                .setSmallIcon(R.mipmap.ic_launcher)
+
+                /*
+                 * הלוגו המלא של ק.מ.י יוצג בתוך ההתראה.
+                 */
+                .setLargeIcon(kmiLogo)
+
+                .setContentTitle(
+                    title.ifBlank {
+                        if (isEnglish) {
+                            "K.M.I Team"
+                        } else {
+                            "צוות ק.מ.י"
+                        }
+                    }
+                )
+                .setContentText(body)
+                .setStyle(
+                    NotificationCompat
+                        .BigTextStyle()
+                        .bigText(body)
+                )
+                .setAutoCancel(true)
+                .setContentIntent(pendingIntent)
+                .setPriority(
+                    NotificationCompat.PRIORITY_HIGH
+                )
 
         try {
             with(NotificationManagerCompat.from(context)) {
@@ -275,10 +384,11 @@ class KmiFirebaseMessagingService : FirebaseMessagingService() {
 
             val channel = NotificationChannel(
                 CHANNEL_ID,
-                "KAMI Messages",
+                "K.M.I Messages / הודעות ק.מ.י",
                 NotificationManager.IMPORTANCE_HIGH
             ).apply {
-                description = "התראות על הודעות מאמן והודעות פורום באפליקציית KAMI / ק.מ.י"
+                description =
+                    "K.M.I app notifications / התראות מאפליקציית ק.מ.י"
             }
 
             manager.createNotificationChannel(channel)

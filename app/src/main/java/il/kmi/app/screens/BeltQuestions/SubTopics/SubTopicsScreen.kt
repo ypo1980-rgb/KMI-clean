@@ -3642,9 +3642,8 @@ private fun HardBeltGroupsStickyContent(
         ) {
             groups
                 .flatMap { group: HardStickyBeltGroup ->
-                    group.items.mapIndexed {
-                            index: Int,
-                            raw: String ->
+                    group.items.mapIndexed { index: Int,
+                                             raw: String ->
 
                         val original =
                             raw.trim()
@@ -4221,12 +4220,12 @@ private fun HardBeltGroupsStickyContent(
                             row.statusKeys
                                 .forEach { key ->
                                     vm.setItemStatusNullable(
-                                    belt = row.belt,
-                                    topic = key,
-                                    item = statusId,
-                                    value = nextValue
-                                )
-                            }
+                                        belt = row.belt,
+                                        topic = key,
+                                        item = statusId,
+                                        value = nextValue
+                                    )
+                                }
 
                             setLocalStatus(
                                 belt = row.belt,
@@ -4435,36 +4434,36 @@ private fun HardBeltStickyHeaderForSubTopics(
                         ),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                        Text(
-                            text = countText,
-                            style =
-                                KmiTypography.caption.copy(
-                                    fontWeight = FontWeight.Bold
-                                ),
-                            color = beltContentColor,
-                            textAlign = TextAlign.Start,
-                            modifier = Modifier.weight(1f),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
+                    Text(
+                        text = countText,
+                        style =
+                            KmiTypography.caption.copy(
+                                fontWeight = FontWeight.Bold
+                            ),
+                        color = beltContentColor,
+                        textAlign = TextAlign.Start,
+                        modifier = Modifier.weight(1f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
 
-                        Text(
-                            text = title,
-                            style =
-                                KmiTypography.screenTitle.copy(
-                                    fontWeight =
-                                        FontWeight.ExtraBold
-                                ),
-                            color = beltContentColor,
-                            textAlign = TextAlign.End,
-                            modifier = Modifier.weight(1f),
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
-                    }
+                    Text(
+                        text = title,
+                        style =
+                            KmiTypography.screenTitle.copy(
+                                fontWeight =
+                                    FontWeight.ExtraBold
+                            ),
+                        color = beltContentColor,
+                        textAlign = TextAlign.End,
+                        modifier = Modifier.weight(1f),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
                 }
             }
         }
+    }
 
     if (showStats) {
         Column(
@@ -4771,138 +4770,310 @@ private fun HardExerciseLegacyRow(
                     LayoutDirection.Rtl
                 }
     ) {
-        Column(
-            modifier =
-                Modifier
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(
+                    horizontal = 8.dp,
+                    vertical = 4.dp
+                ),
+            shape = RoundedCornerShape(18.dp),
+            color = MaterialTheme.colorScheme.surface,
+            border = BorderStroke(
+                width = 1.dp,
+                color =
+                    MaterialTheme.colorScheme
+                        .outlineVariant
+                        .copy(alpha = 0.75f)
+            ),
+            tonalElevation = 0.dp,
+            shadowElevation = 2.dp
+        ) {
+            Column(
+                modifier = Modifier
                     .fillMaxWidth()
                     .padding(
-                        horizontal = 16.dp,
-                        vertical = 2.dp
+                        horizontal = 4.dp,
+                        vertical = 6.dp
                     )
-        ) {
-            Row(
-                modifier =
-                    Modifier
-                        .fillMaxWidth()
-                        .clickable {
-                            onInfoClick()
-                        }
-                        .padding(
-                            start = 8.dp,
-                            end = 8.dp,
-                            top = 2.dp,
-                            bottom = 4.dp
-                        ),
-                verticalAlignment =
-                    Alignment.CenterVertically
             ) {
-                Text(
-                    text =
-                        if (isEnglish) {
-                            displayName.trim()
-                        } else {
-                            "\u200F${displayName.trim()}\u200F"
-                        },
-                    style =
-                        KmiTypography
-                            .cardTitle
-                            .copy(
-                                fontWeight =
-                                    FontWeight.ExtraBold
+                Row(
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                onInfoClick()
+                            }
+                            .padding(
+                                start = 8.dp,
+                                end = 8.dp,
+                                top = 2.dp,
+                                bottom = 4.dp
                             ),
-                    color =
-                        rowTextColor,
-                    textAlign =
-                        if (isEnglish) {
-                            TextAlign.Left
-                        } else {
-                            TextAlign.Right
-                        },
-                    maxLines =
-                        3,
-                    overflow =
-                        TextOverflow.Ellipsis,
-                    modifier =
-                        Modifier.weight(1f)
-                )
-
-                ExerciseNameStatusIndicators(
-                    isFav = isFav,
-                    hasNote = hasNote,
-                    isEnglish = isEnglish
-                )
-            }
-
-            if (isCoach) {
-                CoachMaterialStatusSelector(
-                    progress =
-                        coachProgress,
-                    isEnglish =
-                        isEnglish,
-                    modifier =
-                        Modifier.fillMaxWidth(),
-                    excluded =
-                        excluded,
-                    isFav =
-                        isFav,
-                    hasNote =
-                        hasNote,
-                    onToggleExclude =
-                        onToggleExclude,
-                    onInfo =
-                        onInfoClick,
-                    onToggleFavorite =
-                        onToggleFavorite,
-                    onEditNote =
-                        onEditNote,
-                    onSelect =
-                        onCoachStatusSelect
-                )
-            } else {
-                MaterialsExerciseStatusCard(
-                    isEnglish =
-                        isEnglish,
-                    modifier =
-                        Modifier.fillMaxWidth(),
-                    info = {
-                        ItemFloatingActions(
-                            isEnglish =
-                                isEnglish,
-                            excluded =
-                                excluded,
-                            isFav =
-                                isFav,
-                            hasNote =
-                                hasNote,
-                            onToggleExclude =
-                                onToggleExclude,
-                            onInfo =
-                                onInfoClick,
-                            onToggleFavorite =
-                                onToggleFavorite,
-                            onEditNote =
-                                onEditNote
-                        )
-                    }
+                    verticalAlignment =
+                        Alignment.CenterVertically
                 ) {
-                    TraineeMaterialStatusSelector(
-                        selectedStatus =
-                            traineeStatus,
-                        dateText =
-                            traineeDateText,
+                    Text(
+                        text =
+                            if (isEnglish) {
+                                displayName.trim()
+                            } else {
+                                "\u200F${displayName.trim()}\u200F"
+                            },
+                        style =
+                            KmiTypography
+                                .cardTitle
+                                .copy(
+                                    fontWeight =
+                                        FontWeight.ExtraBold
+                                ),
+                        color =
+                            rowTextColor,
+                        textAlign =
+                            if (isEnglish) {
+                                TextAlign.Left
+                            } else {
+                                TextAlign.Right
+                            },
+                        maxLines =
+                            3,
+                        overflow =
+                            TextOverflow.Ellipsis,
+                        modifier =
+                            Modifier.weight(1f)
+                    )
+
+                    ExerciseNameStatusIndicators(
+                        isFav = isFav,
+                        hasNote = hasNote,
+                        isEnglish = isEnglish
+                    )
+                }
+
+                if (isCoach) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(40.dp),
+                        horizontalArrangement =
+                            Arrangement.spacedBy(4.dp),
+                        verticalAlignment =
+                            Alignment.CenterVertically
+                    ) {
+                        listOf(
+                            CoachMaterialStatus.TAUGHT,
+                            CoachMaterialStatus.PRACTICED,
+                            CoachMaterialStatus.NEEDS_REINFORCEMENT
+                        ).forEach { status ->
+
+                            val selected =
+                                coachProgress.isSelected(status)
+
+                            val updatedAt =
+                                coachProgress.updatedAtFor(status)
+
+                            val activeColor =
+                                when (status) {
+                                    CoachMaterialStatus.TAUGHT ->
+                                        Color(0xFF2F9B4E)
+
+                                    CoachMaterialStatus.PRACTICED ->
+                                        Color(0xFF6D4BD8)
+
+                                    else ->
+                                        Color(0xFFB96B12)
+                                }
+
+                            val label =
+                                when (status) {
+                                    CoachMaterialStatus.TAUGHT ->
+                                        if (isEnglish) {
+                                            "Taught"
+                                        } else {
+                                            "נלמד"
+                                        }
+
+                                    CoachMaterialStatus.PRACTICED ->
+                                        if (isEnglish) {
+                                            "Practiced"
+                                        } else {
+                                            "תורגל"
+                                        }
+
+                                    else ->
+                                        if (isEnglish) {
+                                            "Reinforce"
+                                        } else {
+                                            "חיזוק"
+                                        }
+                                }
+
+                            val dateText =
+                                if (
+                                    selected &&
+                                    updatedAt > 0L
+                                ) {
+                                    SimpleDateFormat(
+                                        "dd/MM/yy",
+                                        Locale.getDefault()
+                                    ).format(
+                                        Date(updatedAt)
+                                    )
+                                } else {
+                                    ""
+                                }
+
+                            Surface(
+                                onClick = {
+                                    onCoachStatusSelect(status)
+                                },
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .fillMaxHeight(),
+                                shape =
+                                    RoundedCornerShape(8.dp),
+                                color =
+                                    if (selected) {
+                                        activeColor.copy(
+                                            alpha = 0.12f
+                                        )
+                                    } else {
+                                        MaterialTheme
+                                            .colorScheme
+                                            .surfaceVariant
+                                            .copy(alpha = 0.30f)
+                                    },
+                                border =
+                                    BorderStroke(
+                                        width = 1.dp,
+                                        color =
+                                            if (selected) {
+                                                activeColor.copy(
+                                                    alpha = 0.65f
+                                                )
+                                            } else {
+                                                MaterialTheme
+                                                    .colorScheme
+                                                    .outlineVariant
+                                            }
+                                    ),
+                                shadowElevation = 0.dp,
+                                tonalElevation = 0.dp
+                            ) {
+                                Column(
+                                    modifier =
+                                        Modifier.fillMaxSize(),
+                                    horizontalAlignment =
+                                        Alignment.CenterHorizontally,
+                                    verticalArrangement =
+                                        Arrangement.Center
+                                ) {
+                                    Text(
+                                        text = label,
+                                        style =
+                                            KmiTypography.caption.copy(
+                                                fontWeight =
+                                                    FontWeight.ExtraBold
+                                            ),
+                                        color =
+                                            if (selected) {
+                                                activeColor
+                                            } else {
+                                                MaterialTheme
+                                                    .colorScheme
+                                                    .onSurfaceVariant
+                                            },
+                                        maxLines = 1
+                                    )
+
+                                    if (dateText.isNotBlank()) {
+                                        Text(
+                                            text = dateText,
+                                            style =
+                                                KmiTypography.caption.copy(
+                                                    fontWeight =
+                                                        FontWeight.Bold
+                                                ),
+                                            color = activeColor,
+                                            maxLines = 1
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxHeight(),
+                            contentAlignment =
+                                Alignment.Center
+                        ) {
+                            ItemFloatingActions(
+                                isEnglish =
+                                    isEnglish,
+                                excluded =
+                                    excluded,
+                                isFav =
+                                    isFav,
+                                hasNote =
+                                    hasNote,
+                                onToggleExclude =
+                                    onToggleExclude,
+                                onInfo =
+                                    onInfoClick,
+                                onToggleFavorite =
+                                    onToggleFavorite,
+                                onEditNote =
+                                    onEditNote
+                            )
+                        }
+                    }
+                } else {
+                    MaterialsExerciseStatusCard(
                         isEnglish =
                             isEnglish,
-                        showSymbols =
-                            false,
-                        onSelect =
-                            onTraineeStatusSelect
-                    )
+                        modifier =
+                            Modifier.fillMaxWidth(),
+                        info = {
+                            ItemFloatingActions(
+                                isEnglish =
+                                    isEnglish,
+                                excluded =
+                                    excluded,
+                                isFav =
+                                    isFav,
+                                hasNote =
+                                    hasNote,
+                                onToggleExclude =
+                                    onToggleExclude,
+                                onInfo =
+                                    onInfoClick,
+                                onToggleFavorite =
+                                    onToggleFavorite,
+                                onEditNote =
+                                    onEditNote
+                            )
+                        }
+                    ) {
+                        TraineeMaterialStatusSelector(
+                            selectedStatus =
+                                traineeStatus,
+                            dateText =
+                                traineeDateText,
+                            isEnglish =
+                                isEnglish,
+                            showSymbols =
+                                false,
+                            onSelect =
+                                onTraineeStatusSelect
+                        )
+                    }
                 }
             }
         }
     }
 }
-
 
 /* ---------------------- ✅ NEW: שורת תרגיל עם אייקון הסבר ---------------------- */
 @Composable

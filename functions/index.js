@@ -1096,8 +1096,14 @@ exports.onCoachBroadcastCreated = functions.firestore
     const region = (data.region || "").toString();
     const branch = (data.branch || "").toString();
     const groupKey = (data.groupKey || "").toString();
-    const coachName = (data.coachName || data.coach_name || "המאמן").toString();
-    const authorUid = (data.authorUid || data.coachUid || "").toString();
+const senderNameHe = "צוות ק.מ.י";
+const senderNameEn = "K.M.I Team";
+
+const authorUid = (
+  data.authorUid ||
+  data.coachUid ||
+  ""
+).toString();
 
     const targetUidsRaw = Array.isArray(data.targetUids) ? data.targetUids : [];
     const targetUids = [...new Set(
@@ -1122,12 +1128,96 @@ exports.onCoachBroadcastCreated = functions.firestore
       return null;
     }
 
-    if (targetUids.length === 0) {
-      console.log("Coach broadcast has no targetUids, skipping push", { broadcastId });
-      return null;
-    }
+      if (targetUids.length === 0) {
+        console.log("Coach broadcast has no targetUids, skipping push", { broadcastId });
+        return null;
+      }
 
-    // ===== 1. שליפת fcmToken לפי targetUids =====
+      // ===== 1. יצירת רשומת Message Center לכל נמען =====
+  const messageCreatedAtMillis =
+    Number(data.createdAtMillis) > 0
+      ? Number(data.createdAtMillis)
+      : Date.now();
+
+    const titleHe =
+      String(
+        data.titleHe ||
+        senderNameHe
+      ).trim();
+
+    const titleEn =
+      String(
+        data.titleEn ||
+        senderNameEn
+      ).trim();
+
+    const groups =
+      Array.isArray(data.groups)
+        ? data.groups
+            .map((value) =>
+              String(value || "").trim()
+            )
+            .filter(Boolean)
+        : (
+            groupKey
+              ? [groupKey]
+              : []
+          );
+
+    const recipientsBatch =
+      db.batch();
+
+    targetUids.forEach((uid) => {
+      const recipientRef =
+        snap.ref
+          .collection("recipients")
+          .doc(uid);
+
+      recipientsBatch.set(
+        recipientRef,
+        {
+          uid,
+          broadcastId,
+
+          titleHe,
+          titleEn,
+
+          message: text,
+          text,
+
+          senderNameHe,
+          senderNameEn,
+
+          region,
+          branch,
+          groups,
+
+          createdAtMillis:
+            messageCreatedAtMillis,
+          createdAt:
+            admin.firestore.FieldValue.serverTimestamp(),
+
+          read: false,
+          deleted: false,
+        },
+        {
+          merge: true,
+        }
+      );
+    });
+
+    await recipientsBatch.commit();
+
+    console.log(
+      "Coach broadcast recipients created:",
+      {
+        broadcastId,
+        recipientsCount:
+          targetUids.length,
+      }
+    );
+
+    // ===== 2. שליפת fcmToken לפי targetUids =====
     const tokenResults = await Promise.all(
       targetUids.map(async (uid) => {
         try {
@@ -1166,33 +1256,83 @@ exports.onCoachBroadcastCreated = functions.firestore
       return null;
     }
 
-    // ===== 2. בניית הודעת Push =====
-    const body = text.length > 120 ? `${text.slice(0, 120)}...` : text;
+  // ===== 2. בניית הודעת Push =====
+  const body =
+    text.length > 120
+      ? `${text.slice(0, 120)}...`
+      : text;
 
-    try {
-      const res = await admin.messaging().sendEachForMulticast({
-        tokens,
-        notification: {
-          title: `הודעה חדשה מהמאמן ${coachName}`,
-          body,
-        },
-        data: {
-          type: "coach_broadcast",
-          broadcastId: broadcastId,
-          region: region,
-          branch: branch,
-          groupKey: groupKey,
-          click_action: "OPEN_HOME",
-        },
-        android: {
-          priority: "high",
-          notification: {
-            channelId: "coach_broadcasts",
-            sound: "default",
-            clickAction: "OPEN_HOME",
+  try {
+    const res =
+      await admin.messaging()
+        .sendEachForMulticast({
+          tokens,
+
+          /*
+           * שולחים גם את פרטי ההודעה בתוך data.
+           *
+           * כך Android יכול:
+           * - לזהות שמדובר בהודעת צוות
+           * - לפתוח בעתיד את ההודעה מתוך מרכז ההודעות
+           * - לשמור senderName אחיד
+           * - לקבל את הטקסט גם אם notification אינו זמין
+           */
+          data: {
+            type: "coach_broadcast",
+
+            broadcastId:
+              String(broadcastId || ""),
+
+           senderNameHe:
+             senderNameHe,
+
+           senderNameEn:
+             senderNameEn,
+
+           sender_name_he:
+             senderNameHe,
+
+           sender_name_en:
+             senderNameEn,
+
+           titleHe:
+             senderNameHe,
+
+           titleEn:
+             senderNameEn,
+
+            body:
+              text,
+
+            text:
+              text,
+
+            message:
+              text,
+
+            region:
+              String(region || ""),
+
+            branch:
+              String(branch || ""),
+
+            groupKey:
+              String(groupKey || ""),
+
+            click_action:
+              "OPEN_HOME",
           },
-        },
-      });
+
+          android: {
+            priority: "high",
+
+            notification: {
+              channelId: "coach_broadcasts",
+              sound: "default",
+              clickAction: "OPEN_HOME",
+            },
+          },
+        });
 
       console.log("Coach broadcast push sent:", {
         broadcastId,

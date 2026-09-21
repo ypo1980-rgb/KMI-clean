@@ -3055,7 +3055,7 @@ private fun BeltGroupsContent(
                     bottom = 10.dp
                 ),
             verticalArrangement =
-                Arrangement.spacedBy(8.dp)
+                Arrangement.spacedBy(6.dp)
         ) {
             itemsIndexed(
                 items = flatRows,
@@ -3643,104 +3643,165 @@ private fun HardExerciseRowCard(
                         LayoutDirection.Rtl
                     }
         ) {
-            Column(
+            val exerciseCardShape =
+                RoundedCornerShape(18.dp)
+
+            Surface(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(
-                        horizontal = 4.dp,
-                        vertical = 2.dp
-                    )
+                        horizontal = 8.dp
+                    ),
+                shape = exerciseCardShape,
+                color =
+                    MaterialTheme.colorScheme.surface,
+                border =
+                    BorderStroke(
+                        width = 1.dp,
+                        color =
+                            if (isDarkMode) {
+                                belt.color.copy(
+                                    alpha = 0.55f
+                                )
+                            } else {
+                                MaterialTheme.colorScheme
+                                    .outlineVariant
+                                    .copy(alpha = 0.85f)
+                            }
+                    ),
+                tonalElevation = 0.dp,
+                shadowElevation = 2.dp
             ) {
-                Row(
+                Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clickable(onClick = onInfoClick)
                         .padding(
-                            start = 8.dp,
-                            end = 8.dp,
-                            top = 2.dp,
-                            bottom = 4.dp
-                        ),
-                    verticalAlignment = Alignment.CenterVertically
+                            horizontal = 4.dp,
+                            vertical = 6.dp
+                        )
                 ) {
-                    if (isFavorite) {
-                        Icon(
-                            imageVector = Icons.Filled.Star,
-                            contentDescription =
-                                if (isEnglish) {
-                                    "Added to favorites"
-                                } else {
-                                    "נוסף למועדפים"
-                                },
-                            tint = Color(0xFFFFC107),
-                            modifier = Modifier.size(19.dp)
-                        )
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(
+                                start = 2.dp,
+                                end = 2.dp
+                            ),
+                        horizontalAlignment =
+                            if (isEnglish) {
+                                Alignment.Start
+                            } else {
+                                Alignment.End
+                            }
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(
+                                    start = 10.dp,
+                                    end = 3.dp,
+                                    top = 2.dp,
+                                    bottom = 2.dp
+                                ),
+                            verticalAlignment = Alignment.Top
+                        ) {
+                            Text(
+                                text =
+                                    if (isEnglish) {
+                                        item.trim()
+                                    } else {
+                                        "\u200F${item.trim()}\u200F"
+                                    },
+                                textAlign = TextAlign.Start,
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clickable(onClick = onInfoClick),
+                                color =
+                                    MaterialTheme.colorScheme.onSurface,
+                                style =
+                                    KmiTypography.body.copy(
+                                        fontWeight =
+                                            FontWeight.SemiBold
+                                    ),
+                                maxLines = 3,
+                                overflow =
+                                    TextOverflow.Ellipsis
+                            )
 
-                        Spacer(
-                            modifier = Modifier.width(5.dp)
-                        )
+                            if (isFavorite) {
+                                Spacer(
+                                    Modifier.width(6.dp)
+                                )
+
+                                Surface(
+                                    shape =
+                                        RoundedCornerShape(10.dp),
+                                    color =
+                                        Color(0xFFF9D9B8),
+                                    border =
+                                        BorderStroke(
+                                            width = 1.dp,
+                                            color =
+                                                Color(0xFF9A5A00)
+                                                    .copy(alpha = 0.14f)
+                                        ),
+                                    shadowElevation = 0.dp
+                                ) {
+                                    Text(
+                                        text =
+                                            if (isEnglish) {
+                                                "Favorite"
+                                            } else {
+                                                "מועדף"
+                                            },
+                                        style =
+                                            KmiTypography.caption.copy(
+                                                fontWeight =
+                                                    FontWeight.ExtraBold
+                                            ),
+                                        color =
+                                            Color(0xFF9A5A00),
+                                        modifier =
+                                            Modifier.padding(
+                                                horizontal = 7.dp,
+                                                vertical = 2.dp
+                                            ),
+                                        maxLines = 1
+                                    )
+                                }
+                            }
+                        }
                     }
 
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
+                    Spacer(
+                        Modifier.height(3.dp)
+                    )
+
+                    Box(
+                        modifier =
+                            Modifier.fillMaxWidth(),
+                        contentAlignment =
+                            if (isEnglish) {
+                                Alignment.CenterStart
+                            } else {
+                                Alignment.CenterEnd
+                            }
                     ) {
-                        if (isFavorite) {
-                            Icon(
-                                imageVector = Icons.Filled.Star,
-                                contentDescription =
-                                    if (isEnglish) {
-                                        "Added to favorites"
-                                    } else {
-                                        "נוסף למועדפים"
-                                    },
-                                tint = Color(0xFFFFC107),
-                                modifier = Modifier.size(17.dp)
-                            )
-
-                            Spacer(
-                                modifier = Modifier.width(4.dp)
-                            )
-                        }
-
-                        Text(
-                            text =
-                                if (isEnglish) {
-                                    item.trim()
-                                } else {
-                                    "\u200F${item.trim()}\u200F"
-                                },
-                            style =
-                                KmiTypography.caption.copy(
-                                    fontWeight = FontWeight.ExtraBold
-                                ),
-                            color = MaterialTheme.colorScheme.onSurface,
-                            textAlign =
-                                if (isEnglish) {
-                                    TextAlign.Left
-                                } else {
-                                    TextAlign.Right
-                                },
-                            modifier = Modifier.weight(1f),
-                            maxLines = 3,
-                            overflow = TextOverflow.Ellipsis
+                        CoachMaterialStatusSelector(
+                            progress = coachProgress,
+                            isEnglish = isEnglish,
+                            modifier = Modifier.fillMaxWidth(),
+                            excluded = false,
+                            isFav = isFavorite,
+                            hasNote = false,
+                            onToggleExclude = {},
+                            onInfo = onInfoClick,
+                            onToggleFavorite = onToggleFavorite,
+                            onEditNote = {},
+                            onSelect = onCoachStatusSelect
                         )
                     }
                 }
-
-                CoachMaterialStatusSelector(
-                    progress = coachProgress,
-                    isEnglish = isEnglish,
-                    modifier = Modifier.fillMaxWidth(),
-                    excluded = false,
-                    isFav = isFavorite,
-                    hasNote = false,
-                    onToggleExclude = {},
-                    onInfo = onInfoClick,
-                    onToggleFavorite = onToggleFavorite,
-                    onEditNote = {},
-                    onSelect = onCoachStatusSelect
-                )
             }
         }
 

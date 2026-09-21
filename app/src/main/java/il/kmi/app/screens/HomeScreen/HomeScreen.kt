@@ -25,18 +25,15 @@ import androidx.compose.foundation.shape.AbsoluteRoundedCornerShape
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.filled.Email
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -70,7 +67,6 @@ import il.kmi.shared.questions.model.util.ExerciseTitleFormatter
 import il.kmi.app.ui.dialogs.ExerciseExplanationDialog
 import il.kmi.app.ui.dialogs.ExerciseNoteEditorDialog
 import il.kmi.app.domain.color
-import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.LinearEasing
@@ -93,7 +89,9 @@ import il.kmi.app.database.KmiDatabaseProvider
 import il.kmi.app.domain.ExerciseExplanationResolver
 import il.kmi.app.privacy.DemoPrivacy
 import il.kmi.app.training.TrainingCatalog
+import il.kmi.app.messages.ui.MessageCenterViewModel
 import il.kmi.app.ui.FloatingQuickMenu
+import androidx.lifecycle.viewmodel.compose.viewModel
 import il.kmi.app.ui.FloatingQuickMenuAction
 import il.kmi.app.ui.KmiIconSize
 import il.kmi.app.ui.KmiTopBar
@@ -400,10 +398,29 @@ fun HomeScreen(
     onOpenMonthlyCalendar: () -> Unit,
     onOpenTrainingSummary: () -> Unit,
     onOpenTrainingArchive: () -> Unit,
-    onOpenTrainingManagement: () -> Unit
+    onOpenTrainingManagement: () -> Unit,
+    onOpenMessageCenter: () -> Unit
 ) {
     val haptic = rememberHapticsGlobal()
     val clickSound = rememberClickSound()
+
+    val messageCenterViewModel:
+            MessageCenterViewModel =
+        viewModel()
+
+    val messageCenterMessages by
+    messageCenterViewModel
+        .messages
+        .collectAsState()
+
+    val messageUnreadCount by
+    messageCenterViewModel
+        .unreadCount
+        .collectAsState()
+
+    LaunchedEffect(messageCenterViewModel) {
+        messageCenterViewModel.startListening()
+    }
 
     // 🔵 מצב לדיאלוג העוזר האישי (AI)
     var showAiDialog by rememberSaveable {
@@ -436,9 +453,8 @@ fun HomeScreen(
 
     DisposableEffect(voiceHomeActionsPrefs) {
         val listener =
-            SharedPreferences.OnSharedPreferenceChangeListener {
-                    preferences,
-                    key ->
+            SharedPreferences.OnSharedPreferenceChangeListener { preferences,
+                                                                 key ->
 
                 when (key) {
                     "open_free_trainings" -> {
@@ -541,938 +557,954 @@ fun HomeScreen(
         Scaffold(
             topBar = {
 
-            val contextLang = LocalContext.current
-            val langManager = remember { AppLanguageManager(contextLang) }
+                val contextLang = LocalContext.current
+                val langManager = remember { AppLanguageManager(contextLang) }
 
-            KmiTopBar(
-                title = if (langManager.getCurrentLanguage() == AppLanguage.ENGLISH) "Home" else "מסך הבית",
-                onHome = { /* no-op במסך הבית */ },
-                lockHome = true,
-                homeDisabledToast =
-                    if (isEnglish) {
-                        "You are already on the home screen 🙂"
-                    } else {
-                        "אתה כבר במסך הבית 🙂"
+                KmiTopBar(
+                    title = if (langManager.getCurrentLanguage() == AppLanguage.ENGLISH) "Home" else "מסך הבית",
+                    onHome = { /* no-op במסך הבית */ },
+                    lockHome = true,
+                    homeDisabledToast =
+                        if (isEnglish) {
+                            "You are already on the home screen 🙂"
+                        } else {
+                            "אתה כבר במסך הבית 🙂"
+                        },
+                    showTopHome = false,
+                    showTopShare = true,
+
+                    currentLang =
+                        if (langManager.getCurrentLanguage() == AppLanguage.ENGLISH) "en" else "he",
+
+                    onToggleLanguage = {
+
+                        val newLang =
+                            if (langManager.getCurrentLanguage() == AppLanguage.HEBREW)
+                                AppLanguage.ENGLISH
+                            else
+                                AppLanguage.HEBREW
+
+                        langManager.setLanguage(newLang)
+
+                        (contextLang as Activity).recreate()
                     },
-                showTopHome = false,
-                showTopShare = true,
 
-                currentLang =
-                    if (langManager.getCurrentLanguage() == AppLanguage.ENGLISH) "en" else "he",
-
-                onToggleLanguage = {
-
-                    val newLang =
-                        if (langManager.getCurrentLanguage() == AppLanguage.HEBREW)
-                            AppLanguage.ENGLISH
-                        else
-                            AppLanguage.HEBREW
-
-                    langManager.setLanguage(newLang)
-
-                    (contextLang as Activity).recreate()
-                },
-
-                onShare = {
-                    shareHomePdf(
-                        context = ctxRole,
-                        trainings = homePdfTrainings,
-                        isEnglish = isEnglish
-                    )
-                },
-
-                // חיפוש תרגיל מהסרגל התחתון
-                onPickSearchResult = { key ->
-                    clickSound()
-                    haptic(true)
-                    pickedKey = key
-                },
-            )
-        },
-        contentWindowInsets = WindowInsets(0)
-    ) { padding ->
-
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(
-                    top = padding.calculateTopPadding(),
-                    start = padding.calculateStartPadding(LocalLayoutDirection.current),
-                    end = padding.calculateEndPadding(LocalLayoutDirection.current),
-                    bottom = padding.calculateBottomPadding()
-                )
-                .background(backgroundBrush)
-        ) {
-            val listState = rememberLazyListState()
-
-            val ctx = LocalContext.current
-            val userSp =
-                remember {
-                    ctx.getSharedPreferences(
-                        "kmi_user",
-                        Context.MODE_PRIVATE
-                    )
-                }
-
-            val subsSp =
-                remember {
-                    ctx.getSharedPreferences(
-                        "kmi_subs",
-                        Context.MODE_PRIVATE
-                    )
-                }
-
-            val legacySp =
-                remember {
-                    ctx.getSharedPreferences(
-                        "kmi_prefs",
-                        Context.MODE_PRIVATE
-                    )
-                }
-
-            val settingsSp =
-                remember {
-                    ctx.getSharedPreferences(
-                        "kmi_settings",
-                        Context.MODE_PRIVATE
-                    )
-                }
-
-            val activeHomeBelt =
-                remember(
-                    userSp,
-                    legacySp,
-                    settingsSp
-                ) {
-                    resolveHomeActiveBelt(
-                        userSp = userSp,
-                        legacySp = legacySp,
-                        settingsSp = settingsSp
-                    )
-                }
-
-            val rawHomeBelt =
-                remember(
-                    userSp,
-                    legacySp,
-                    settingsSp
-                ) {
-                    listOf(
-                        userSp.getString(
-                            "current_belt",
-                            null
-                        ),
-                        userSp.getString(
-                            "belt_current",
-                            null
-                        ),
-                        userSp.getString(
-                            "belt",
-                            null
-                        ),
-                        legacySp.getString(
-                            "current_belt",
-                            null
-                        ),
-                        legacySp.getString(
-                            "belt_current",
-                            null
-                        ),
-                        legacySp.getString(
-                            "belt",
-                            null
-                        ),
-                        settingsSp.getString(
-                            "current_belt",
-                            null
-                        ),
-                        settingsSp.getString(
-                            "belt",
-                            null
+                    onShare = {
+                        shareHomePdf(
+                            context = ctxRole,
+                            trainings = homePdfTrainings,
+                            isEnglish = isEnglish
                         )
-                    )
-                        .firstOrNull {
-                            !it.isNullOrBlank()
-                        }
-                        ?.trim()
-                        .orEmpty()
-                }
+                    },
 
-            val homeBeltAccentRaw =
-                remember(
-                    activeHomeBelt,
-                    rawHomeBelt
-                ) {
-                    val normalizedRaw =
-                        rawHomeBelt
-                            .trim()
-                            .lowercase()
-
-                    when {
-                        /*
-                         * לא סומנה חגורה:
-                         * ברירת מחדל כתומה.
-                         */
-                        normalizedRaw.isBlank() ->
-                            Belt.ORANGE.color
-
-                        /*
-                         * לבנה -> צהובה
-                         */
-                        activeHomeBelt == Belt.WHITE ->
-                            Belt.YELLOW.color
-
-                        /*
-                         * צהובה -> כתומה
-                         */
-                        activeHomeBelt == Belt.YELLOW ->
-                            Belt.ORANGE.color
-
-                        /*
-                         * כתומה -> ירוקה
-                         */
-                        activeHomeBelt == Belt.ORANGE ->
-                            Belt.GREEN.color
-
-                        /*
-                         * ירוקה -> כחולה
-                         */
-                        activeHomeBelt == Belt.GREEN ->
-                            Belt.BLUE.color
-
-                        /*
-                         * כחולה -> חומה
-                         */
-                        activeHomeBelt == Belt.BLUE ->
-                            Belt.BROWN.color
-
-                        /*
-                         * מחומה ועד דן 10:
-                         * שחור.
-                         */
-                        activeHomeBelt == Belt.BROWN ||
-                                activeHomeBelt == Belt.BLACK ||
-                                normalizedRaw.contains("brown") ||
-                                normalizedRaw.contains("חום") ||
-                                normalizedRaw.contains("חומה") ||
-                                normalizedRaw.contains("black") ||
-                                normalizedRaw.contains("שחור") ||
-                                normalizedRaw.contains("שחורה") ||
-                                normalizedRaw.contains("dan") ||
-                                normalizedRaw.contains("דאן") ||
-                                normalizedRaw.contains("דן") ->
-                            Color.Black
-
-                        else ->
-                            Belt.ORANGE.color
-                    }
-                }
-
-            val homeBeltAccent =
-                readableHomeBeltAccent(
-                    beltColor = homeBeltAccentRaw
+                    // חיפוש תרגיל מהסרגל התחתון
+                    onPickSearchResult = { key ->
+                        clickSound()
+                        haptic(true)
+                        pickedKey = key
+                    },
                 )
+            },
+            contentWindowInsets = WindowInsets(0)
+        ) { padding ->
 
-            var homeAccessRefreshTick by
-            remember {
-                mutableIntStateOf(0)
-            }
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(
+                        top = padding.calculateTopPadding(),
+                        start = padding.calculateStartPadding(LocalLayoutDirection.current),
+                        end = padding.calculateEndPadding(LocalLayoutDirection.current),
+                        bottom = padding.calculateBottomPadding()
+                    )
+                    .background(backgroundBrush)
+            ) {
+                val listState = rememberLazyListState()
 
-            // מצב הגישה מתרענן דרך SharedPreferences listener.
-            // אין צורך בלולאת רענון קבועה במסך הבית.
+                val ctx = LocalContext.current
+                val userSp =
+                    remember {
+                        ctx.getSharedPreferences(
+                            "kmi_user",
+                            Context.MODE_PRIVATE
+                        )
+                    }
 
-            DisposableEffect(userSp, subsSp, legacySp) {
-                val listener =
-                    SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
-                        if (
-                            key == "has_full_access" ||
-                            key == "full_access" ||
-                            key == "subscription_active" ||
-                            key == "is_subscribed" ||
-                            key == "google_subscription_verified" ||
-                            key == "google_subscription_checked_at" ||
-                            key == "sub_product" ||
-                            key == "sub_access_until" ||
-                            key == "access_changed_at"
-                        ) {
-                            homeAccessRefreshTick++
+                val subsSp =
+                    remember {
+                        ctx.getSharedPreferences(
+                            "kmi_subs",
+                            Context.MODE_PRIVATE
+                        )
+                    }
+
+                val legacySp =
+                    remember {
+                        ctx.getSharedPreferences(
+                            "kmi_prefs",
+                            Context.MODE_PRIVATE
+                        )
+                    }
+
+                val settingsSp =
+                    remember {
+                        ctx.getSharedPreferences(
+                            "kmi_settings",
+                            Context.MODE_PRIVATE
+                        )
+                    }
+
+                val activeHomeBelt =
+                    remember(
+                        userSp,
+                        legacySp,
+                        settingsSp
+                    ) {
+                        resolveHomeActiveBelt(
+                            userSp = userSp,
+                            legacySp = legacySp,
+                            settingsSp = settingsSp
+                        )
+                    }
+
+                val rawHomeBelt =
+                    remember(
+                        userSp,
+                        legacySp,
+                        settingsSp
+                    ) {
+                        listOf(
+                            userSp.getString(
+                                "current_belt",
+                                null
+                            ),
+                            userSp.getString(
+                                "belt_current",
+                                null
+                            ),
+                            userSp.getString(
+                                "belt",
+                                null
+                            ),
+                            legacySp.getString(
+                                "current_belt",
+                                null
+                            ),
+                            legacySp.getString(
+                                "belt_current",
+                                null
+                            ),
+                            legacySp.getString(
+                                "belt",
+                                null
+                            ),
+                            settingsSp.getString(
+                                "current_belt",
+                                null
+                            ),
+                            settingsSp.getString(
+                                "belt",
+                                null
+                            )
+                        )
+                            .firstOrNull {
+                                !it.isNullOrBlank()
+                            }
+                            ?.trim()
+                            .orEmpty()
+                    }
+
+                val homeBeltAccentRaw =
+                    remember(
+                        activeHomeBelt,
+                        rawHomeBelt
+                    ) {
+                        val normalizedRaw =
+                            rawHomeBelt
+                                .trim()
+                                .lowercase()
+
+                        when {
+                            /*
+                             * לא סומנה חגורה:
+                             * ברירת מחדל כתומה.
+                             */
+                            normalizedRaw.isBlank() ->
+                                Belt.ORANGE.color
+
+                            /*
+                             * לבנה -> צהובה
+                             */
+                            activeHomeBelt == Belt.WHITE ->
+                                Belt.YELLOW.color
+
+                            /*
+                             * צהובה -> כתומה
+                             */
+                            activeHomeBelt == Belt.YELLOW ->
+                                Belt.ORANGE.color
+
+                            /*
+                             * כתומה -> ירוקה
+                             */
+                            activeHomeBelt == Belt.ORANGE ->
+                                Belt.GREEN.color
+
+                            /*
+                             * ירוקה -> כחולה
+                             */
+                            activeHomeBelt == Belt.GREEN ->
+                                Belt.BLUE.color
+
+                            /*
+                             * כחולה -> חומה
+                             */
+                            activeHomeBelt == Belt.BLUE ->
+                                Belt.BROWN.color
+
+                            /*
+                             * מחומה ועד דן 10:
+                             * שחור.
+                             */
+                            activeHomeBelt == Belt.BROWN ||
+                                    activeHomeBelt == Belt.BLACK ||
+                                    normalizedRaw.contains("brown") ||
+                                    normalizedRaw.contains("חום") ||
+                                    normalizedRaw.contains("חומה") ||
+                                    normalizedRaw.contains("black") ||
+                                    normalizedRaw.contains("שחור") ||
+                                    normalizedRaw.contains("שחורה") ||
+                                    normalizedRaw.contains("dan") ||
+                                    normalizedRaw.contains("דאן") ||
+                                    normalizedRaw.contains("דן") ->
+                                Color.Black
+
+                            else ->
+                                Belt.ORANGE.color
                         }
                     }
 
-                userSp.registerOnSharedPreferenceChangeListener(listener)
-                subsSp.registerOnSharedPreferenceChangeListener(listener)
-                legacySp.registerOnSharedPreferenceChangeListener(listener)
+                val homeBeltAccent =
+                    readableHomeBeltAccent(
+                        beltColor = homeBeltAccentRaw
+                    )
 
-                onDispose {
-                    userSp.unregisterOnSharedPreferenceChangeListener(listener)
-                    subsSp.unregisterOnSharedPreferenceChangeListener(listener)
-                    legacySp.unregisterOnSharedPreferenceChangeListener(listener)
+                var homeAccessRefreshTick by
+                remember {
+                    mutableIntStateOf(0)
                 }
-            }
 
-            fun SharedPreferences.hasActiveSubscriptionAccess(): Boolean {
-                val now = System.currentTimeMillis()
-                val until = getLong("sub_access_until", 0L)
+                // מצב הגישה מתרענן דרך SharedPreferences listener.
+                // אין צורך בלולאת רענון קבועה במסך הבית.
 
-                val hasSubscriptionFlags =
-                    getBoolean("google_subscription_verified", false) ||
-                            getBoolean("has_full_access", false) ||
-                            getBoolean("full_access", false) ||
-                            getBoolean("subscription_active", false) ||
-                            getBoolean("is_subscribed", false) ||
-                            getString("sub_product", "").orEmpty().isNotBlank()
+                DisposableEffect(userSp, subsSp, legacySp) {
+                    val listener =
+                        SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+                            if (
+                                key == "has_full_access" ||
+                                key == "full_access" ||
+                                key == "subscription_active" ||
+                                key == "is_subscribed" ||
+                                key == "google_subscription_verified" ||
+                                key == "google_subscription_checked_at" ||
+                                key == "sub_product" ||
+                                key == "sub_access_until" ||
+                                key == "access_changed_at"
+                            ) {
+                                homeAccessRefreshTick++
+                            }
+                        }
 
-                // מנוי רגיל / בדיקות פותח רק אם יש זמן תקף.
-                val active =
-                    hasSubscriptionFlags &&
-                            until > now
+                    userSp.registerOnSharedPreferenceChangeListener(listener)
+                    subsSp.registerOnSharedPreferenceChangeListener(listener)
+                    legacySp.registerOnSharedPreferenceChangeListener(listener)
+
+                    onDispose {
+                        userSp.unregisterOnSharedPreferenceChangeListener(listener)
+                        subsSp.unregisterOnSharedPreferenceChangeListener(listener)
+                        legacySp.unregisterOnSharedPreferenceChangeListener(listener)
+                    }
+                }
+
+                fun SharedPreferences.hasActiveSubscriptionAccess(): Boolean {
+                    val now = System.currentTimeMillis()
+                    val until = getLong("sub_access_until", 0L)
+
+                    val hasSubscriptionFlags =
+                        getBoolean("google_subscription_verified", false) ||
+                                getBoolean("has_full_access", false) ||
+                                getBoolean("full_access", false) ||
+                                getBoolean("subscription_active", false) ||
+                                getBoolean("is_subscribed", false) ||
+                                getString("sub_product", "").orEmpty().isNotBlank()
+
+                    // מנוי רגיל / בדיקות פותח רק אם יש זמן תקף.
+                    val active =
+                        hasSubscriptionFlags &&
+                                until > now
 
 // אם הזמן עבר — מנקים את כל הדגלים הישנים כדי שהמנעולים יחזרו.
-                if (
-                    !active &&
-                    hasSubscriptionFlags &&
-                    until > 0L
-                ) {
-                    edit {
-                        putBoolean("google_subscription_verified", false)
-                        putBoolean("has_full_access", false)
-                        putBoolean("full_access", false)
-                        putBoolean("subscription_active", false)
-                        putBoolean("is_subscribed", false)
-                        remove("sub_product")
-                        remove("sub_token")
-                        remove("sub_purchase_time")
-                        remove("sub_access_until")
-                        putLong("access_changed_at", System.currentTimeMillis())
+                    if (
+                        !active &&
+                        hasSubscriptionFlags &&
+                        until > 0L
+                    ) {
+                        edit {
+                            putBoolean("google_subscription_verified", false)
+                            putBoolean("has_full_access", false)
+                            putBoolean("full_access", false)
+                            putBoolean("subscription_active", false)
+                            putBoolean("is_subscribed", false)
+                            remove("sub_product")
+                            remove("sub_token")
+                            remove("sub_purchase_time")
+                            remove("sub_access_until")
+                            putLong("access_changed_at", System.currentTimeMillis())
+                        }
                     }
+
+                    return active
                 }
 
-                return active
-            }
+                val hasFullAccess = remember(homeAccessRefreshTick) {
+                    userSp.hasActiveSubscriptionAccess() ||
+                            subsSp.hasActiveSubscriptionAccess() ||
+                            legacySp.hasActiveSubscriptionAccess()
+                }
 
-            val hasFullAccess = remember(homeAccessRefreshTick) {
-                userSp.hasActiveSubscriptionAccess() ||
-                        subsSp.hasActiveSubscriptionAccess() ||
-                        legacySp.hasActiveSubscriptionAccess()
-            }
+                // התפריט המהיר מוצג תמיד, גם כאשר אין מספיק תוכן לגלילה.
+                val showFab = true
 
-            // התפריט המהיר מוצג תמיד, גם כאשר אין מספיק תוכן לגלילה.
-            val showFab = true
-
-            // =========================
-            // ⭐ הודעות מהמאמן – state ברמת Box כדי שגם הכרטיס וגם הדיאלוג יכירו אותו
-            // =========================
-            /*
-             * Firebase עשוי לשחזר את המשתמש רק לאחר שהמסך כבר הורכב.
-             * לכן לא שומרים את ה-UID באמצעות remember קבוע, אלא מאזינים
-             * לשינויי ההתחברות ומעדכנים את ה-State.
-             */
-            var currentUid by remember {
-                mutableStateOf(
-                    FirebaseAuth.getInstance()
-                        .currentUser
-                        ?.uid
-                )
-            }
-
-            DisposableEffect(Unit) {
-                val auth =
-                    FirebaseAuth.getInstance()
-
-                val authListener =
-                    FirebaseAuth.AuthStateListener { changedAuth ->
-                        currentUid =
-                            changedAuth.currentUser
-                                ?.uid
-                    }
-
-                auth.addAuthStateListener(authListener)
-
+                // =========================
+                // UID פעיל למסך הבית
+                // =========================
                 /*
-                 * עדכון מיידי, בנוסף ל-listener, למקרה שהמשתמש
-                 * כבר היה מחובר לפני פתיחת המסך.
+                 * Firebase עשוי לשחזר את המשתמש רק לאחר שהמסך כבר הורכב.
+                 * ה-UID משמש לשיוכי מאמן, אימונים חופשיים וסנכרון אימונים,
+                 * ולכן מאזינים גם לשינויי ההתחברות.
                  */
-                currentUid =
-                    auth.currentUser
-                        ?.uid
-
-                onDispose {
-                    auth.removeAuthStateListener(authListener)
-                }
-            }
-
-            val coachMessagesState =
-                rememberHomeCoachMessagesState(
-                    currentUid = currentUid,
-                    userSp = userSp,
-                    settingsSp = settingsSp
-                )
-
-            val recentCoachMessages =
-                coachMessagesState.recentMessages
-
-            val showCoachMessagesDialog =
-                coachMessagesState.showDialog
-
-            var recentTrainingNotices by remember {
-                mutableStateOf<List<HomeNotice>>(emptyList())
-            }
-
-            val homeNotices =
-                remember(
-                    recentCoachMessages,
-                    recentTrainingNotices,
-                    isEnglish
-                ) {
-                    val coachNotices =
-                        recentCoachMessages.mapIndexed {
-                                index,
-                                message ->
-
-                            HomeNotice(
-                                id =
-                                    "message|${message.sentAt?.time ?: 0L}|$index",
-                                type =
-                                    HomeNoticeType.COACH_MESSAGE,
-                                title =
-                                    if (isEnglish) {
-                                        "Message from coach"
-                                    } else {
-                                        "הודעה מהמאמן"
-                                    },
-                                text = message.text,
-                                coachName = message.coachName,
-                                sentAt = message.sentAt,
-                                branch = message.branch,
-                                group = message.group
-                            )
-                        }
-
-                    (
-                            coachNotices +
-                                    recentTrainingNotices
-                            )
-                        .distinctBy { notice ->
-                            notice.id
-                        }
-                        .sortedByDescending { notice ->
-                            notice.sentAt?.time ?: 0L
-                        }
-                        .take(5)
-                }
-
-            Column(
-                modifier =
-                    Modifier.fillMaxSize(),
-                horizontalAlignment =
-                    Alignment.CenterHorizontally
-            ) {
-                val coachAssignmentsState =
-                    rememberHomeCoachAssignmentsState(
-                        currentUid = currentUid,
-                        userSp = userSp
-                    )
-
-                val coachFromPrefs =
-                    coachAssignmentsState.coachName
-
-                val branchGroupPairsEffective =
-                    coachAssignmentsState.branchGroupPairs
-
-                val isAbroadBranch =
-                    coachAssignmentsState.isAbroadBranch
-
-                // ✅ name להצגה + פרמטרים לניווט אימונים חופשיים (נעדכן state כדי שה-FAB יוכל להשתמש גם מחוץ ל-Column)
-                val freeName = remember(userSp) {
-                    userSp.getString("full_name", null)
-                        ?: userSp.getString("name", null)
-                        ?: userSp.getString("user_name", null)
-                        ?: ""
-                }
-
-                LaunchedEffect(
-                    branchGroupPairsEffective,
-                    currentUid,
-                    freeName
-                ) {
-                    val firstAssignment =
-                        branchGroupPairsEffective
-                            .firstOrNull()
-
-                    freeBranchUi =
-                        firstAssignment
-                            ?.first
-                            .orEmpty()
-
-                    freeGroupKeyUi =
-                        firstAssignment
-                            ?.second
-                            .orEmpty()
-
-                    freeUidUi =
-                        currentUid.orEmpty()
-
-                    freeNameUi =
-                        freeName
-                }
-
-                LaunchedEffect(
-                    openFreeTrainingsFromVoice,
-                    freeBranchUi,
-                    freeGroupKeyUi,
-                    freeUidUi,
-                    freeNameUi
-                ) {
-                    if (openFreeTrainingsFromVoice) {
-                        voiceHomeActionsPrefs.edit {
-                            putBoolean(
-                                "open_free_trainings",
-                                false
-                            )
-                        }
-
-                        openFreeTrainingsFromVoice = false
-
-                        onOpenFreeSessions(
-                            freeBranchUi,
-                            freeGroupKeyUi,
-                            freeUidUi,
-                            freeNameUi
-                        )
-                    }
-                }
-
-                data class SlotLike(
-                    val dayOfWeek: Int,
-                    val startHour: Int,
-                    val startMinute: Int,
-                    val durationMinutes: Int
-                )
-
-                fun <T : AccessibleObject> T.makeAccessibleSafe(): T {
-                    try {
-                        isAccessible = true
-                    } catch (_: SecurityException) {
-                        /* ignore */
-                    }
-                    return this
-                }
-
-                fun readSlot(slot: Any): SlotLike {
-                    val cls = slot::class.java
-
-                    val dayField =
-                        runCatching { cls.getDeclaredField("day").makeAccessibleSafe() }.getOrNull()
-                    val startField =
-                        runCatching {
-                            cls.getDeclaredField("start").makeAccessibleSafe()
-                        }.getOrNull()
-                    val endField =
-                        runCatching { cls.getDeclaredField("end").makeAccessibleSafe() }.getOrNull()
-
-                    if (dayField != null && startField != null && endField != null) {
-                        val dayEnum =
-                            runCatching { dayField.get(slot) as? DayOfWeek }.getOrNull()
-                        val startLt =
-                            runCatching { startField.get(slot) as? LocalTime }.getOrNull()
-                        val endLt =
-                            runCatching { endField.get(slot) as? LocalTime }.getOrNull()
-
-                        val calDay = when (dayEnum) {
-                            DayOfWeek.SUNDAY -> Calendar.SUNDAY
-                            DayOfWeek.MONDAY -> Calendar.MONDAY
-                            DayOfWeek.TUESDAY -> Calendar.TUESDAY
-                            DayOfWeek.WEDNESDAY -> Calendar.WEDNESDAY
-                            DayOfWeek.THURSDAY -> Calendar.THURSDAY
-                            DayOfWeek.FRIDAY -> Calendar.FRIDAY
-                            DayOfWeek.SATURDAY -> Calendar.SATURDAY
-                            else -> Calendar.MONDAY
-                        }
-
-                        val durMin = if (startLt != null && endLt != null)
-                            Duration.between(startLt, endLt).toMinutes().toInt()
-                        else 90
-
-                        return SlotLike(
-                            dayOfWeek = calDay,
-                            startHour = startLt?.hour ?: 19,
-                            startMinute = startLt?.minute ?: 0,
-                            durationMinutes = durMin
-                        )
-                    }
-
-                    fun intField(vararg names: String, fallback: Int): Int {
-                        for (n in names) {
-                            val v = runCatching {
-                                val f = cls.getDeclaredField(n).makeAccessibleSafe()
-                                (f.get(slot) as? Number)?.toInt()
-                            }.getOrNull()
-                            if (v != null) return v
-                        }
-                        return fallback
-                    }
-
-                    return SlotLike(
-                        dayOfWeek = intField(
-                            "dayOfWeek",
-                            "day",
-                            "dow",
-                            fallback = Calendar.MONDAY
-                        ),
-                        startHour = intField("startHour", "hour", "h", fallback = 19),
-                        startMinute = intField(
-                            "startMinute",
-                            "minute",
-                            "min",
-                            "startMin",
-                            fallback = 0
-                        ),
-                        durationMinutes = intField(
-                            "durationMinutes",
-                            "duration",
-                            "dur",
-                            "length",
-                            fallback = 90
-                        )
+                var currentUid by remember {
+                    mutableStateOf(
+                        FirebaseAuth.getInstance()
+                            .currentUser
+                            ?.uid
                     )
                 }
 
-                // הכותרת "מסך הבית" כבר מוצגת ב־KmiTopBar.
-                // לכן מסירים את הכותרת הפנימית כדי להרוויח עוד שטח תצוגה.
+                DisposableEffect(Unit) {
+                    val auth =
+                        FirebaseAuth.getInstance()
 
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .kmiSectionHeaderBackground()
-                        .padding(vertical = 4.dp)
-                ) {
-                    TrainingsWeekHeader(
-                        isEnglish = isEnglish,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp)
-                    )
-                }
+                    val authListener =
+                        FirebaseAuth.AuthStateListener { changedAuth ->
+                            currentUid =
+                                changedAuth.currentUser
+                                    ?.uid
+                        }
 
-                Spacer(Modifier.height(4.dp))
-
-                /*
-                 * שעון משותף ליצירת האימונים ולחישוב הסטטוס.
-                 * הרענון מאפשר לאימון לעבור אוטומטית בין
-                 * מתוכנן, מתקיים והסתיים.
-                 */
-                var trainingStatusNowMillis by remember {
-                    mutableLongStateOf(
-                        System.currentTimeMillis()
-                    )
-                }
-
-                LaunchedEffect(Unit) {
-                    while (true) {
-                        delay(5.seconds)
-
-                        trainingStatusNowMillis =
-                            System.currentTimeMillis()
-                    }
-                }
-
-                fun upcomingWindowEndMillis(): Long {
-                    return Calendar.getInstance().apply {
-                        timeInMillis = trainingStatusNowMillis
-                        add(Calendar.DAY_OF_YEAR, 6)
-                        set(Calendar.HOUR_OF_DAY, 23)
-                        set(Calendar.MINUTE, 59)
-                        set(Calendar.SECOND, 59)
-                        set(Calendar.MILLISECOND, 999)
-                    }.timeInMillis
-                }
-
-                fun isWithinUpcomingSevenDays(
-                    training: TrainingData
-                ): Boolean {
-                    val windowEndMillis =
-                        upcomingWindowEndMillis()
+                    auth.addAuthStateListener(authListener)
 
                     /*
-                     * אם זמן הסיום אינו קיים, משתמשים בזמן ההתחלה.
-                     * ברוב האימונים שנוצרים דרך nextWeekly יהיה
-                     * זמן סיום תקין.
+                     * עדכון מיידי, בנוסף ל-listener, למקרה שהמשתמש
+                     * כבר היה מחובר לפני פתיחת המסך.
                      */
-                    val effectiveEndMillis =
-                        training.endMillis
-                            ?: training.startMillis
+                    currentUid =
+                        auth.currentUser
+                            ?.uid
 
-                    return effectiveEndMillis >=
-                            trainingStatusNowMillis &&
-                            training.startMillis <=
-                            windowEndMillis
-                }
-
-                fun branchScheduleVariants(branch: String): List<String> {
-                    val clean = branch
-                        .trim()
-                        .replace("־", "-")
-                        .replace("–", "-")
-                        .replace("—", "-")
-                        .replace("  ", " ")
-
-                    val pretty = branch
-                        .trim()
-                        .replace("־", "–")
-                        .replace("-", "–")
-                        .replace("—", "–")
-                        .replace("  ", " ")
-
-                    return listOf(
-                        branch.trim(),
-                        clean,
-                        pretty,
-                        clean.replace(" - ", " – "),
-                        pretty.replace(" – ", " - ")
-                    )
-                        .map { it.trim() }
-                        .filter { it.isNotBlank() }
-                        .distinct()
-                }
-
-                fun groupScheduleVariants(group: String): List<String> {
-                    val clean = group
-                        .trim()
-                        .replace("־", "-")
-                        .replace("–", "-")
-                        .replace("—", "-")
-                        .replace("  ", " ")
-
-                    return listOf(
-                        group.trim(),
-                        clean,
-                        clean.replace("+", " + "),
-                        clean.replace(" + ", "+"),
-                        TrainingCatalog.normalizeGroupName(group)
-                            .ifBlank { group }
-                    )
-                        .map { it.trim() }
-                        .filter { it.isNotBlank() }
-                        .distinct()
-                }
-
-                fun calendarDayFromDatabase(dayOfWeek: String): Int {
-                    return when (dayOfWeek.trim().uppercase(Locale.US)) {
-                        "SUNDAY" -> Calendar.SUNDAY
-                        "MONDAY" -> Calendar.MONDAY
-                        "TUESDAY" -> Calendar.TUESDAY
-                        "WEDNESDAY" -> Calendar.WEDNESDAY
-                        "THURSDAY" -> Calendar.THURSDAY
-                        "FRIDAY" -> Calendar.FRIDAY
-                        "SATURDAY" -> Calendar.SATURDAY
-                        else -> Calendar.MONDAY
+                    onDispose {
+                        auth.removeAuthStateListener(authListener)
                     }
                 }
 
-                fun hourFromTimeText(time: String, fallback: Int): Int {
-                    return time
-                        .substringBefore(":")
-                        .trim()
-                        .toIntOrNull()
-                        ?: fallback
+                var recentTrainingNotices by remember {
+                    mutableStateOf<List<HomeNotice>>(emptyList())
                 }
 
-                fun minuteFromTimeText(time: String, fallback: Int): Int {
-                    return time
-                        .substringAfter(":", "")
-                        .trim()
-                        .toIntOrNull()
-                        ?: fallback
-                }
-
-                fun databaseGroupMatches(
-                    selectedGroup: String,
-                    databaseGroupHe: String,
-                    databaseGroupEn: String,
-                    branchName: String
-                ): Boolean {
-                    val wanted = TrainingCatalog
-                        .normalizeGroupName(selectedGroup)
-                        .ifBlank { selectedGroup }
-                        .trim()
-
-                    val dbHe = TrainingCatalog
-                        .normalizeGroupName(databaseGroupHe)
-                        .ifBlank { databaseGroupHe }
-                        .trim()
-
-                    val dbEn = databaseGroupEn.trim()
-
-                    if (wanted.equals(dbHe, ignoreCase = true)) return true
-
-                    if (
-                        selectedGroup.trim()
-                            .equals(
-                                databaseGroupHe.trim(),
-                                ignoreCase = true
-                            )
+                val homeNotices =
+                    remember(
+                        messageCenterMessages,
+                        recentTrainingNotices,
+                        isEnglish
                     ) {
-                        return true
-                    }
+                        val messageNotices =
+                            messageCenterMessages.map { message ->
 
-                    if (
-                        selectedGroup.trim()
-                            .equals(
-                                dbEn,
-                                ignoreCase = true
-                            )
-                    ) {
-                        return true
-                    }
+                                val senderName =
+                                    if (isEnglish) {
+                                        message.senderNameEn
+                                            .ifBlank {
+                                                "K.M.I Team"
+                                            }
+                                    } else {
+                                        message.senderNameHe
+                                            .ifBlank {
+                                                "צוות ק.מ.י"
+                                            }
+                                    }
 
-                    val isOfek =
-                        branchName
-                            .replace("־", "-")
-                            .replace("–", "-")
-                            .replace("—", "-")
-                            .contains(
-                                "מרכז קהילתי אופק",
-                                ignoreCase = true
-                            )
+                                val title =
+                                    if (isEnglish) {
+                                        message.titleEn
+                                            .ifBlank {
+                                                senderName
+                                            }
+                                    } else {
+                                        message.titleHe
+                                            .ifBlank {
+                                                senderName
+                                            }
+                                    }
 
-                    if (
-                        wanted == "נוער" &&
-                        dbHe == "נוער + בוגרים"
-                    ) {
-                        return true
-                    }
-
-                    if (
-                        !isOfek &&
-                        wanted == "בוגרים" &&
-                        dbHe == "נוער + בוגרים"
-                    ) {
-                        return true
-                    }
-
-                    return false
-                }
-
-                data class HomeTrainingCandidate(
-                    val training: TrainingData,
-                    val branch: String,
-                    val group: String,
-                    val displayGroup: String
-                )
-
-                fun trainingsFromDatabaseForHome(
-                    branchName: String,
-                    groupName: String,
-                    coachFallback: String
-                ): List<HomeTrainingCandidate> {
-                    val dbBranch = KmiDatabaseProvider.branchByName(ctx, branchName)
-                        ?: return emptyList()
-
-                    val matchingDays = dbBranch.trainingDays.filter { day ->
-                        databaseGroupMatches(
-                            selectedGroup = groupName,
-                            databaseGroupHe = day.groupHe,
-                            databaseGroupEn = day.groupEn,
-                            branchName = branchName
-                        )
-                    }
-
-                    if (matchingDays.isEmpty()) return emptyList()
-
-                    return matchingDays.map { day ->
-                        val durationMinutes =
-                            day.durationMinutes.takeIf { it > 0 }
-                                ?: 90
-
-                        /*
-                         * מזיזים את זמן הייחוס לאחור לפי משך האימון.
-                         * כך אימון שכבר התחיל אך טרם הסתיים נשאר
-                         * המופע של השבוע הנוכחי ולא קופץ לשבוע הבא.
-                         */
-                        val occurrenceReference =
-                            Calendar.getInstance().apply {
-                                timeInMillis =
-                                    trainingStatusNowMillis
-
-                                add(
-                                    Calendar.MINUTE,
-                                    -durationMinutes
+                                HomeNotice(
+                                    id =
+                                        "message|${message.id}",
+                                    type =
+                                        HomeNoticeType.COACH_MESSAGE,
+                                    title = title,
+                                    text = message.message,
+                                    coachName = senderName,
+                                    sentAt =
+                                        message.createdAtMillis
+                                            .takeIf {
+                                                it > 0L
+                                            }
+                                            ?.let(::Date),
+                                    branch = message.branch,
+                                    group =
+                                        message.groups
+                                            .joinToString(" · ")
                                 )
                             }
 
-                        HomeTrainingCandidate(
-                            training = TrainingData.nextWeekly(
-                                dayOfWeek =
-                                    calendarDayFromDatabase(
-                                        day.dayOfWeek
-                                    ),
-                                startHour =
-                                    hourFromTimeText(
-                                        day.startTime,
-                                        19
-                                    ),
-                                startMinute =
-                                    minuteFromTimeText(
-                                        day.startTime,
-                                        0
-                                    ),
-                                durationMinutes =
-                                    durationMinutes,
-                                place =
-                                    dbBranch.displayPlace(
-                                        isEnglish
-                                    ),
-                                address =
-                                    dbBranch.displayAddress(
-                                        isEnglish
-                                    ),
-                                coach =
-                                    day.displayCoachName(
-                                        isEnglish
-                                    ).ifBlank {
-                                        coachFallback
-                                    },
-                                now = occurrenceReference
+                        (
+                                messageNotices +
+                                        recentTrainingNotices
+                                )
+                            .distinctBy { notice ->
+                                notice.id
+                            }
+                            .sortedByDescending { notice ->
+                                notice.sentAt?.time ?: 0L
+                            }
+                            .take(5)
+                    }
+
+                Column(
+                    modifier =
+                        Modifier.fillMaxSize(),
+                    horizontalAlignment =
+                        Alignment.CenterHorizontally
+                ) {
+                    val coachAssignmentsState =
+                        rememberHomeCoachAssignmentsState(
+                            currentUid = currentUid,
+                            userSp = userSp
+                        )
+
+                    val coachFromPrefs =
+                        coachAssignmentsState.coachName
+
+                    val branchGroupPairsEffective =
+                        coachAssignmentsState.branchGroupPairs
+
+                    val isAbroadBranch =
+                        coachAssignmentsState.isAbroadBranch
+
+                    // ✅ name להצגה + פרמטרים לניווט אימונים חופשיים (נעדכן state כדי שה-FAB יוכל להשתמש גם מחוץ ל-Column)
+                    val freeName = remember(userSp) {
+                        userSp.getString("full_name", null)
+                            ?: userSp.getString("name", null)
+                            ?: userSp.getString("user_name", null)
+                            ?: ""
+                    }
+
+                    LaunchedEffect(
+                        branchGroupPairsEffective,
+                        currentUid,
+                        freeName
+                    ) {
+                        val firstAssignment =
+                            branchGroupPairsEffective
+                                .firstOrNull()
+
+                        freeBranchUi =
+                            firstAssignment
+                                ?.first
+                                .orEmpty()
+
+                        freeGroupKeyUi =
+                            firstAssignment
+                                ?.second
+                                .orEmpty()
+
+                        freeUidUi =
+                            currentUid.orEmpty()
+
+                        freeNameUi =
+                            freeName
+                    }
+
+                    LaunchedEffect(
+                        openFreeTrainingsFromVoice,
+                        freeBranchUi,
+                        freeGroupKeyUi,
+                        freeUidUi,
+                        freeNameUi
+                    ) {
+                        if (openFreeTrainingsFromVoice) {
+                            voiceHomeActionsPrefs.edit {
+                                putBoolean(
+                                    "open_free_trainings",
+                                    false
+                                )
+                            }
+
+                            openFreeTrainingsFromVoice = false
+
+                            onOpenFreeSessions(
+                                freeBranchUi,
+                                freeGroupKeyUi,
+                                freeUidUi,
+                                freeNameUi
+                            )
+                        }
+                    }
+
+                    data class SlotLike(
+                        val dayOfWeek: Int,
+                        val startHour: Int,
+                        val startMinute: Int,
+                        val durationMinutes: Int
+                    )
+
+                    fun <T : AccessibleObject> T.makeAccessibleSafe(): T {
+                        try {
+                            isAccessible = true
+                        } catch (_: SecurityException) {
+                            /* ignore */
+                        }
+                        return this
+                    }
+
+                    fun readSlot(slot: Any): SlotLike {
+                        val cls = slot::class.java
+
+                        val dayField =
+                            runCatching {
+                                cls.getDeclaredField("day").makeAccessibleSafe()
+                            }.getOrNull()
+                        val startField =
+                            runCatching {
+                                cls.getDeclaredField("start").makeAccessibleSafe()
+                            }.getOrNull()
+                        val endField =
+                            runCatching {
+                                cls.getDeclaredField("end").makeAccessibleSafe()
+                            }.getOrNull()
+
+                        if (dayField != null && startField != null && endField != null) {
+                            val dayEnum =
+                                runCatching { dayField.get(slot) as? DayOfWeek }.getOrNull()
+                            val startLt =
+                                runCatching { startField.get(slot) as? LocalTime }.getOrNull()
+                            val endLt =
+                                runCatching { endField.get(slot) as? LocalTime }.getOrNull()
+
+                            val calDay = when (dayEnum) {
+                                DayOfWeek.SUNDAY -> Calendar.SUNDAY
+                                DayOfWeek.MONDAY -> Calendar.MONDAY
+                                DayOfWeek.TUESDAY -> Calendar.TUESDAY
+                                DayOfWeek.WEDNESDAY -> Calendar.WEDNESDAY
+                                DayOfWeek.THURSDAY -> Calendar.THURSDAY
+                                DayOfWeek.FRIDAY -> Calendar.FRIDAY
+                                DayOfWeek.SATURDAY -> Calendar.SATURDAY
+                                else -> Calendar.MONDAY
+                            }
+
+                            val durMin = if (startLt != null && endLt != null)
+                                Duration.between(startLt, endLt).toMinutes().toInt()
+                            else 90
+
+                            return SlotLike(
+                                dayOfWeek = calDay,
+                                startHour = startLt?.hour ?: 19,
+                                startMinute = startLt?.minute ?: 0,
+                                durationMinutes = durMin
+                            )
+                        }
+
+                        fun intField(vararg names: String, fallback: Int): Int {
+                            for (n in names) {
+                                val v = runCatching {
+                                    val f = cls.getDeclaredField(n).makeAccessibleSafe()
+                                    (f.get(slot) as? Number)?.toInt()
+                                }.getOrNull()
+                                if (v != null) return v
+                            }
+                            return fallback
+                        }
+
+                        return SlotLike(
+                            dayOfWeek = intField(
+                                "dayOfWeek",
+                                "day",
+                                "dow",
+                                fallback = Calendar.MONDAY
                             ),
-                            branch = branchName.trim(),
-                            group = groupName.trim(),
-                            displayGroup =
-                                if (isEnglish) {
-                                    day.groupEn.trim()
-                                        .ifBlank {
-                                            day.groupHe.trim()
-                                        }
-                                } else {
-                                    day.groupHe.trim()
-                                        .ifBlank {
-                                            groupName.trim()
-                                        }
-                                }
+                            startHour = intField("startHour", "hour", "h", fallback = 19),
+                            startMinute = intField(
+                                "startMinute",
+                                "minute",
+                                "min",
+                                "startMin",
+                                fallback = 0
+                            ),
+                            durationMinutes = intField(
+                                "durationMinutes",
+                                "duration",
+                                "dur",
+                                "length",
+                                fallback = 90
+                            )
                         )
                     }
-                }
 
-                val currentWeekCandidates:
-                        List<HomeTrainingCandidate> =
-                    remember(
-                        branchGroupPairsEffective,
-                        coachFromPrefs,
-                        isEnglish,
-                        trainingStatusNowMillis
+                    // הכותרת "מסך הבית" כבר מוצגת ב־KmiTopBar.
+                    // לכן מסירים את הכותרת הפנימית כדי להרוויח עוד שטח תצוגה.
+
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .kmiSectionHeaderBackground()
+                            .padding(vertical = 4.dp)
                     ) {
-                        val all =
-                            mutableListOf<HomeTrainingCandidate>()
+                        TrainingsWeekHeader(
+                            isEnglish = isEnglish,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp)
+                        )
+                    }
 
-                        branchGroupPairsEffective.forEach {
-                                (branchName, grp) ->
+                    Spacer(Modifier.height(4.dp))
 
-                            // ✅ 1) ניסיון ראשון: branches.json דרך KmiDatabaseProvider
-                            val dbItems =
-                                trainingsFromDatabaseForHome(
-                                    branchName = branchName,
-                                    groupName = grp,
-                                    coachFallback = coachFromPrefs
+                    /*
+                     * שעון משותף ליצירת האימונים ולחישוב הסטטוס.
+                     * הרענון מאפשר לאימון לעבור אוטומטית בין
+                     * מתוכנן, מתקיים והסתיים.
+                     */
+                    var trainingStatusNowMillis by remember {
+                        mutableLongStateOf(
+                            System.currentTimeMillis()
+                        )
+                    }
+
+                    LaunchedEffect(Unit) {
+                        while (true) {
+                            delay(5.seconds)
+
+                            trainingStatusNowMillis =
+                                System.currentTimeMillis()
+                        }
+                    }
+
+                    fun upcomingWindowEndMillis(): Long {
+                        return Calendar.getInstance().apply {
+                            timeInMillis = trainingStatusNowMillis
+                            add(Calendar.DAY_OF_YEAR, 6)
+                            set(Calendar.HOUR_OF_DAY, 23)
+                            set(Calendar.MINUTE, 59)
+                            set(Calendar.SECOND, 59)
+                            set(Calendar.MILLISECOND, 999)
+                        }.timeInMillis
+                    }
+
+                    fun isWithinUpcomingSevenDays(
+                        training: TrainingData
+                    ): Boolean {
+                        val windowEndMillis =
+                            upcomingWindowEndMillis()
+
+                        /*
+                         * אם זמן הסיום אינו קיים, משתמשים בזמן ההתחלה.
+                         * ברוב האימונים שנוצרים דרך nextWeekly יהיה
+                         * זמן סיום תקין.
+                         */
+                        val effectiveEndMillis =
+                            training.endMillis
+                                ?: training.startMillis
+
+                        return effectiveEndMillis >=
+                                trainingStatusNowMillis &&
+                                training.startMillis <=
+                                windowEndMillis
+                    }
+
+                    fun branchScheduleVariants(branch: String): List<String> {
+                        val clean = branch
+                            .trim()
+                            .replace("־", "-")
+                            .replace("–", "-")
+                            .replace("—", "-")
+                            .replace("  ", " ")
+
+                        val pretty = branch
+                            .trim()
+                            .replace("־", "–")
+                            .replace("-", "–")
+                            .replace("—", "–")
+                            .replace("  ", " ")
+
+                        return listOf(
+                            branch.trim(),
+                            clean,
+                            pretty,
+                            clean.replace(" - ", " – "),
+                            pretty.replace(" – ", " - ")
+                        )
+                            .map { it.trim() }
+                            .filter { it.isNotBlank() }
+                            .distinct()
+                    }
+
+                    fun groupScheduleVariants(group: String): List<String> {
+                        val clean = group
+                            .trim()
+                            .replace("־", "-")
+                            .replace("–", "-")
+                            .replace("—", "-")
+                            .replace("  ", " ")
+
+                        return listOf(
+                            group.trim(),
+                            clean,
+                            clean.replace("+", " + "),
+                            clean.replace(" + ", "+"),
+                            TrainingCatalog.normalizeGroupName(group)
+                                .ifBlank { group }
+                        )
+                            .map { it.trim() }
+                            .filter { it.isNotBlank() }
+                            .distinct()
+                    }
+
+                    fun calendarDayFromDatabase(dayOfWeek: String): Int {
+                        return when (dayOfWeek.trim().uppercase(Locale.US)) {
+                            "SUNDAY" -> Calendar.SUNDAY
+                            "MONDAY" -> Calendar.MONDAY
+                            "TUESDAY" -> Calendar.TUESDAY
+                            "WEDNESDAY" -> Calendar.WEDNESDAY
+                            "THURSDAY" -> Calendar.THURSDAY
+                            "FRIDAY" -> Calendar.FRIDAY
+                            "SATURDAY" -> Calendar.SATURDAY
+                            else -> Calendar.MONDAY
+                        }
+                    }
+
+                    fun hourFromTimeText(time: String, fallback: Int): Int {
+                        return time
+                            .substringBefore(":")
+                            .trim()
+                            .toIntOrNull()
+                            ?: fallback
+                    }
+
+                    fun minuteFromTimeText(time: String, fallback: Int): Int {
+                        return time
+                            .substringAfter(":", "")
+                            .trim()
+                            .toIntOrNull()
+                            ?: fallback
+                    }
+
+                    fun databaseGroupMatches(
+                        selectedGroup: String,
+                        databaseGroupHe: String,
+                        databaseGroupEn: String,
+                        branchName: String
+                    ): Boolean {
+                        val wanted = TrainingCatalog
+                            .normalizeGroupName(selectedGroup)
+                            .ifBlank { selectedGroup }
+                            .trim()
+
+                        val dbHe = TrainingCatalog
+                            .normalizeGroupName(databaseGroupHe)
+                            .ifBlank { databaseGroupHe }
+                            .trim()
+
+                        val dbEn = databaseGroupEn.trim()
+
+                        if (wanted.equals(dbHe, ignoreCase = true)) return true
+
+                        if (
+                            selectedGroup.trim()
+                                .equals(
+                                    databaseGroupHe.trim(),
+                                    ignoreCase = true
                                 )
+                        ) {
+                            return true
+                        }
+
+                        if (
+                            selectedGroup.trim()
+                                .equals(
+                                    dbEn,
+                                    ignoreCase = true
+                                )
+                        ) {
+                            return true
+                        }
+
+                        val isOfek =
+                            branchName
+                                .replace("־", "-")
+                                .replace("–", "-")
+                                .replace("—", "-")
+                                .contains(
+                                    "מרכז קהילתי אופק",
+                                    ignoreCase = true
+                                )
+
+                        if (
+                            wanted == "נוער" &&
+                            dbHe == "נוער + בוגרים"
+                        ) {
+                            return true
+                        }
+
+                        if (
+                            !isOfek &&
+                            wanted == "בוגרים" &&
+                            dbHe == "נוער + בוגרים"
+                        ) {
+                            return true
+                        }
+
+                        return false
+                    }
+
+                    data class HomeTrainingCandidate(
+                        val training: TrainingData,
+                        val branch: String,
+                        val group: String,
+                        val displayGroup: String
+                    )
+
+                    fun trainingsFromDatabaseForHome(
+                        branchName: String,
+                        groupName: String,
+                        coachFallback: String
+                    ): List<HomeTrainingCandidate> {
+                        val dbBranch = KmiDatabaseProvider.branchByName(ctx, branchName)
+                            ?: return emptyList()
+
+                        val matchingDays = dbBranch.trainingDays.filter { day ->
+                            databaseGroupMatches(
+                                selectedGroup = groupName,
+                                databaseGroupHe = day.groupHe,
+                                databaseGroupEn = day.groupEn,
+                                branchName = branchName
+                            )
+                        }
+
+                        if (matchingDays.isEmpty()) return emptyList()
+
+                        return matchingDays.map { day ->
+                            val durationMinutes =
+                                day.durationMinutes.takeIf { it > 0 }
+                                    ?: 90
+
+                            /*
+                             * מזיזים את זמן הייחוס לאחור לפי משך האימון.
+                             * כך אימון שכבר התחיל אך טרם הסתיים נשאר
+                             * המופע של השבוע הנוכחי ולא קופץ לשבוע הבא.
+                             */
+                            val occurrenceReference =
+                                Calendar.getInstance().apply {
+                                    timeInMillis =
+                                        trainingStatusNowMillis
+
+                                    add(
+                                        Calendar.MINUTE,
+                                        -durationMinutes
+                                    )
+                                }
+
+                            HomeTrainingCandidate(
+                                training = TrainingData.nextWeekly(
+                                    dayOfWeek =
+                                        calendarDayFromDatabase(
+                                            day.dayOfWeek
+                                        ),
+                                    startHour =
+                                        hourFromTimeText(
+                                            day.startTime,
+                                            19
+                                        ),
+                                    startMinute =
+                                        minuteFromTimeText(
+                                            day.startTime,
+                                            0
+                                        ),
+                                    durationMinutes =
+                                        durationMinutes,
+                                    place =
+                                        dbBranch.displayPlace(
+                                            isEnglish
+                                        ),
+                                    address =
+                                        dbBranch.displayAddress(
+                                            isEnglish
+                                        ),
+                                    coach =
+                                        day.displayCoachName(
+                                            isEnglish
+                                        ).ifBlank {
+                                            coachFallback
+                                        },
+                                    now = occurrenceReference
+                                ),
+                                branch = branchName.trim(),
+                                group = groupName.trim(),
+                                displayGroup =
+                                    if (isEnglish) {
+                                        day.groupEn.trim()
+                                            .ifBlank {
+                                                day.groupHe.trim()
+                                            }
+                                    } else {
+                                        day.groupHe.trim()
+                                            .ifBlank {
+                                                groupName.trim()
+                                            }
+                                    }
+                            )
+                        }
+                    }
+
+                    val currentWeekCandidates:
+                            List<HomeTrainingCandidate> =
+                        remember(
+                            branchGroupPairsEffective,
+                            coachFromPrefs,
+                            isEnglish,
+                            trainingStatusNowMillis
+                        ) {
+                            val all =
+                                mutableListOf<HomeTrainingCandidate>()
+
+                            branchGroupPairsEffective.forEach { (branchName, grp) ->
+
+                                // ✅ 1) ניסיון ראשון: branches.json דרך KmiDatabaseProvider
+                                val dbItems =
+                                    trainingsFromDatabaseForHome(
+                                        branchName = branchName,
+                                        groupName = grp,
+                                        coachFallback = coachFromPrefs
+                                    )
 
                                 if (dbItems.isNotEmpty()) {
                                     val validDbItems =
@@ -1486,456 +1518,223 @@ fun HomeScreen(
                                     return@forEach
                                 }
 
-                            // ✅ 2) Fallback דרך TrainingCatalog
-                            val branchVariants =
-                                branchScheduleVariants(branchName)
+                                // ✅ 2) Fallback דרך TrainingCatalog
+                                val branchVariants =
+                                    branchScheduleVariants(branchName)
 
-                            val groupVariants =
-                                groupScheduleVariants(grp)
+                                val groupVariants =
+                                    groupScheduleVariants(grp)
 
-                            var matchedBranch = ""
-                            var matchedGroup = ""
+                                var matchedBranch = ""
+                                var matchedGroup = ""
 
-                            val sched =
-                                branchVariants
-                                    .asSequence()
-                                    .flatMap { branchCandidate ->
-                                        groupVariants
-                                            .asSequence()
-                                            .map { groupCandidate ->
-                                                branchCandidate to groupCandidate
-                                            }
-                                    }
-                                    .firstNotNullOfOrNull {
-                                            (branchCandidate, groupCandidate) ->
+                                val sched =
+                                    branchVariants
+                                        .asSequence()
+                                        .flatMap { branchCandidate ->
+                                            groupVariants
+                                                .asSequence()
+                                                .map { groupCandidate ->
+                                                    branchCandidate to groupCandidate
+                                                }
+                                        }
+                                        .firstNotNullOfOrNull { (branchCandidate, groupCandidate) ->
 
-                                        val found =
-                                            TrainingCatalog.trainingsFor(
-                                                branch = branchCandidate,
-                                                group = groupCandidate,
-                                                isEnglish = isEnglish
-                                            )
-
-                                        found
-                                            .takeIf { it.isNotEmpty() }
-                                            ?.also {
-                                                matchedBranch = branchCandidate
-                                                matchedGroup = groupCandidate
-                                            }
-                                    }
-
-                            val fallbackItems: List<HomeTrainingCandidate> =
-                                sched
-                                    ?.map { training ->
-                                        val fallbackGroup =
-                                            matchedGroup
-                                                .ifBlank { grp }
-                                                .trim()
-
-                                        HomeTrainingCandidate(
-                                            training = training,
-                                            branch =
-                                                matchedBranch
-                                                    .ifBlank { branchName }
-                                                    .trim(),
-                                            group = fallbackGroup,
-                                            displayGroup = fallbackGroup
-                                        )
-                                    }
-                                    .orEmpty()
-
-                            val validFallbackItems =
-                                fallbackItems.filter { candidate ->
-                                    isWithinUpcomingSevenDays(
-                                        candidate.training
-                                    )
-                                }
-
-                            all += validFallbackItems
-                        }
-                        /*
-                         * מנרמלים חלקי טקסט לצורך זיהוי אותו אימון,
-                         * גם כאשר קיימים הבדלים קטנים ברווחים,
-                         * מקפים או אותיות גדולות/קטנות.
-                         */
-                        fun normalizeTrainingIdentityPart(
-                            value: String
-                        ): String {
-                            return value
-                                .replace("\u200F", "")
-                                .replace("\u200E", "")
-                                .replace("\u00A0", " ")
-                                .trim()
-                                .lowercase()
-                                .replace("־", "-")
-                                .replace("–", "-")
-                                .replace("—", "-")
-                                .replace(Regex("\\s+"), " ")
-                        }
-
-                        /*
-    * מזהה מופע פיזי של אימון.
-    *
-    * הקבוצה אינה חלק מהמפתח בכוונה:
-    * אותו אימון עשוי להתאים ליותר מקבוצה אחת,
-    * אך הוא צריך להופיע במסך הבית פעם אחת בלבד.
-    */
-                        fun physicalTrainingKey(
-                            candidate: HomeTrainingCandidate
-                        ): String {
-                            val training = candidate.training
-
-                            val startMinute =
-                                training.startMillis / 60_000L
-
-                            val endMinute =
-                                (
-                                        training.endMillis
-                                            ?: training.startMillis
-                                        ) / 60_000L
-
-                            val placeIdentity =
-                                training.place
-                                    .ifBlank {
-                                        candidate.branch
-                                    }
-
-                            val addressIdentity =
-                                training.address
-
-                            return buildString {
-                                append(startMinute)
-                                append("|")
-                                append(endMinute)
-                                append("|")
-                                append(
-                                    normalizeTrainingIdentityPart(
-                                        placeIdentity
-                                    )
-                                )
-                                append("|")
-                                append(
-                                    normalizeTrainingIdentityPart(
-                                        addressIdentity
-                                    )
-                                )
-                            }
-                        }
-
-                        val result =
-                            all
-                                .groupBy(::physicalTrainingKey)
-                                .values
-                                .map { samePhysicalTraining ->
-                                    /*
-                                     * אם אותו אימון הגיע מכמה מקורות,
-                                     * מעדיפים את הרשומה המלאה ביותר.
-                                     */
-                                    samePhysicalTraining.maxByOrNull { candidate ->
-                                        listOf(
-                                            candidate.training.place,
-                                            candidate.training.address,
-                                            candidate.training.coach,
-                                            candidate.branch,
-                                            candidate.group
-                                        )
-                                            .count { value ->
-                                                value.isNotBlank()
-                                            }
-                                    } ?: samePhysicalTraining.first()
-                                }
-                                .sortedBy { candidate ->
-                                    candidate.training.startMillis
-                                }
-
-                        result
-                    }
-
-                /*
-                 * הרשימה זמינה כאן בתוך תחום התוכן של
-                 * מסך הבית. מעדכנים את מאגר הניווט בכל
-                 * פעם שמקורות האימונים משתנים.
-                 */
-                LaunchedEffect(
-                    currentWeekCandidates
-                ) {
-                    TrainingArchiveNavigationStore.update(
-                        currentWeekCandidates.map { candidate ->
-                            TrainingArchiveSource(
-                                training =
-                                    candidate.training,
-                                branch =
-                                    candidate.branch,
-                                group =
-                                    candidate.group
-                            )
-                        }
-                    )
-                }
-
-                data class HomeTrainingUi(
-                    val training: TrainingData,
-                    val branch: String,
-                    val group: String,
-                    val displayGroup: String,
-                    val status: TrainingStatusEngine.Status,
-                    val occurrenceKey: String,
-                    val activeOverride: TrainingOverride?
-                ) {
-                    val isCancelledByHoliday: Boolean
-                        get() =
-                            status.state ==
-                                    TrainingStatusEngine.State.CANCELLED_BY_HOLIDAY
-
-                    fun cancellationReason(
-                        isEnglish: Boolean
-                    ): String? {
-                        return status.reason(isEnglish)
-                    }
-                }
-
-                var activeTrainingOverrides by remember {
-                    mutableStateOf<Map<String, TrainingOverride>>(
-                        emptyMap()
-                    )
-                }
-
-                val occurrenceKeys =
-                    remember(currentWeekCandidates) {
-                        currentWeekCandidates
-                            .associateBy { candidate ->
-                                TrainingOverrideRepository
-                                    .buildOccurrenceKey(
-                                        training =
-                                            candidate.training,
-                                        branch =
-                                            candidate.branch,
-                                        group =
-                                            candidate.group
-                                    )
-                            }
-                    }
-
-                DisposableEffect(occurrenceKeys.keys) {
-                    val listenerHandle =
-                        TrainingOverrideRepository
-                            .listenForOccurrenceKeys(
-                                occurrenceKeys =
-                                    occurrenceKeys.keys,
-                                onChanged = { overrides ->
-                                    activeTrainingOverrides =
-                                        overrides
-
-                                    val timeFormatter =
-                                        SimpleDateFormat(
-                                            "HH:mm",
-                                            Locale.forLanguageTag("he-IL")
-                                        ).apply {
-                                            timeZone =
-                                                TimeZone.getTimeZone(
-                                                    "Asia/Jerusalem"
+                                            val found =
+                                                TrainingCatalog.trainingsFor(
+                                                    branch = branchCandidate,
+                                                    group = groupCandidate,
+                                                    isEnglish = isEnglish
                                                 )
+
+                                            found
+                                                .takeIf { it.isNotEmpty() }
+                                                ?.also {
+                                                    matchedBranch = branchCandidate
+                                                    matchedGroup = groupCandidate
+                                                }
                                         }
 
-                                    recentTrainingNotices =
-                                        overrides
-                                            .values
-                                            .filter { override ->
-                                                override.isActive
-                                            }
-                                            .mapNotNull { override ->
-                                                val eventDate =
-                                                    override.updatedAt
-                                                        ?.toDate()
-                                                        ?: override.createdAt
-                                                            ?.toDate()
-                                                        ?: Date()
+                                val fallbackItems: List<HomeTrainingCandidate> =
+                                    sched
+                                        ?.map { training ->
+                                            val fallbackGroup =
+                                                matchedGroup
+                                                    .ifBlank { grp }
+                                                    .trim()
 
-                                                when {
-                                                    override.isCancelled -> {
-                                                        HomeNotice(
-                                                            id =
-                                                                "cancelled|${override.occurrenceKey}",
-                                                            type =
-                                                                HomeNoticeType.TRAINING_CANCELLED,
-                                                            title =
-                                                                if (isEnglish) {
-                                                                    "Training cancelled"
-                                                                } else {
-                                                                    "האימון בוטל"
-                                                                },
-                                                            text =
-                                                                buildString {
-                                                                    append(
-                                                                        if (isEnglish) {
-                                                                            "The training at "
-                                                                        } else {
-                                                                            "האימון ב־"
-                                                                        }
-                                                                    )
+                                            HomeTrainingCandidate(
+                                                training = training,
+                                                branch =
+                                                    matchedBranch
+                                                        .ifBlank { branchName }
+                                                        .trim(),
+                                                group = fallbackGroup,
+                                                displayGroup = fallbackGroup
+                                            )
+                                        }
+                                        .orEmpty()
 
-                                                                    append(
-                                                                        override.place
-                                                                            .ifBlank {
-                                                                                override.branch
-                                                                            }
-                                                                    )
+                                val validFallbackItems =
+                                    fallbackItems.filter { candidate ->
+                                        isWithinUpcomingSevenDays(
+                                            candidate.training
+                                        )
+                                    }
 
-                                                                    val reason =
-                                                                        override.reason.trim()
+                                all += validFallbackItems
+                            }
+                            /*
+                             * מנרמלים חלקי טקסט לצורך זיהוי אותו אימון,
+                             * גם כאשר קיימים הבדלים קטנים ברווחים,
+                             * מקפים או אותיות גדולות/קטנות.
+                             */
+                            fun normalizeTrainingIdentityPart(
+                                value: String
+                            ): String {
+                                return value
+                                    .replace("\u200F", "")
+                                    .replace("\u200E", "")
+                                    .replace("\u00A0", " ")
+                                    .trim()
+                                    .lowercase()
+                                    .replace("־", "-")
+                                    .replace("–", "-")
+                                    .replace("—", "-")
+                                    .replace(Regex("\\s+"), " ")
+                            }
 
-                                                                    if (reason.isNotBlank()) {
-                                                                        append("\n")
+                            /*
+        * מזהה מופע פיזי של אימון.
+        *
+        * הקבוצה אינה חלק מהמפתח בכוונה:
+        * אותו אימון עשוי להתאים ליותר מקבוצה אחת,
+        * אך הוא צריך להופיע במסך הבית פעם אחת בלבד.
+        */
+                            fun physicalTrainingKey(
+                                candidate: HomeTrainingCandidate
+                            ): String {
+                                val training = candidate.training
 
-                                                                        append(
-                                                                            if (isEnglish) {
-                                                                                "Reason: "
-                                                                            } else {
-                                                                                "סיבה: "
-                                                                            }
-                                                                        )
+                                val startMinute =
+                                    training.startMillis / 60_000L
 
-                                                                        append(reason)
-                                                                    }
-                                                                },
-                                                            coachName =
-                                                                override.changedByName
-                                                                    .ifBlank {
-                                                                        if (isEnglish) {
-                                                                            "Coach"
-                                                                        } else {
-                                                                            "המאמן"
-                                                                        }
-                                                                    },
-                                                            sentAt = eventDate,
-                                                            branch = override.branch,
-                                                            group = override.group
-                                                        )
-                                                    }
+                                val endMinute =
+                                    (
+                                            training.endMillis
+                                                ?: training.startMillis
+                                            ) / 60_000L
 
-                                                    override.hasChangedTime -> {
-                                                        val originalStart =
-                                                            timeFormatter.format(
-                                                                Date(
-                                                                    override.originalStartMillis
-                                                                )
-                                                            )
+                                val placeIdentity =
+                                    training.place
+                                        .ifBlank {
+                                            candidate.branch
+                                        }
 
-                                                        val originalEnd =
-                                                            timeFormatter.format(
-                                                                Date(
-                                                                    override.originalEndMillis
-                                                                )
-                                                            )
+                                val addressIdentity =
+                                    training.address
 
-                                                        val newStart =
-                                                            timeFormatter.format(
-                                                                Date(
-                                                                    override.effectiveStartMillis
-                                                                )
-                                                            )
-
-                                                        val newEnd =
-                                                            timeFormatter.format(
-                                                                Date(
-                                                                    override.effectiveEndMillis
-                                                                )
-                                                            )
-
-                                                        HomeNotice(
-                                                            id =
-                                                                "time_changed|${override.occurrenceKey}",
-                                                            type =
-                                                                HomeNoticeType.TRAINING_TIME_CHANGED,
-                                                            title =
-                                                                if (isEnglish) {
-                                                                    "Training time changed"
-                                                                } else {
-                                                                    "שעת האימון שונתה"
-                                                                },
-                                                            text =
-                                                                buildString {
-                                                                    append(
-                                                                        override.place
-                                                                            .ifBlank {
-                                                                                override.branch
-                                                                            }
-                                                                    )
-
-                                                                    append("\n")
-
-                                                                    append(originalStart)
-                                                                    append("–")
-                                                                    append(originalEnd)
-
-                                                                    append("  ←  ")
-
-                                                                    append(newStart)
-                                                                    append("–")
-                                                                    append(newEnd)
-
-                                                                    val reason =
-                                                                        override.reason.trim()
-
-                                                                    if (reason.isNotBlank()) {
-                                                                        append("\n")
-
-                                                                        append(
-                                                                            if (isEnglish) {
-                                                                                "Reason: "
-                                                                            } else {
-                                                                                "סיבה: "
-                                                                            }
-                                                                        )
-
-                                                                        append(reason)
-                                                                    }
-                                                                },
-                                                            coachName =
-                                                                override.changedByName
-                                                                    .ifBlank {
-                                                                        if (isEnglish) {
-                                                                            "Coach"
-                                                                        } else {
-                                                                            "המאמן"
-                                                                        }
-                                                                    },
-                                                            sentAt = eventDate,
-                                                            branch = override.branch,
-                                                            group = override.group
-                                                        )
-                                                    }
-
-                                                    else -> null
-                                                }
-                                            }
-                                            .sortedByDescending { notice ->
-                                                notice.sentAt?.time ?: 0L
-                                            }
-                                            .take(5)
-                                },
-                                onError = {
-                                    /*
-                                     * אין מפילים את מסך הבית כאשר
-                                     * Firestore אינו זמין זמנית.
-                                     */
+                                return buildString {
+                                    append(startMinute)
+                                    append("|")
+                                    append(endMinute)
+                                    append("|")
+                                    append(
+                                        normalizeTrainingIdentityPart(
+                                            placeIdentity
+                                        )
+                                    )
+                                    append("|")
+                                    append(
+                                        normalizeTrainingIdentityPart(
+                                            addressIdentity
+                                        )
+                                    )
                                 }
-                            )
+                            }
 
-                    onDispose {
-                        listenerHandle.remove()
-                    }
-                }
+                            val result =
+                                all
+                                    .groupBy(::physicalTrainingKey)
+                                    .values
+                                    .map { samePhysicalTraining ->
+                                        /*
+                                         * אם אותו אימון הגיע מכמה מקורות,
+                                         * מעדיפים את הרשומה המלאה ביותר.
+                                         */
+                                        samePhysicalTraining.maxByOrNull { candidate ->
+                                            listOf(
+                                                candidate.training.place,
+                                                candidate.training.address,
+                                                candidate.training.coach,
+                                                candidate.branch,
+                                                candidate.group
+                                            )
+                                                .count { value ->
+                                                    value.isNotBlank()
+                                                }
+                                        } ?: samePhysicalTraining.first()
+                                    }
+                                    .sortedBy { candidate ->
+                                        candidate.training.startMillis
+                                    }
 
-                val upcoming: List<HomeTrainingUi> =
-                    remember(
-                        currentWeekCandidates,
-                        activeTrainingOverrides,
-                        trainingStatusNowMillis
-                    ) {
+                            result
+                        }
+
+                    /*
+                     * הרשימה זמינה כאן בתוך תחום התוכן של
+                     * מסך הבית. מעדכנים את מאגר הניווט בכל
+                     * פעם שמקורות האימונים משתנים.
+                     */
+                    LaunchedEffect(
                         currentWeekCandidates
-                            .map { candidate ->
-                                val occurrenceKey =
+                    ) {
+                        TrainingArchiveNavigationStore.update(
+                            currentWeekCandidates.map { candidate ->
+                                TrainingArchiveSource(
+                                    training =
+                                        candidate.training,
+                                    branch =
+                                        candidate.branch,
+                                    group =
+                                        candidate.group
+                                )
+                            }
+                        )
+                    }
+
+                    data class HomeTrainingUi(
+                        val training: TrainingData,
+                        val branch: String,
+                        val group: String,
+                        val displayGroup: String,
+                        val status: TrainingStatusEngine.Status,
+                        val occurrenceKey: String,
+                        val activeOverride: TrainingOverride?
+                    ) {
+                        val isCancelledByHoliday: Boolean
+                            get() =
+                                status.state ==
+                                        TrainingStatusEngine.State.CANCELLED_BY_HOLIDAY
+
+                        fun cancellationReason(
+                            isEnglish: Boolean
+                        ): String? {
+                            return status.reason(isEnglish)
+                        }
+                    }
+
+                    var activeTrainingOverrides by remember {
+                        mutableStateOf<Map<String, TrainingOverride>>(
+                            emptyMap()
+                        )
+                    }
+
+                    val occurrenceKeys =
+                        remember(currentWeekCandidates) {
+                            currentWeekCandidates
+                                .associateBy { candidate ->
                                     TrainingOverrideRepository
                                         .buildOccurrenceKey(
                                             training =
@@ -1945,1118 +1744,806 @@ fun HomeScreen(
                                             group =
                                                 candidate.group
                                         )
+                                }
+                        }
 
-                                HomeTrainingUi(
-                                    training =
-                                        candidate.training,
-                                    branch =
-                                        candidate.branch,
-                                    group =
-                                        candidate.group,
-                                    displayGroup =
-                                        candidate.displayGroup,
-                                    status =
-                                        TrainingStatusEngine.evaluate(
-                                            context = ctx,
-                                            training =
-                                                candidate.training,
-                                            nowMillis =
-                                                trainingStatusNowMillis
-                                        ),
-                                    occurrenceKey =
-                                        occurrenceKey,
-                                    activeOverride =
-                                        activeTrainingOverrides[
-                                            occurrenceKey
-                                        ]
+                    DisposableEffect(occurrenceKeys.keys) {
+                        val listenerHandle =
+                            TrainingOverrideRepository
+                                .listenForOccurrenceKeys(
+                                    occurrenceKeys =
+                                        occurrenceKeys.keys,
+                                    onChanged = { overrides ->
+                                        activeTrainingOverrides =
+                                            overrides
+
+                                        val timeFormatter =
+                                            SimpleDateFormat(
+                                                "HH:mm",
+                                                Locale.forLanguageTag("he-IL")
+                                            ).apply {
+                                                timeZone =
+                                                    TimeZone.getTimeZone(
+                                                        "Asia/Jerusalem"
+                                                    )
+                                            }
+
+                                        recentTrainingNotices =
+                                            overrides
+                                                .values
+                                                .filter { override ->
+                                                    override.isActive
+                                                }
+                                                .mapNotNull { override ->
+                                                    val eventDate =
+                                                        override.updatedAt
+                                                            ?.toDate()
+                                                            ?: override.createdAt
+                                                                ?.toDate()
+                                                            ?: Date()
+
+                                                    when {
+                                                        override.isCancelled -> {
+                                                            HomeNotice(
+                                                                id =
+                                                                    "cancelled|${override.occurrenceKey}",
+                                                                type =
+                                                                    HomeNoticeType.TRAINING_CANCELLED,
+                                                                title =
+                                                                    if (isEnglish) {
+                                                                        "Training cancelled"
+                                                                    } else {
+                                                                        "האימון בוטל"
+                                                                    },
+                                                                text =
+                                                                    buildString {
+                                                                        append(
+                                                                            if (isEnglish) {
+                                                                                "The training at "
+                                                                            } else {
+                                                                                "האימון ב־"
+                                                                            }
+                                                                        )
+
+                                                                        append(
+                                                                            override.place
+                                                                                .ifBlank {
+                                                                                    override.branch
+                                                                                }
+                                                                        )
+
+                                                                        val reason =
+                                                                            override.reason.trim()
+
+                                                                        if (reason.isNotBlank()) {
+                                                                            append("\n")
+
+                                                                            append(
+                                                                                if (isEnglish) {
+                                                                                    "Reason: "
+                                                                                } else {
+                                                                                    "סיבה: "
+                                                                                }
+                                                                            )
+
+                                                                            append(reason)
+                                                                        }
+                                                                    },
+                                                                coachName =
+                                                                    override.changedByName
+                                                                        .ifBlank {
+                                                                            if (isEnglish) {
+                                                                                "Coach"
+                                                                            } else {
+                                                                                "המאמן"
+                                                                            }
+                                                                        },
+                                                                sentAt = eventDate,
+                                                                branch = override.branch,
+                                                                group = override.group
+                                                            )
+                                                        }
+
+                                                        override.hasChangedTime -> {
+                                                            val originalStart =
+                                                                timeFormatter.format(
+                                                                    Date(
+                                                                        override.originalStartMillis
+                                                                    )
+                                                                )
+
+                                                            val originalEnd =
+                                                                timeFormatter.format(
+                                                                    Date(
+                                                                        override.originalEndMillis
+                                                                    )
+                                                                )
+
+                                                            val newStart =
+                                                                timeFormatter.format(
+                                                                    Date(
+                                                                        override.effectiveStartMillis
+                                                                    )
+                                                                )
+
+                                                            val newEnd =
+                                                                timeFormatter.format(
+                                                                    Date(
+                                                                        override.effectiveEndMillis
+                                                                    )
+                                                                )
+
+                                                            HomeNotice(
+                                                                id =
+                                                                    "time_changed|${override.occurrenceKey}",
+                                                                type =
+                                                                    HomeNoticeType.TRAINING_TIME_CHANGED,
+                                                                title =
+                                                                    if (isEnglish) {
+                                                                        "Training time changed"
+                                                                    } else {
+                                                                        "שעת האימון שונתה"
+                                                                    },
+                                                                text =
+                                                                    buildString {
+                                                                        append(
+                                                                            override.place
+                                                                                .ifBlank {
+                                                                                    override.branch
+                                                                                }
+                                                                        )
+
+                                                                        append("\n")
+
+                                                                        append(originalStart)
+                                                                        append("–")
+                                                                        append(originalEnd)
+
+                                                                        append("  ←  ")
+
+                                                                        append(newStart)
+                                                                        append("–")
+                                                                        append(newEnd)
+
+                                                                        val reason =
+                                                                            override.reason.trim()
+
+                                                                        if (reason.isNotBlank()) {
+                                                                            append("\n")
+
+                                                                            append(
+                                                                                if (isEnglish) {
+                                                                                    "Reason: "
+                                                                                } else {
+                                                                                    "סיבה: "
+                                                                                }
+                                                                            )
+
+                                                                            append(reason)
+                                                                        }
+                                                                    },
+                                                                coachName =
+                                                                    override.changedByName
+                                                                        .ifBlank {
+                                                                            if (isEnglish) {
+                                                                                "Coach"
+                                                                            } else {
+                                                                                "המאמן"
+                                                                            }
+                                                                        },
+                                                                sentAt = eventDate,
+                                                                branch = override.branch,
+                                                                group = override.group
+                                                            )
+                                                        }
+
+                                                        else -> null
+                                                    }
+                                                }
+                                                .sortedByDescending { notice ->
+                                                    notice.sentAt?.time ?: 0L
+                                                }
+                                                .take(5)
+                                    },
+                                    onError = {
+                                        /*
+                                         * אין מפילים את מסך הבית כאשר
+                                         * Firestore אינו זמין זמנית.
+                                         */
+                                    }
+                                )
+
+                        onDispose {
+                            listenerHandle.remove()
+                        }
+                    }
+
+                    val upcoming: List<HomeTrainingUi> =
+                        remember(
+                            currentWeekCandidates,
+                            activeTrainingOverrides,
+                            trainingStatusNowMillis
+                        ) {
+                            currentWeekCandidates
+                                .map { candidate ->
+                                    val occurrenceKey =
+                                        TrainingOverrideRepository
+                                            .buildOccurrenceKey(
+                                                training =
+                                                    candidate.training,
+                                                branch =
+                                                    candidate.branch,
+                                                group =
+                                                    candidate.group
+                                            )
+
+                                    HomeTrainingUi(
+                                        training =
+                                            candidate.training,
+                                        branch =
+                                            candidate.branch,
+                                        group =
+                                            candidate.group,
+                                        displayGroup =
+                                            candidate.displayGroup,
+                                        status =
+                                            TrainingStatusEngine.evaluate(
+                                                context = ctx,
+                                                training =
+                                                    candidate.training,
+                                                nowMillis =
+                                                    trainingStatusNowMillis
+                                            ),
+                                        occurrenceKey =
+                                            occurrenceKey,
+                                        activeOverride =
+                                            activeTrainingOverrides[
+                                                occurrenceKey
+                                            ]
+                                    )
+                                }
+                                .sortedBy { item ->
+                                    item.activeOverride
+                                        ?.effectiveStartMillis
+                                        ?: item.training.startMillis
+                                }
+                                .filter { item ->
+                                    item.status.isScheduled ||
+                                            item.status.isOngoing ||
+                                            item.status.isCancelled ||
+                                            item.activeOverride != null
+                                }
+                        }
+
+                    SyncHomeCoachTrainingOccurrences(
+                        isCoach = isCoach,
+                        currentUid = currentUid,
+                        items =
+                            upcoming.map { item ->
+                                HomeCoachOccurrenceItem(
+                                    training = item.training,
+                                    branch = item.branch,
+                                    group = item.group,
+                                    activeOverride = item.activeOverride
                                 )
                             }
-                            .sortedBy { item ->
-                                item.activeOverride
-                                    ?.effectiveStartMillis
-                                    ?: item.training.startMillis
-                            }
-                            .filter { item ->
-                                item.status.isScheduled ||
-                                        item.status.isOngoing ||
-                                        item.status.isCancelled ||
-                                        item.activeOverride != null
-                            }
-                    }
+                    )
 
-                SyncHomeCoachTrainingOccurrences(
-                    isCoach = isCoach,
-                    currentUid = currentUid,
-                    items =
-                        upcoming.map { item ->
-                            HomeCoachOccurrenceItem(
-                                training = item.training,
-                                branch = item.branch,
-                                group = item.group,
-                                activeOverride = item.activeOverride
+                    LaunchedEffect(upcoming, isEnglish) {
+                        val locale = if (isEnglish) {
+                            Locale.ENGLISH
+                        } else {
+                            Locale.forLanguageTag("he-IL")
+                        }
+
+                        val dayFmt = SimpleDateFormat("EEEE", locale)
+                        val dateFmt = SimpleDateFormat("dd/MM", locale)
+                        val timeFmt = SimpleDateFormat("HH:mm", locale)
+
+                        homePdfTrainings = upcoming.map { item ->
+                            val training = item.training
+
+                            HomePdfTraining(
+                                place = training.place,
+                                address = training.address,
+                                coach = training.coach,
+                                day = dayFmt.format(training.cal.time),
+                                date = dateFmt.format(training.cal.time),
+                                time = timeFmt.format(training.cal.time),
+                                cancellationReason =
+                                    item.cancellationReason(isEnglish)
                             )
                         }
-                )
-
-                LaunchedEffect(upcoming, isEnglish) {
-                    val locale = if (isEnglish) {
-                        Locale.ENGLISH
-                    } else {
-                        Locale.forLanguageTag("he-IL")
                     }
 
-                    val dayFmt = SimpleDateFormat("EEEE", locale)
-                    val dateFmt = SimpleDateFormat("dd/MM", locale)
-                    val timeFmt = SimpleDateFormat("HH:mm", locale)
-
-                    homePdfTrainings = upcoming.map { item ->
-                        val training = item.training
-
-                        HomePdfTraining(
-                            place = training.place,
-                            address = training.address,
-                            coach = training.coach,
-                            day = dayFmt.format(training.cal.time),
-                            date = dateFmt.format(training.cal.time),
-                            time = timeFmt.format(training.cal.time),
-                            cancellationReason =
-                                item.cancellationReason(isEnglish)
-                        )
+                    val weekBlockedByHoliday = remember(upcoming) {
+                        upcoming.isNotEmpty() &&
+                                upcoming.all {
+                                    it.isCancelledByHoliday
+                                }
                     }
-                }
 
-                val weekBlockedByHoliday = remember(upcoming) {
-                    upcoming.isNotEmpty() &&
-                            upcoming.all {
-                                it.isCancelledByHoliday
+                    LazyColumn(
+                        state = listState,
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                        contentPadding = PaddingValues(top = 6.dp, bottom = 28.dp)
+                    ) {
+
+                        if (upcoming.isEmpty()) {
+                            item {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .heightIn(min = 96.dp),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text = if (weekBlockedByHoliday) {
+                                            if (isEnglish)
+                                                "Passover holiday\nNo trainings this week"
+                                            else
+                                                "חג פסח / חול המועד פסח\nאין אימונים בשבוע זה"
+                                        } else {
+                                            if (isAbroadBranch) {
+                                                if (isEnglish)
+                                                    "Training schedule is not available for international branches this week"
+                                                else
+                                                    "אין מידע על אימונים לשבוע הקרוב בסניפי חו״ל"
+                                            } else {
+                                                if (isEnglish) "No upcoming trainings" else "אין אימונים קרובים"
+                                            }
+
+                                        },
+                                        style =
+                                            KmiTypography.cardTitle,
+                                        color =
+                                            MaterialTheme
+                                                .colorScheme
+                                                .onBackground,
+                                        textAlign = TextAlign.Center,
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 16.dp)
+                                    )
+                                }
                             }
-                }
+                        } else {
+                            items(
+                                items = upcoming,
+                                key = { item ->
+                                    buildString {
+                                        append(item.occurrenceKey)
+                                        append("|holiday=")
+                                        append(item.isCancelledByHoliday)
+                                    }
+                                }
+                            ) { item ->
+                                TrainingCardCompact(
+                                    training = item.training,
+                                    group = item.displayGroup,
+                                    branch = item.branch,
+                                    attendanceGroup = item.group,
+                                    occurrenceKey = item.occurrenceKey,
+                                    authUid = currentUid.orEmpty(),
+                                    isCoach = isCoach,
+                                    isEnglish = isEnglish,
+                                    status = item.status,
+                                    nowMillis = trainingStatusNowMillis,
+                                    activeOverride =
+                                        item.activeOverride,
+                                    onManageTraining = {
+                                        openHomeCoachTrainingManagement(
+                                            training =
+                                                item.training,
+                                            occurrenceKey =
+                                                item.occurrenceKey,
+                                            branch =
+                                                item.branch,
+                                            group =
+                                                item.group,
+                                            activeOverride =
+                                                item.activeOverride,
+                                            coachName =
+                                                coachFromPrefs,
+                                            fallbackName =
+                                                freeNameUi,
+                                            isEnglish =
+                                                isEnglish
+                                        )
 
-                LazyColumn(
-                    state = listState,
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxWidth(),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                    contentPadding = PaddingValues(top = 6.dp, bottom = 28.dp)
-                ) {
+                                        onOpenTrainingManagement()
+                                    }
+                                )
+                            }
+                            item { Spacer(Modifier.height(6.dp)) }
+                        }
 
-                    if (upcoming.isEmpty()) {
                         item {
+                            Spacer(Modifier.height(4.dp))
                             Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .heightIn(min = 96.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text = if (weekBlockedByHoliday) {
-                                        if (isEnglish)
-                                            "Passover holiday\nNo trainings this week"
-                                        else
-                                            "חג פסח / חול המועד פסח\nאין אימונים בשבוע זה"
-                                    } else {
-                                        if (isAbroadBranch) {
-                                            if (isEnglish)
-                                                "Training schedule is not available for international branches this week"
-                                            else
-                                                "אין מידע על אימונים לשבוע הקרוב בסניפי חו״ל"
-                                        } else {
-                                            if (isEnglish) "No upcoming trainings" else "אין אימונים קרובים"
-                                        }
-
-                                    },
-                                    style =
-                                        KmiTypography.cardTitle,
-                                    color =
-                                        MaterialTheme
-                                            .colorScheme
-                                            .onBackground,
-                                    textAlign = TextAlign.Center,
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(horizontal = 16.dp)
-                                )
-                            }
-                        }
-                    } else {
-                        items(
-                            items = upcoming,
-                            key = { item ->
-                                buildString {
-                                    append(item.occurrenceKey)
-                                    append("|holiday=")
-                                    append(item.isCancelledByHoliday)
-                                }
-                            }
-                        ) { item ->
-                            TrainingCardCompact(
-                                training = item.training,
-                                group = item.displayGroup,
-                                branch = item.branch,
-                                attendanceGroup = item.group,
-                                occurrenceKey = item.occurrenceKey,
-                                authUid = currentUid.orEmpty(),
-                                isCoach = isCoach,
-                                isEnglish = isEnglish,
-                                status = item.status,
-                                nowMillis = trainingStatusNowMillis,
-                                activeOverride =
-                                    item.activeOverride,
-                                onManageTraining = {
-                                    openHomeCoachTrainingManagement(
-                                        training =
-                                            item.training,
-                                        occurrenceKey =
-                                            item.occurrenceKey,
-                                        branch =
-                                            item.branch,
-                                        group =
-                                            item.group,
-                                        activeOverride =
-                                            item.activeOverride,
-                                        coachName =
-                                            coachFromPrefs,
-                                        fallbackName =
-                                            freeNameUi,
-                                        isEnglish =
-                                            isEnglish
-                                    )
-
-                                    onOpenTrainingManagement()
-                                }
-                            )
-                        }
-                        item { Spacer(Modifier.height(6.dp)) }
-                    }
-
-                    item {
-                        Spacer(Modifier.height(4.dp))
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(4.dp)
-                                .background(
-                                    brush =
-                                        Brush.verticalGradient(
-                                            colors =
-                                                listOf(
-                                                    MaterialTheme
-                                                        .colorScheme
-                                                        .outlineVariant
-                                                        .copy(
-                                                            alpha = 0.86f
-                                                        ),
-                                                    MaterialTheme
-                                                        .colorScheme
-                                                        .outlineVariant
-                                                        .copy(
-                                                            alpha = 0.38f
-                                                        ),
-                                                    Color.Transparent
-                                                )
-                                        )
-                                )
-                        )
-                        Spacer(Modifier.height(6.dp))
-                    }
-
-            // ===== כרטיס הודעות ואירועים =====
-            item {
-                HomeCoachNoticesCard(
-                    homeNotices =
-                        homeNotices,
-                    hasRecentCoachMessages =
-                        recentCoachMessages
-                            .isNotEmpty(),
-                    isEnglish =
-                        isEnglish,
-                    onOpen = {
-                        coachMessagesState
-                            .openDialog()
-                    }
-                )
-            }
-        }
-
-            Spacer(Modifier.height(1.dp))
-
-            val bubbleTransition = rememberInfiniteTransition(
-                    label = "homeBottomButtonBubbleTransition"
-                )
-
-                val bubbleOffset by bubbleTransition.animateFloat(
-                    initialValue = -120f,
-                    targetValue = 320f,
-                    animationSpec = infiniteRepeatable(
-                        animation = tween(
-                            durationMillis = 2600,
-                            easing = LinearEasing
-                        ),
-                        repeatMode = RepeatMode.Restart
-                    ),
-                    label = "homeBottomButtonBubbleOffset"
-                )
-
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .navigationBarsPadding()
-                        .imePadding()
-                        .padding(horizontal = 12.dp, vertical = 1.dp)
-                ) {
-                    Surface(
-                        onClick = {
-                            clickSound()
-                            haptic(true)
-                            onContinue()
-                        },
-                        shape = RoundedCornerShape(18.dp),
-                        tonalElevation = 0.dp,
-                        shadowElevation = 0.dp,
-                        modifier =
-                            Modifier
-                                .fillMaxWidth()
-                                .heightIn(
-                                    min = 46.dp,
-                                    max = 58.dp
-                                )
-                                .border(
-                                    width = 1.dp,
-                                    brush = Brush.linearGradient(
-                                        colors = listOf(
-                                            MaterialTheme.colorScheme.onPrimary.copy(
-                                                alpha = 0.85f
-                                            ),
-                                            MaterialTheme.colorScheme.onPrimary.copy(
-                                                alpha = 0.25f
-                                            ),
-                                            MaterialTheme.colorScheme.onPrimary.copy(
-                                                alpha = 0.85f
-                                            )
-                                        )
-                                    ),
-                                    shape = RoundedCornerShape(18.dp)
-                                )
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .background(
-                                    brush =
-                                        kmiGraniteActionBrush()
-                                )
-                        ) {
-
-                            Box(
-                                modifier = Modifier
-                                    .offset(x = bubbleOffset.dp)
-                                    .size(140.dp)
+                                    .height(4.dp)
                                     .background(
                                         brush =
-                                            Brush.radialGradient(
+                                            Brush.verticalGradient(
                                                 colors =
                                                     listOf(
-                                                        kmiGraniteActionHighlightColor(),
+                                                        MaterialTheme
+                                                            .colorScheme
+                                                            .outlineVariant
+                                                            .copy(
+                                                                alpha = 0.86f
+                                                            ),
+                                                        MaterialTheme
+                                                            .colorScheme
+                                                            .outlineVariant
+                                                            .copy(
+                                                                alpha = 0.38f
+                                                            ),
                                                         Color.Transparent
                                                     )
-                                            ),
-                                        shape = CircleShape
-                                    )
-                            )
-
-                            Box(
-                                modifier = Modifier.fillMaxSize(),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.Center
-                                ) {
-                                    Icon(
-                                        imageVector =
-                                            Icons.Filled.Star,
-                                        contentDescription = null,
-                                        tint =
-                                            MaterialTheme
-                                                .colorScheme
-                                                .onPrimary,
-                                        modifier =
-                                            Modifier.size(
-                                                scaledIconSize(16.dp)
                                             )
                                     )
+                            )
+                            Spacer(Modifier.height(6.dp))
+                        }
 
-                                    Spacer(Modifier.width(6.dp))
-
-                                    Text(
-                                        text =
-                                            if (isEnglish) {
-                                                "Go to Belt Selection"
-                                            } else {
-                                                "מעבר לבחירת חגורה"
-                                            },
-                                        fontWeight =
-                                            FontWeight.ExtraBold,
-                                        color =
-                                            MaterialTheme
-                                                .colorScheme
-                                                .onPrimary,
-                                        style =
-                                            KmiTypography.action,
-                                        maxLines = 1,
-                                        overflow =
-                                            TextOverflow.Ellipsis
-                                    )
+                        // ===== כרטיס הודעות ואירועים =====
+                        item {
+                            HomeCoachNoticesCard(
+                                homeNotices =
+                                    homeNotices,
+                                hasRecentCoachMessages =
+                                    messageCenterMessages
+                                        .isNotEmpty(),
+                                unreadCount =
+                                    messageUnreadCount,
+                                isEnglish =
+                                    isEnglish,
+                                onOpen = {
+                                    messageCenterViewModel.stopListening()
+                                    onOpenMessageCenter()
                                 }
-                            }
+                            )
                         }
                     }
-                }
 
-                Spacer(Modifier.height(2.dp))
-            }
+                    Spacer(Modifier.height(1.dp))
 
-            val homeQuickMenuActions =
-                listOf(
-                    FloatingQuickMenuAction(
-                        titleHe = "ארכיון\nאימונים",
-                        titleEn = "Training\nArchive",
-                        icon = Icons.Filled.History,
-                        action = {
-                            clickSound()
-                            haptic(true)
-                            onOpenTrainingArchive()
-                        },
-                        isLocked = !hasFullAccess,
-                        iconTint = Color(0xFF6D4CFF),
-                        iconBackground = Color(0xFFF0ECFF)
-                    ),
-                    FloatingQuickMenuAction(
-                        titleHe = "אימונים\nחופשיים",
-                        titleEn = "Free\nTrainings",
-                        icon = Icons.Filled.Add,
-                        action = {
-                            clickSound()
-                            haptic(true)
-
-                            onOpenFreeSessions(
-                                freeBranchUi,
-                                freeGroupKeyUi,
-                                freeUidUi,
-                                freeNameUi
-                            )
-                        },
-                        isLocked = !hasFullAccess,
-                        iconTint = Color(0xFF00897B),
-                        iconBackground = Color(0xFFE0F2F1)
-                    )
-                )
-
-            if (showFab) {
-                FloatingQuickMenu(
-                    belt = activeHomeBelt,
-                    modifier = Modifier
-                        .align(Alignment.CenterStart),
-                    expanded = fabExpanded,
-                    onExpandedChange = { expanded ->
-                        fabExpanded = expanded
-                    },
-                    triggerMode =
-                        QuickMenuTriggerMode.SideRail,
-                    includePractice = false,
-                    includeAllLists = false,
-                    includeSummary = false,
-                    includeReset = false,
-                    customActions =
-                        homeQuickMenuActions,
-                    accentColorOverride =
-                        homeBeltAccent,
-                    hasFullAccess =
-                        hasFullAccess,
-                    onLockedItemClick = {
-                        clickSound()
-                        haptic(true)
-                        onOpenSubscription()
-                    },
-                    onWeakPoints = {},
-                    onAllLists = {},
-                    onPractice = {},
-                    onSummary = {},
-                    onReset = {},
-                    onVoice = {},
-                    onPdf = {}
-                )
-            }
-
-            if (showCoachMessagesDialog) {
-                val noticeColors =
-                    MaterialTheme.colorScheme
-
-                val noticeAccent =
-                    noticeColors.primary
-
-                val noticeCardBrush =
-                    Brush.linearGradient(
-                        colors = listOf(
-                            noticeColors.surface.copy(
-                                alpha = 0.97f
-                            ),
-                            noticeColors.surfaceVariant.copy(
-                                alpha = 0.92f
-                            ),
-                            noticeAccent.copy(
-                                alpha = 0.10f
-                            )
-                        )
+                    val bubbleTransition = rememberInfiniteTransition(
+                        label = "homeBottomButtonBubbleTransition"
                     )
 
-                AlertDialog(
-                    onDismissRequest = {
-                        coachMessagesState.dismissDialog()
-                    },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 4.dp)
-                        .clip(
-                            RoundedCornerShape(30.dp)
-                        )
-                        .background(
-                            backgroundBrush
+                    val bubbleOffset by bubbleTransition.animateFloat(
+                        initialValue = -120f,
+                        targetValue = 320f,
+                        animationSpec = infiniteRepeatable(
+                            animation = tween(
+                                durationMillis = 2600,
+                                easing = LinearEasing
+                            ),
+                            repeatMode = RepeatMode.Restart
                         ),
-                    shape =
-                        RoundedCornerShape(30.dp),
-                    containerColor =
-                        Color.Transparent,
-                    tonalElevation = 0.dp,
-                    title = {
-                        Column(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalAlignment =
-                                Alignment.CenterHorizontally
-                        ) {
-                            Surface(
-                                shape = RoundedCornerShape(999.dp),
-                                color =
-                                    noticeAccent.copy(alpha = 0.14f),
-                                tonalElevation = 0.dp,
-                                shadowElevation = 0.dp
-                            ) {
-                                Icon(
-                                    imageVector =
-                                        Icons.Filled.Email,
-                                    contentDescription = null,
-                                    tint = noticeAccent,
-                                    modifier =
-                                        Modifier
-                                            .size(
-                                                scaledIconSize(40.dp)
-                                            )
-                                            .padding(
-                                                scaledIconSize(9.dp)
-                                            )
-                                )
-                            }
+                        label = "homeBottomButtonBubbleOffset"
+                    )
 
-                            Spacer(Modifier.height(10.dp))
-
-                            Surface(
-                                modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(20.dp),
-                                color =
-                                    noticeColors
-                                        .surface
-                                        .copy(alpha = 0.94f),
-                                tonalElevation = 0.dp,
-                                shadowElevation = 0.dp,
-                                border =
-                                    BorderStroke(
-                                        width = 1.dp,
-                                        color =
-                                            noticeColors
-                                                .outline
-                                                .copy(alpha = 0.28f)
-                                    )
-                            ) {
-                                Text(
-                                    text =
-                                        if (isEnglish) {
-                                            "Recent messages and events"
-                                        } else {
-                                            "הודעות ואירועים אחרונים"
-                                        },
-                                    style =
-                                        KmiTypography.sectionTitle.copy(
-                                            fontWeight =
-                                                FontWeight.Black
-                                        ),
-                                    maxLines = 2,
-                                    overflow =
-                                        TextOverflow.Ellipsis,
-                                    color =
-                                        noticeColors
-                                            .onSurface,
-                                    textAlign = TextAlign.Center,
-                                    modifier = Modifier.padding(
-                                        horizontal = 14.dp,
-                                        vertical = 10.dp
-                                    )
-                                )
-                            }
-
-                            Spacer(Modifier.height(9.dp))
-
-                            Box(
-                                modifier = Modifier
-                                    .width(64.dp)
-                                    .height(3.dp)
-                                    .background(
-                                        brush =
-                                            Brush.horizontalGradient(
-                                                colors = listOf(
-                                                    noticeAccent,
-                                                    noticeColors.secondary
-                                                )
-                                            ),
-                                        shape =
-                                            RoundedCornerShape(999.dp)
-                                    )
-                            )
-                        }
-                    },
-                    text = {
-                        LazyColumn(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .heightIn(max = 430.dp),
-                            verticalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            if (homeNotices.isEmpty()) {
-                                item {
-                                    Surface(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        shape = RoundedCornerShape(20.dp),
-                                        color =
-                                            noticeColors.surfaceVariant.copy(
-                                                alpha = 0.88f
-                                            ),
-                                        tonalElevation = 0.dp,
-                                        shadowElevation = 0.dp
-                                    ) {
-                                        Column(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .padding(
-                                                    horizontal = 16.dp,
-                                                    vertical = 20.dp
-                                                ),
-                                            horizontalAlignment =
-                                                Alignment.CenterHorizontally
-                                        ) {
-                                            Icon(
-                                                imageVector =
-                                                    Icons.Filled.Email,
-                                                contentDescription = null,
-                                                tint =
-                                                    noticeAccent.copy(
-                                                        alpha = 0.78f
-                                                    ),
-                                                modifier =
-                                                    Modifier.size(
-                                                        KmiIconSize.large
-                                                    )
-                                            )
-
-                                            Spacer(Modifier.height(8.dp))
-
-                                            Text(
-                                                text =
-                                                    if (isEnglish) {
-                                                        "No messages right now."
-                                                    } else {
-                                                        "אין הודעות כרגע."
-                                                    },
-                                                color =
-                                                    noticeColors.onSurfaceVariant,
-                                                fontWeight =
-                                                    FontWeight.SemiBold,
-                                                textAlign = TextAlign.Center,
-                                                modifier =
-                                                    Modifier.fillMaxWidth()
-                                            )
-                                        }
-                                    }
-                                }
-                            } else {
-                                items(
-                                    items = homeNotices,
-                                    key = { notice ->
-                                        notice.id
-                                    }
-                                ) { message ->
-                                    Surface(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        shape = RoundedCornerShape(22.dp),
-                                        color = noticeColors.surface,
-                                        tonalElevation = 0.dp,
-                                        shadowElevation = 0.dp
-                                    ) {
-                                        Box(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .background(
-                                                    noticeCardBrush
-                                                )
-                                        ) {
-                                            Row(
-                                                modifier = Modifier.fillMaxWidth()
-                                            ) {
-                                                Box(
-                                                    modifier = Modifier
-                                                        .width(5.dp)
-                                                        .fillMaxHeight()
-                                                        .background(
-                                                            Brush.verticalGradient(
-                                                                colors = listOf(
-                                                                    noticeAccent,
-                                                                    noticeColors.secondary
-                                                                )
-                                                            )
-                                                        )
-                                                )
-
-                                                Column(
-                                                    modifier = Modifier
-                                                        .weight(1f)
-                                                        .padding(
-                                                            horizontal = 14.dp,
-                                                            vertical = 14.dp
-                                                        ),
-                                                    horizontalAlignment = if (isEnglish) {
-                                                        Alignment.Start
-                                                    } else {
-                                                        Alignment.End
-                                                    }
-                                                ) {
-                                                    Row(
-                                                        modifier = Modifier.fillMaxWidth(),
-                                                        verticalAlignment = Alignment.CenterVertically,
-                                                        horizontalArrangement = if (isEnglish) {
-                                                            Arrangement.Start
-                                                        } else {
-                                                            Arrangement.End
-                                                        }
-                                                    ) {
-                                                        if (isEnglish) {
-                                                            Surface(
-                                                                shape = CircleShape,
-                                                                color =
-                                                                    noticeAccent.copy(
-                                                                        alpha = 0.14f
-                                                                    ),
-                                                                tonalElevation = 0.dp,
-                                                                shadowElevation = 0.dp
-                                                            ) {
-                                                                Icon(
-                                                                    imageVector =
-                                                                        Icons.Filled.Person,
-                                                                    contentDescription =
-                                                                        null,
-                                                                    tint =
-                                                                        noticeAccent,
-                                                                    modifier =
-                                                                        Modifier
-                                                                            .size(
-                                                                                scaledIconSize(
-                                                                                    30.dp
-                                                                                )
-                                                                            )
-                                                                            .padding(
-                                                                                scaledIconSize(
-                                                                                    6.dp
-                                                                                )
-                                                                            )
-                                                                )
-                                                            }
-
-                                                            Spacer(Modifier.width(8.dp))
-                                                        }
-
-                                                        Text(
-                                                            text =
-                                                                homeCoachDisplayName(
-                                                                    realName =
-                                                                        message.coachName,
-                                                                    isEnglish =
-                                                                        isEnglish
-                                                                ),
-                                                            style =
-                                                                KmiTypography.cardTitle,
-                                                            color = noticeAccent,
-                                                            maxLines = 1,
-                                                            overflow = TextOverflow.Ellipsis,
-                                                            textAlign =
-                                                                if (isEnglish) {
-                                                                    TextAlign.Left
-                                                                } else {
-                                                                    TextAlign.Right
-                                                                },
-                                                            modifier = Modifier.weight(1f)
-                                                        )
-
-                                                        if (!isEnglish) {
-                                                            Spacer(Modifier.width(8.dp))
-
-                                                            Surface(
-                                                                shape = CircleShape,
-                                                                color =
-                                                                    noticeAccent.copy(
-                                                                        alpha = 0.14f
-                                                                    ),
-                                                                tonalElevation = 0.dp,
-                                                                shadowElevation = 0.dp
-                                                            ) {
-                                                                Icon(
-                                                                    imageVector =
-                                                                        Icons.Filled.Person,
-                                                                    contentDescription =
-                                                                        null,
-                                                                    tint =
-                                                                        noticeAccent,
-                                                                    modifier =
-                                                                        Modifier
-                                                                            .size(
-                                                                                scaledIconSize(
-                                                                                    30.dp
-                                                                                )
-                                                                            )
-                                                                            .padding(
-                                                                                scaledIconSize(
-                                                                                    6.dp
-                                                                                )
-                                                                            )
-                                                                )
-                                                            }
-                                                        }
-                                                    }
-
-                                                    Spacer(Modifier.height(7.dp))
-
-                                                    Text(
-                                                        text = message.text,
-                                                        style = KmiTypography.body.copy(
-                                                            fontWeight = FontWeight.Bold
-                                                        ),
-                                                        color = noticeColors.onSurface,
-                                                        textAlign =
-                                                            if (isEnglish) {
-                                                                TextAlign.Left
-                                                            } else {
-                                                                TextAlign.Right
-                                                            },
-                                                        modifier = Modifier.fillMaxWidth()
-                                                    )
-
-                                                    val branchGroupLine = buildString {
-                                                        val b = message.branch.trim()
-                                                        val g = message.group.trim()
-
-                                                        if (b.isNotBlank()) {
-                                                            append(if (isEnglish) "Branch: " else "סניף: ")
-                                                            append(b)
-                                                        }
-
-                                                        if (g.isNotBlank()) {
-                                                            if (isNotBlank()) append(" · ")
-                                                            append(if (isEnglish) "Group: " else "קבוצה: ")
-                                                            append(g)
-                                                        }
-                                                    }
-
-                                                    if (branchGroupLine.isNotBlank()) {
-                                                        Spacer(Modifier.height(8.dp))
-
-                                                        Surface(
-                                                            shape =
-                                                                RoundedCornerShape(18.dp),
-                                                            color =
-                                                                noticeAccent.copy(
-                                                                    alpha = 0.12f
-                                                                ),
-                                                            tonalElevation = 0.dp,
-                                                            shadowElevation = 0.dp
-                                                        ) {
-                                                            Text(
-                                                                text = branchGroupLine,
-                                                                style =
-                                                                    KmiTypography.secondary.copy(
-                                                                        fontWeight =
-                                                                            FontWeight.SemiBold
-                                                                    ),
-                                                                color =
-                                                                    noticeColors.onSurfaceVariant,
-                                                                maxLines = 2,
-                                                                overflow = TextOverflow.Ellipsis,
-                                                                textAlign =
-                                                                    if (isEnglish) {
-                                                                        TextAlign.Left
-                                                                    } else {
-                                                                        TextAlign.Right
-                                                                    },
-                                                                modifier = Modifier
-                                                                    .fillMaxWidth()
-                                                                    .padding(
-                                                                        horizontal = 10.dp,
-                                                                        vertical = 5.dp
-                                                                    )
-                                                            )
-                                                        }
-                                                    }
-
-                                                    val timeText = message.sentAt?.let {
-                                                        SimpleDateFormat(
-                                                            "dd/MM/yyyy · HH:mm",
-                                                            Locale.forLanguageTag("he-IL")
-                                                        ).format(it)
-                                                    }.orEmpty()
-
-                                                    if (timeText.isNotBlank()) {
-                                                        Spacer(Modifier.height(9.dp))
-
-                                                        Row(
-                                                            modifier = Modifier.fillMaxWidth(),
-                                                            verticalAlignment = Alignment.CenterVertically,
-                                                            horizontalArrangement = if (isEnglish) {
-                                                                Arrangement.Start
-                                                            } else {
-                                                                Arrangement.End
-                                                            }
-                                                        ) {
-                                                            Surface(
-                                                                shape =
-                                                                    RoundedCornerShape(999.dp),
-                                                                color =
-                                                                    noticeColors.surfaceVariant
-                                                                        .copy(alpha = 0.82f),
-                                                                tonalElevation = 0.dp,
-                                                                shadowElevation = 0.dp
-                                                            ) {
-                                                                Row(
-                                                                    modifier = Modifier.padding(
-                                                                        horizontal = 9.dp,
-                                                                        vertical = 4.dp
-                                                                    ),
-                                                                    verticalAlignment = Alignment.CenterVertically,
-                                                                    horizontalArrangement = Arrangement.spacedBy(
-                                                                        5.dp
-                                                                    )
-                                                                ) {
-                                                                    Icon(
-                                                                        imageVector = Icons.Filled.DateRange,
-                                                                        contentDescription = null,
-                                                                        tint =
-                                                                            noticeColors.onSurfaceVariant,
-                                                                        modifier =
-                                                                            Modifier.size(
-                                                                                scaledIconSize(
-                                                                                    12.dp
-                                                                                )
-                                                                            )
-                                                                    )
-
-                                                                    Text(
-                                                                        text = timeText,
-                                                                        style =
-                                                                            KmiTypography.caption,
-                                                                        color =
-                                                                            noticeColors.onSurfaceVariant,
-                                                                        maxLines = 1,
-                                                                        overflow =
-                                                                            TextOverflow.Ellipsis
-                                                                    )
-                                                                }
-                                                            }
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    },
-                    confirmButton = {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .navigationBarsPadding()
+                            .imePadding()
+                            .padding(horizontal = 12.dp, vertical = 1.dp)
+                    ) {
                         Surface(
                             onClick = {
                                 clickSound()
                                 haptic(true)
-                                coachMessagesState.dismissDialog()
+                                onContinue()
                             },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .heightIn(min = 56.dp),
                             shape = RoundedCornerShape(18.dp),
-                            color = noticeAccent,
                             tonalElevation = 0.dp,
-                            shadowElevation = 0.dp
-                        ) {
-                            Row(
-                                modifier = Modifier
+                            shadowElevation = 0.dp,
+                            modifier =
+                                Modifier
                                     .fillMaxWidth()
-                                    .padding(
-                                        horizontal = 18.dp,
-                                        vertical = 14.dp
-                                    ),
-                                horizontalArrangement =
-                                    Arrangement.Center,
-                                verticalAlignment =
-                                    Alignment.CenterVertically
+                                    .heightIn(
+                                        min = 46.dp,
+                                        max = 58.dp
+                                    )
+                                    .border(
+                                        width = 1.dp,
+                                        brush = Brush.linearGradient(
+                                            colors = listOf(
+                                                MaterialTheme.colorScheme.onPrimary.copy(
+                                                    alpha = 0.85f
+                                                ),
+                                                MaterialTheme.colorScheme.onPrimary.copy(
+                                                    alpha = 0.25f
+                                                ),
+                                                MaterialTheme.colorScheme.onPrimary.copy(
+                                                    alpha = 0.85f
+                                                )
+                                            )
+                                        ),
+                                        shape = RoundedCornerShape(18.dp)
+                                    )
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .background(
+                                        brush =
+                                            kmiGraniteActionBrush()
+                                    )
                             ) {
 
-                                Text(
-                                    text =
-                                        if (isEnglish) {
-                                            "Close"
-                                        } else {
-                                            "סגור"
-                                        },
-                                    style =
-                                        KmiTypography.cardTitle,
-                                    fontWeight =
-                                        FontWeight.ExtraBold,
-                                    color =
-                                        noticeColors.onPrimary,
-                                    textAlign = TextAlign.Center
+                                Box(
+                                    modifier = Modifier
+                                        .offset(x = bubbleOffset.dp)
+                                        .size(140.dp)
+                                        .background(
+                                            brush =
+                                                Brush.radialGradient(
+                                                    colors =
+                                                        listOf(
+                                                            kmiGraniteActionHighlightColor(),
+                                                            Color.Transparent
+                                                        )
+                                                ),
+                                            shape = CircleShape
+                                        )
                                 )
+
+                                Box(
+                                    modifier = Modifier.fillMaxSize(),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.Center
+                                    ) {
+                                        Icon(
+                                            imageVector =
+                                                Icons.Filled.Star,
+                                            contentDescription = null,
+                                            tint =
+                                                MaterialTheme
+                                                    .colorScheme
+                                                    .onPrimary,
+                                            modifier =
+                                                Modifier.size(
+                                                    scaledIconSize(16.dp)
+                                                )
+                                        )
+
+                                        Spacer(Modifier.width(6.dp))
+
+                                        Text(
+                                            text =
+                                                if (isEnglish) {
+                                                    "Go to Belt Selection"
+                                                } else {
+                                                    "מעבר לבחירת חגורה"
+                                                },
+                                            fontWeight =
+                                                FontWeight.ExtraBold,
+                                            color =
+                                                MaterialTheme
+                                                    .colorScheme
+                                                    .onPrimary,
+                                            style =
+                                                KmiTypography.action,
+                                            maxLines = 1,
+                                            overflow =
+                                                TextOverflow.Ellipsis
+                                        )
+                                    }
+                                }
                             }
                         }
                     }
-                )
-            }
 
-// ===== דיאלוג תרגיל מהחיפוש =====
-            pickedKey?.let { key ->
-                val (belt, topic, item) = parseSearchKey(key)
-
-                val displayName = ExerciseTitleFormatter
-                    .displayName(item)
-                    .ifBlank { item }
-
-                val favoriteId = remember(item) { normalizeFavoriteId(item) }
-
-                val favorites: Set<String> by FavoritesStore
-                    .favoritesFlow
-                    .collectAsState(initial = emptySet())
-
-                val isFavorite = favorites.contains(favoriteId)
-
-                val noteKey = remember(belt, topic, favoriteId) {
-                    "note_${belt.id}_${topic.trim()}_${favoriteId}"
+                    Spacer(Modifier.height(2.dp))
                 }
 
-                var noteText by remember(noteKey, notesRefreshKey) {
-                    mutableStateOf(notePrefs.getString(noteKey, "").orEmpty())
-                }
+                val homeQuickMenuActions =
+                    listOf(
+                        FloatingQuickMenuAction(
+                            titleHe = "ארכיון\nאימונים",
+                            titleEn = "Training\nArchive",
+                            icon = Icons.Filled.History,
+                            action = {
+                                clickSound()
+                                haptic(true)
+                                onOpenTrainingArchive()
+                            },
+                            isLocked = !hasFullAccess,
+                            iconTint = Color(0xFF6D4CFF),
+                            iconBackground = Color(0xFFF0ECFF)
+                        ),
+                        FloatingQuickMenuAction(
+                            titleHe = "אימונים\nחופשיים",
+                            titleEn = "Free\nTrainings",
+                            icon = Icons.Filled.Add,
+                            action = {
+                                clickSound()
+                                haptic(true)
 
-                var showNoteEditor by rememberSaveable(noteKey) {
-                    mutableStateOf(false)
-                }
+                                onOpenFreeSessions(
+                                    freeBranchUi,
+                                    freeGroupKeyUi,
+                                    freeUidUi,
+                                    freeNameUi
+                                )
+                            },
+                            isLocked = !hasFullAccess,
+                            iconTint = Color(0xFF00897B),
+                            iconBackground = Color(0xFFE0F2F1)
+                        )
+                    )
 
-                val explanation = remember(belt, item, topic, isEnglish) {
-                    findExplanationForHit(
-                        belt = belt,
-                        rawItem = item,
-                        topic = topic,
-                        isEnglish = isEnglish
+                if (showFab) {
+                    FloatingQuickMenu(
+                        belt = activeHomeBelt,
+                        modifier = Modifier
+                            .align(Alignment.CenterStart),
+                        expanded = fabExpanded,
+                        onExpandedChange = { expanded ->
+                            fabExpanded = expanded
+                        },
+                        triggerMode =
+                            QuickMenuTriggerMode.SideRail,
+                        includePractice = false,
+                        includeAllLists = false,
+                        includeSummary = false,
+                        includeReset = false,
+                        customActions =
+                            homeQuickMenuActions,
+                        accentColorOverride =
+                            homeBeltAccent,
+                        hasFullAccess =
+                            hasFullAccess,
+                        onLockedItemClick = {
+                            clickSound()
+                            haptic(true)
+                            onOpenSubscription()
+                        },
+                        onWeakPoints = {},
+                        onAllLists = {},
+                        onPractice = {},
+                        onSummary = {},
+                        onReset = {},
+                        onVoice = {},
+                        onPdf = {}
                     )
                 }
 
-                ExerciseExplanationDialog(
-                    title = if (isEnglish) {
-                        ExerciseTitlesEn.getOrSame(displayName)
-                    } else {
-                        displayName
-                    },
-                    beltLabel = if (isEnglish) "(${belt.en})" else "(${belt.heb})",
-                    explanation = explanation,
-                    noteText = noteText,
-                    isFavorite = isFavorite,
-                    accentColor = belt.color,
-                    isEnglish = isEnglish,
-                    backgroundBrush = Brush.verticalGradient(
-                        colors = listOf(
-                            MaterialTheme.colorScheme.surface,
-                            lerp(
-                                MaterialTheme.colorScheme.surface,
-                                belt.color,
-                                0.12f
-                            ),
-                            lerp(
-                                MaterialTheme.colorScheme.surface,
-                                belt.color,
-                                0.06f
-                            ),
-                            MaterialTheme.colorScheme.surface
-                        )
-                    ),
-                    onDismiss = {
-                        clickSound()
-                        haptic(true)
-                        pickedKey = null
-                        showNoteEditor = false
-                    },
-                    onEditNote = {
-                        clickSound()
-                        haptic(true)
-                        showNoteEditor = true
-                    },
-                    onDeleteNote = {
-                        clickSound()
-                        haptic(true)
+// ===== דיאלוג תרגיל מהחיפוש =====
+                pickedKey?.let { key ->
+                    val (belt, topic, item) = parseSearchKey(key)
 
-                        noteText = ""
-                        saveHomeExerciseNote(noteKey, "")
-                    },
-                    onToggleFavorite = {
-                        clickSound()
-                        haptic(true)
-                        FavoritesStore.toggle(favoriteId)
+                    val displayName = ExerciseTitleFormatter
+                        .displayName(item)
+                        .ifBlank { item }
+
+                    val favoriteId = remember(item) { normalizeFavoriteId(item) }
+
+                    val favorites: Set<String> by FavoritesStore
+                        .favoritesFlow
+                        .collectAsState(initial = emptySet())
+
+                    val isFavorite = favorites.contains(favoriteId)
+
+                    val noteKey = remember(belt, topic, favoriteId) {
+                        "note_${belt.id}_${topic.trim()}_${favoriteId}"
                     }
-                )
 
-                if (showNoteEditor) {
-                    ExerciseNoteEditorDialog(
-                        exerciseTitle = if (isEnglish) {
+                    var noteText by remember(noteKey, notesRefreshKey) {
+                        mutableStateOf(notePrefs.getString(noteKey, "").orEmpty())
+                    }
+
+                    var showNoteEditor by rememberSaveable(noteKey) {
+                        mutableStateOf(false)
+                    }
+
+                    val explanation = remember(belt, item, topic, isEnglish) {
+                        findExplanationForHit(
+                            belt = belt,
+                            rawItem = item,
+                            topic = topic,
+                            isEnglish = isEnglish
+                        )
+                    }
+
+                    ExerciseExplanationDialog(
+                        title = if (isEnglish) {
                             ExerciseTitlesEn.getOrSame(displayName)
                         } else {
                             displayName
                         },
+                        beltLabel = if (isEnglish) "(${belt.en})" else "(${belt.heb})",
+                        explanation = explanation,
                         noteText = noteText,
-                        isEnglish = isEnglish,
+                        isFavorite = isFavorite,
                         accentColor = belt.color,
-                        onNoteChange = { noteText = it },
+                        isEnglish = isEnglish,
+                        backgroundBrush = Brush.verticalGradient(
+                            colors = listOf(
+                                MaterialTheme.colorScheme.surface,
+                                lerp(
+                                    MaterialTheme.colorScheme.surface,
+                                    belt.color,
+                                    0.12f
+                                ),
+                                lerp(
+                                    MaterialTheme.colorScheme.surface,
+                                    belt.color,
+                                    0.06f
+                                ),
+                                MaterialTheme.colorScheme.surface
+                            )
+                        ),
                         onDismiss = {
+                            clickSound()
+                            haptic(true)
+                            pickedKey = null
                             showNoteEditor = false
                         },
-                        onSave = {
+                        onEditNote = {
+                            clickSound()
+                            haptic(true)
+                            showNoteEditor = true
+                        },
+                        onDeleteNote = {
                             clickSound()
                             haptic(true)
 
-                            val cleanNote = noteText.trim()
-                            noteText = cleanNote
-
-                            saveHomeExerciseNote(noteKey, cleanNote)
-
-                            showNoteEditor = false
+                            noteText = ""
+                            saveHomeExerciseNote(noteKey, "")
+                        },
+                        onToggleFavorite = {
+                            clickSound()
+                            haptic(true)
+                            FavoritesStore.toggle(favoriteId)
                         }
                     )
+
+                    if (showNoteEditor) {
+                        ExerciseNoteEditorDialog(
+                            exerciseTitle = if (isEnglish) {
+                                ExerciseTitlesEn.getOrSame(displayName)
+                            } else {
+                                displayName
+                            },
+                            noteText = noteText,
+                            isEnglish = isEnglish,
+                            accentColor = belt.color,
+                            onNoteChange = { noteText = it },
+                            onDismiss = {
+                                showNoteEditor = false
+                            },
+                            onSave = {
+                                clickSound()
+                                haptic(true)
+
+                                val cleanNote = noteText.trim()
+                                noteText = cleanNote
+
+                                saveHomeExerciseNote(noteKey, cleanNote)
+
+                                showNoteEditor = false
+                            }
+                        )
+                    }
                 }
             }
         }
-    }
 
-    // 🔊 דיאלוג העוזר הקולי – מחוץ ל-Box כדי להיות מעל כל המסך
+        // 🔊 דיאלוג העוזר הקולי – מחוץ ל-Box כדי להיות מעל כל המסך
         if (showAiDialog) {
             AiAssistantDialog(
                 onDismiss = {
@@ -4018,10 +3505,10 @@ private fun TrainingCardCompact(
             )
         ) {
             Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 10.dp, vertical = 8.dp)
-        ) {
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 10.dp, vertical = 8.dp)
+            ) {
                 val branchLine =
                     remember(
                         training.place,
@@ -4079,96 +3566,96 @@ private fun TrainingCardCompact(
                         }
                     }
 
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalAlignment =
-                    Alignment.CenterHorizontally
-            ) {
-                Text(
-                    text = branchLine,
-                    style = KmiTypography.cardTitle,
-                    color =
-                        MaterialTheme.colorScheme.onSurface,
-                    textAlign = TextAlign.Center,
+                Column(
                     modifier = Modifier.fillMaxWidth(),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-
-                if (groupLine.isNotBlank()) {
+                    horizontalAlignment =
+                        Alignment.CenterHorizontally
+                ) {
                     Text(
-                        text = groupLine,
-                        style = KmiTypography.secondary,
+                        text = branchLine,
+                        style = KmiTypography.cardTitle,
                         color =
-                            MaterialTheme.colorScheme.onSurfaceVariant,
+                            MaterialTheme.colorScheme.onSurface,
                         textAlign = TextAlign.Center,
                         modifier = Modifier.fillMaxWidth(),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
+
+                    if (groupLine.isNotBlank()) {
+                        Text(
+                            text = groupLine,
+                            style = KmiTypography.secondary,
+                            color =
+                                MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.fillMaxWidth(),
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+
+                    Text(
+                        text = dateTimeText,
+                        style = KmiTypography.secondary.copy(
+                            fontWeight = FontWeight.Bold
+                        ),
+                        color =
+                            MaterialTheme.colorScheme.onSurface,
+                        textAlign = TextAlign.Center,
+                        maxLines = 1,
+                        softWrap = false,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.fillMaxWidth()
+                    )
                 }
 
-                Text(
-                    text = dateTimeText,
-                    style = KmiTypography.secondary.copy(
-                        fontWeight = FontWeight.Bold
-                    ),
-                    color =
-                        MaterialTheme.colorScheme.onSurface,
-                    textAlign = TextAlign.Center,
-                    maxLines = 1,
-                    softWrap = false,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
-
-            val statusMessage =
-                when {
-                    activeOverride?.isCancelled == true ->
-                        if (isEnglish) {
-                            "Cancelled by coach"
-                        } else {
-                            "בוטל על ידי המאמן"
-                        }
-
-                    isTrainingOngoing ->
-                        if (isEnglish) {
-                            "Training in progress"
-                        } else {
-                            "האימון מתקיים עכשיו"
-                        }
-
-                    countdownMinutes != null ->
-                        if (isEnglish) {
-                            if (countdownMinutes == 1) {
-                                "Training starts in 1 minute"
+                val statusMessage =
+                    when {
+                        activeOverride?.isCancelled == true ->
+                            if (isEnglish) {
+                                "Cancelled by coach"
                             } else {
-                                "Training starts in $countdownMinutes minutes"
+                                "בוטל על ידי המאמן"
                             }
-                        } else {
-                            if (countdownMinutes == 1) {
-                                "עוד דקה האימון מתחיל"
+
+                        isTrainingOngoing ->
+                            if (isEnglish) {
+                                "Training in progress"
                             } else {
-                                "עוד $countdownMinutes דקות האימון מתחיל"
+                                "האימון מתקיים עכשיו"
                             }
-                        }
 
-                    activeOverride?.hasChangedTime == true ->
-                        if (isEnglish) {
-                            "Training time changed"
-                        } else {
-                            "שעת האימון שונתה"
-                        }
+                        countdownMinutes != null ->
+                            if (isEnglish) {
+                                if (countdownMinutes == 1) {
+                                    "Training starts in 1 minute"
+                                } else {
+                                    "Training starts in $countdownMinutes minutes"
+                                }
+                            } else {
+                                if (countdownMinutes == 1) {
+                                    "עוד דקה האימון מתחיל"
+                                } else {
+                                    "עוד $countdownMinutes דקות האימון מתחיל"
+                                }
+                            }
 
-                    else ->
-                        status.displayText(isEnglish)
-                }
+                        activeOverride?.hasChangedTime == true ->
+                            if (isEnglish) {
+                                "Training time changed"
+                            } else {
+                                "שעת האימון שונתה"
+                            }
 
-            val ongoingPulseTransition =
-                rememberInfiniteTransition(
-                    label = "ongoingTrainingStatusPulse"
-                )
+                        else ->
+                            status.displayText(isEnglish)
+                    }
+
+                val ongoingPulseTransition =
+                    rememberInfiniteTransition(
+                        label = "ongoingTrainingStatusPulse"
+                    )
 
                 val ongoingStatusAlpha by
                 ongoingPulseTransition.animateFloat(
@@ -4183,12 +3670,12 @@ private fun TrainingCardCompact(
                     label = "ongoingTrainingStatusAlpha"
                 )
 
-            val statusAlpha =
-                if (isTrainingOngoing) {
-                    ongoingStatusAlpha
-                } else {
-                    1f
-                }
+                val statusAlpha =
+                    if (isTrainingOngoing) {
+                        ongoingStatusAlpha
+                    } else {
+                        1f
+                    }
 
                 if (statusMessage.isNotBlank()) {
                     val statusContentColor =
@@ -4253,51 +3740,51 @@ private fun TrainingCardCompact(
 
                     Spacer(Modifier.height(4.dp))
 
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.Center
-                ) {
-                    Surface(
-                        shape = RoundedCornerShape(999.dp),
-                        color = statusBackgroundColor,
-                        border = BorderStroke(
-                            width = 1.dp,
-                            color =
-                                when {
-                                    isTrainingOngoing ->
-                                        kmiSuccessColor()
-
-                                    countdownMinutes != null ->
-                                        kmiWarningColor()
-
-                                    else ->
-                                        statusContentColor.copy(
-                                            alpha = 0.18f
-                                        )
-                                }
-                        ),
-                        modifier = Modifier.graphicsLayer {
-                            alpha = statusAlpha
-                        }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.Center
                     ) {
-                        Text(
-                            text = statusMessage,
-                            modifier = Modifier.padding(
-                                horizontal = 14.dp,
-                                vertical = 5.dp
+                        Surface(
+                            shape = RoundedCornerShape(999.dp),
+                            color = statusBackgroundColor,
+                            border = BorderStroke(
+                                width = 1.dp,
+                                color =
+                                    when {
+                                        isTrainingOngoing ->
+                                            kmiSuccessColor()
+
+                                        countdownMinutes != null ->
+                                            kmiWarningColor()
+
+                                        else ->
+                                            statusContentColor.copy(
+                                                alpha = 0.18f
+                                            )
+                                    }
                             ),
-                            textAlign = TextAlign.Center,
-                            style = KmiTypography.caption.copy(
-                                fontWeight = FontWeight.Bold
-                            ),
-                            color = statusContentColor,
-                            maxLines = 1
-                        )
+                            modifier = Modifier.graphicsLayer {
+                                alpha = statusAlpha
+                            }
+                        ) {
+                            Text(
+                                text = statusMessage,
+                                modifier = Modifier.padding(
+                                    horizontal = 14.dp,
+                                    vertical = 5.dp
+                                ),
+                                textAlign = TextAlign.Center,
+                                style = KmiTypography.caption.copy(
+                                    fontWeight = FontWeight.Bold
+                                ),
+                                color = statusContentColor,
+                                maxLines = 1
+                            )
+                        }
                     }
                 }
-            }
 
-            Spacer(Modifier.height(4.dp))
+                Spacer(Modifier.height(4.dp))
 
                 NavigationChip(
                     address =
@@ -5176,10 +4663,10 @@ private fun shareHomePdf(
 
     val uri =
         FileProvider.getUriForFile(
-        context,
-        "${context.packageName}.fileprovider",
-        pdfFile
-    )
+            context,
+            "${context.packageName}.fileprovider",
+            pdfFile
+        )
 
     val sendIntent = Intent(Intent.ACTION_SEND).apply {
         type = "application/pdf"
