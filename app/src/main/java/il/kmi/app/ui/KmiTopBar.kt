@@ -206,7 +206,7 @@ fun KmiTopBar(
     showTopSearch: Boolean = true,
     showTopShare: Boolean = false,
 
-    titleMaxLines: Int = 1,
+    titleMaxLines: Int = 2,
     titleScale: Float = 1f,
 
     isInsideAssistant: Boolean = false,

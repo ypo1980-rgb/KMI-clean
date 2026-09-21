@@ -124,76 +124,84 @@ private fun applyBeltColors(
 private fun parseExerciseExplanationForUi(
     raw: String
 ): AnnotatedString {
-    val redStartTag = "[[RED_BOLD]]"
-    val redEndTag = "[[/RED_BOLD]]"
+    val redBoldStartTag = "[[RED_BOLD]]"
+    val redBoldEndTag = "[[/RED_BOLD]]"
 
-    val blueStartTag = "[[BLUE_BOLD]]"
-    val blueEndTag = "[[/BLUE_BOLD]]"
+    val blueBoldStartTag = "[[BLUE_BOLD]]"
+    val blueBoldEndTag = "[[/BLUE_BOLD]]"
+
+    val blueStartTag = "[[BLUE]]"
+    val blueEndTag = "[[/BLUE]]"
 
     val builder = AnnotatedString.Builder()
     var remaining = raw
 
     while (remaining.isNotEmpty()) {
-        val redStartIndex =
-            remaining.indexOf(redStartTag)
+        val redBoldStartIndex =
+            remaining.indexOf(redBoldStartTag)
+
+        val blueBoldStartIndex =
+            remaining.indexOf(blueBoldStartTag)
 
         val blueStartIndex =
             remaining.indexOf(blueStartTag)
 
-        /*
-         * בוחרים את תגית העיצוב הקרובה ביותר.
-         */
-        val useRedTag =
-            redStartIndex >= 0 &&
-                    (
-                            blueStartIndex < 0 ||
-                                    redStartIndex <
-                                    blueStartIndex
-                            )
+        val availableStartIndexes =
+            listOf(
+                redBoldStartIndex,
+                blueBoldStartIndex,
+                blueStartIndex
+            ).filter { index ->
+                index >= 0
+            }
 
-        val useBlueTag =
-            blueStartIndex >= 0 &&
-                    (
-                            redStartIndex < 0 ||
-                                    blueStartIndex <
-                                    redStartIndex
-                            )
+        val nextStartIndex =
+            availableStartIndexes.minOrNull()
 
-        if (!useRedTag && !useBlueTag) {
+        if (nextStartIndex == null) {
             builder.append(remaining)
             break
         }
 
+        val useRedBoldTag =
+            nextStartIndex == redBoldStartIndex
+
+        val useBlueBoldTag =
+            nextStartIndex == blueBoldStartIndex
+
         val startTag =
-            if (useRedTag) {
-                redStartTag
-            } else {
-                blueStartTag
+            when {
+                useRedBoldTag ->
+                    redBoldStartTag
+
+                useBlueBoldTag ->
+                    blueBoldStartTag
+
+                else ->
+                    blueStartTag
             }
 
         val endTag =
-            if (useRedTag) {
-                redEndTag
-            } else {
-                blueEndTag
-            }
+            when {
+                useRedBoldTag ->
+                    redBoldEndTag
 
-        val startIndex =
-            if (useRedTag) {
-                redStartIndex
-            } else {
-                blueStartIndex
+                useBlueBoldTag ->
+                    blueBoldEndTag
+
+                else ->
+                    blueEndTag
             }
 
         builder.append(
             remaining.substring(
                 startIndex = 0,
-                endIndex = startIndex
+                endIndex = nextStartIndex
             )
         )
 
         val contentStart =
-            startIndex +
+            nextStartIndex +
                     startTag.length
 
         val endIndex =
@@ -209,7 +217,7 @@ private fun parseExerciseExplanationForUi(
         if (endIndex < 0) {
             builder.append(
                 remaining.substring(
-                    startIndex
+                    nextStartIndex
                 )
             )
             break
@@ -224,20 +232,24 @@ private fun parseExerciseExplanationForUi(
         builder.pushStyle(
             SpanStyle(
                 color =
-                    if (useRedTag) {
+                    if (useRedBoldTag) {
                         Color(0xFFDC2626)
                     } else {
                         Color(0xFF2563EB)
                     },
                 fontWeight =
-                    FontWeight.Black
+                    if (
+                        useRedBoldTag ||
+                        useBlueBoldTag
+                    ) {
+                        FontWeight.Black
+                    } else {
+                        FontWeight.Normal
+                    }
             )
         )
 
-        builder.append(
-            highlightedText
-        )
-
+        builder.append(highlightedText)
         builder.pop()
 
         remaining =
@@ -250,7 +262,7 @@ private fun parseExerciseExplanationForUi(
          * RED_BOLD ממשיך להציג את עמידת המוצא
          * בשורה נפרדת.
          */
-        if (useRedTag) {
+        if (useRedBoldTag) {
             when {
                 remaining.startsWith(". ") -> {
                     builder.append(".\n")
@@ -281,8 +293,8 @@ private fun parseExerciseExplanationForUi(
     }
 
     /*
-     * לאחר עיבוד RED_BOLD ו־BLUE_BOLD מוסיפים
-     * את צבעי החגורות לאותו AnnotatedString.
+     * לאחר עיבוד תגיות הצבע מוסיפים את צבעי
+     * החגורות לאותו AnnotatedString.
      */
     return applyBeltColors(
         builder.toAnnotatedString()

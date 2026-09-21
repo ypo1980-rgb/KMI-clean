@@ -2999,6 +2999,54 @@ fun MainNavHost(
                             DrawerBridge.openSettings()
                         }
 
+                        VoiceAppCommand.OpenEditProfile -> {
+                            speakVoiceCommandFeedback(
+                                hebrewText = "מעביר למסך עריכת הפרופיל",
+                                englishText = "Opening profile editing"
+                            )
+
+                            nav.navigate(PROFILE_EDIT_ROUTE) {
+                                launchSingleTop = true
+                                restoreState = false
+                            }
+                        }
+
+                        VoiceAppCommand.OpenAccountRecovery -> {
+                            speakVoiceCommandFeedback(
+                                hebrewText = "מעביר למסך שחזור החשבון",
+                                englishText = "Opening account recovery"
+                            )
+
+                            nav.navigate(PROFILE_ACCOUNT_RECOVERY_ROUTE) {
+                                launchSingleTop = true
+                                restoreState = false
+                            }
+                        }
+
+                        VoiceAppCommand.OpenMembershipPayment -> {
+                            speakVoiceCommandFeedback(
+                                hebrewText = "מעביר למסך תשלום המנוי",
+                                englishText = "Opening membership payment"
+                            )
+
+                            nav.navigate(Route.MembershipPayment.route) {
+                                launchSingleTop = true
+                                restoreState = false
+                            }
+                        }
+
+                        VoiceAppCommand.OpenPayment -> {
+                            speakVoiceCommandFeedback(
+                                hebrewText = "מעביר למסך התשלום",
+                                englishText = "Opening payment"
+                            )
+
+                            nav.navigate(Route.Payment.route) {
+                                launchSingleTop = true
+                                restoreState = false
+                            }
+                        }
+
                         VoiceAppCommand.OpenProgress -> {
                             speakVoiceCommandFeedback(
                                 hebrewText = "מעביר למסך ההתקדמות",

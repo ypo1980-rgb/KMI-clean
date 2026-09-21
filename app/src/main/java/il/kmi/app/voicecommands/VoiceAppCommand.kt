@@ -45,6 +45,14 @@ sealed interface VoiceAppCommand {
 
     data object OpenSettings : VoiceAppCommand
 
+    data object OpenEditProfile : VoiceAppCommand
+
+    data object OpenAccountRecovery : VoiceAppCommand
+
+    data object OpenMembershipPayment : VoiceAppCommand
+
+    data object OpenPayment : VoiceAppCommand
+
     data object OpenProgress : VoiceAppCommand
 
     // לוח האימונים החודשי
@@ -143,6 +151,10 @@ object VoiceAppCommandParser {
          * כחיפוש חופשי לפי המילים "מסך סיכום".
          */
         resolveQuickMenuCommand(normalized)?.let { command ->
+            return command
+        }
+
+        resolveAccountAndPaymentCommand(normalized)?.let { command ->
             return command
         }
 
@@ -317,6 +329,81 @@ object VoiceAppCommandParser {
                 "monthly calendar"
             ) ->
                 VoiceAppCommand.OpenTrainings
+
+            else -> null
+        }
+    }
+
+    /**
+     * פקודות לחשבון ולתשלומים נבדקות לפני יעדי המגירה,
+     * כדי למנוע פתיחת מסך כללי במקום המסך המבוקש.
+     */
+    private fun resolveAccountAndPaymentCommand(
+        text: String
+    ): VoiceAppCommand? {
+        return when {
+            containsAny(
+                text,
+                "עריכת פרופיל",
+                "ערוך פרופיל",
+                "ערוך את הפרופיל",
+                "שינוי פרופיל",
+                "שנה את הפרופיל",
+                "עריכת פרטים אישיים",
+                "שינוי פרטים אישיים",
+                "edit profile",
+                "edit my profile",
+                "profile editing",
+                "change profile details"
+            ) ->
+                VoiceAppCommand.OpenEditProfile
+
+            containsAny(
+                text,
+                "שחזור חשבון",
+                "שחזר חשבון",
+                "שחזר את החשבון",
+                "שחזור פרטי חשבון",
+                "שחזור שם משתמש",
+                "שחזור סיסמה",
+                "איפוס סיסמה",
+                "account recovery",
+                "recover account",
+                "recover my account",
+                "forgot username",
+                "forgot password",
+                "reset password"
+            ) ->
+                VoiceAppCommand.OpenAccountRecovery
+
+            containsAny(
+                text,
+                "תשלום מנוי",
+                "שלם על מנוי",
+                "רכישת מנוי",
+                "רכוש מנוי",
+                "חידוש מנוי",
+                "חדש מנוי",
+                "membership payment",
+                "pay for membership",
+                "buy subscription",
+                "renew subscription"
+            ) ->
+                VoiceAppCommand.OpenMembershipPayment
+
+            containsAny(
+                text,
+                "ביצוע תשלום",
+                "בצע תשלום",
+                "מסך תשלום",
+                "פתח תשלום",
+                "תשלום חדש",
+                "make payment",
+                "payment screen",
+                "open payment",
+                "new payment"
+            ) ->
+                VoiceAppCommand.OpenPayment
 
             else -> null
         }

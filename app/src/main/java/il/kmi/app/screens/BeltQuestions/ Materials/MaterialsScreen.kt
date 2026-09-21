@@ -13,6 +13,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -211,9 +212,17 @@ private fun itemTitleForUi(topic: String, rawItem: String, lang: AppLanguage): S
             .trim()
 
     fun removeTopicPrefixOnlyWithSeparator(value: String): String {
-        if (topicTrim.isBlank()) return value
-
         val s = value.trim()
+
+        if (topicTrim.isBlank()) return s
+
+        // קוואלר הוא נושא ראשי, ושם הנושא הוא חלק משמות התרגילים.
+        if (
+            topicTrim == "קוואלר" ||
+            topicTrim == "קאוולר"
+        ) {
+            return s
+        }
 
         return when {
             s.startsWith("$topicTrim::") -> {
@@ -284,6 +293,10 @@ fun MaterialsScreen(
 ) {
 
     val context = LocalContext.current
+    val configuration = LocalConfiguration.current
+    val bottomListScrollSpace =
+        configuration.screenHeightDp.dp * 0.25f
+
     val langManager = remember {
         AppLanguageManager(context)
     }
@@ -3158,7 +3171,9 @@ fun MaterialsScreen(
                                         .fillMaxWidth()
                                         .weight(1f),
                                     verticalArrangement = Arrangement.spacedBy(0.dp),
-                                    contentPadding = PaddingValues(bottom = 12.dp)
+                                    contentPadding = PaddingValues(
+                                        bottom = bottomListScrollSpace
+                                    )
                                 ) {
                                     if (
                                         effectiveIsCoach &&
@@ -3545,11 +3560,7 @@ fun MaterialsScreen(
                                                                     style =
                                                                         KmiTypography.body.copy(
                                                                             fontWeight =
-                                                                                if (isHighlighted) {
-                                                                                    FontWeight.Bold
-                                                                                } else {
-                                                                                    FontWeight.SemiBold
-                                                                                }
+                                                                                FontWeight.SemiBold
                                                                         ),
                                                                     maxLines = 3,
                                                                     overflow =

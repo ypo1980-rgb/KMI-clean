@@ -3093,9 +3093,6 @@ object ExerciseIdentityRegistry {
                 "releases",
                 "releases_hugs",
                 "releases_hugs_body"
-            ),
-            aliases = setOf(
-                "שחרור מחביקה סגורה מאחור בהרמה"
             )
         ),
 
@@ -3162,6 +3159,22 @@ object ExerciseIdentityRegistry {
                  */
                 "שחרור מחביקת הצוואר מאחור",
                 "שחרור מחביקת הצואר מאחור"
+            )
+        ),
+
+        ExerciseIdentity(
+            id = "ex_226",
+            belt = Belt.GREEN,
+            hebrewTitle = "שחרור מחביקה סגורה מאחור בהרמה",
+            topicKeys = setOf(
+                "שחרורים",
+                "שחרורים__חביקות גוף",
+                "חביקות גוף",
+                "שחרורים__שחרורים מחביקות גוף",
+                "שחרורים מחביקות גוף",
+                "releases",
+                "releases_hugs",
+                "releases_hugs_body"
             )
         ),
 

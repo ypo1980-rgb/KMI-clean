@@ -2568,6 +2568,29 @@ private fun TopicsCardForBelt(
                                 mutableIntStateOf(0)
                             }
 
+                            val hasScrolledPastExpandedTopic by remember(
+                                isExpanded,
+                                title
+                            ) {
+                                derivedStateOf {
+                                    isExpanded &&
+                                            topicHeightPx > 0 &&
+                                            topicsScroll.value.toFloat() >=
+                                            topicTopPx + topicHeightPx
+                                }
+                            }
+
+                            LaunchedEffect(
+                                hasScrolledPastExpandedTopic
+                            ) {
+                                if (
+                                    hasScrolledPastExpandedTopic &&
+                                    expandedTopic == title
+                                ) {
+                                    expandedTopic = null
+                                }
+                            }
+
                             Surface(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -2680,6 +2703,10 @@ private fun TopicsCardForBelt(
                                                                 0f
                                                             }
                                                     }
+                                                    // שכבה אטומה שמסתירה תוכן הנגלל מאחורי הכותרת
+                                                    .background(
+                                                        topicSurfaceColor
+                                                    )
                                                     .clip(
                                                         RoundedCornerShape(14.dp)
                                                     )
@@ -3390,13 +3417,16 @@ private fun BeltArcPicker(
                     // ✅ רק לעיגול המרכזי: טבעת צבעונית מסתובבת מסביב
                     if (isCenter) {
                         RotatingOrbitRing(
-                            modifier = Modifier.fillMaxSize(),
+                            modifier =
+                                Modifier
+                                    .fillMaxSize()
+                                    .zIndex(1f),
                             base = circleColor
                         )
                     }
 
-                    // ✅ כדי שהטבעת לא “תכוסה” ע״י העיגול, מכניסים את העיגול פנימה קצת רק במרכז
-                    val ringPad = if (isCenter) 8.dp else 0.dp
+                    // העיגול הפנימי מוגדל, והטבעת מוצגת מעליו בגודלה המלא
+                    val ringPad = if (isCenter) 4.dp else 0.dp
 
                     Box(
                         modifier = Modifier
@@ -3407,8 +3437,15 @@ private fun BeltArcPicker(
                             .background(circleColor),
                         contentAlignment = Alignment.Center
                     ) {
+                        if (isCenter) {
+                            PremiumCenterShimmer(
+                                base = circleColor
+                            )
+                        }
+
                         val ctx = LocalContext.current
                         val lang = remember { AppLanguageManager(ctx) }.getCurrentLanguage()
+
                         if (isCenter) {
                             val clean =
                                 remember(
@@ -3442,7 +3479,10 @@ private fun BeltArcPicker(
 
                             Column(
                                 modifier =
-                                    Modifier.padding(8.dp),
+                                    Modifier
+                                        .fillMaxSize()
+                                        .padding(8.dp)
+                                        .absoluteOffset(y = (-3).dp),
                                 horizontalAlignment =
                                     Alignment.CenterHorizontally,
                                 verticalArrangement =
@@ -3505,6 +3545,93 @@ private fun BeltArcPicker(
     }
 }
 
+@Composable
+private fun PremiumCenterShimmer(
+    base: Color,
+    modifier: Modifier = Modifier
+) {
+    val transition =
+        rememberInfiniteTransition(
+            label = "premium-center-shimmer"
+        )
+
+    val shimmerPosition by transition.animateFloat(
+        initialValue = -0.8f,
+        targetValue = 1.8f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(
+                durationMillis = 2600,
+                easing = LinearEasing
+            ),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "premium-center-shimmer-position"
+    )
+
+    val shimmerColor =
+        if (base.luminance() > 0.72f) {
+            Color.Black
+        } else {
+            Color.White
+        }
+
+    Canvas(
+        modifier =
+            modifier.fillMaxSize()
+    ) {
+        val centerX =
+            size.width * shimmerPosition
+
+        val shimmerWidth =
+            size.width * 0.34f
+
+        val mainShimmer =
+            Brush.linearGradient(
+                colors = listOf(
+                    Color.Transparent,
+                    shimmerColor.copy(alpha = 0.08f),
+                    shimmerColor.copy(alpha = 0.30f),
+                    shimmerColor.copy(alpha = 0.08f),
+                    Color.Transparent
+                ),
+                start = Offset(
+                    x = centerX - shimmerWidth,
+                    y = size.height
+                ),
+                end = Offset(
+                    x = centerX + shimmerWidth,
+                    y = 0f
+                )
+            )
+
+        val centerGlow =
+            Brush.radialGradient(
+                colors = listOf(
+                    shimmerColor.copy(alpha = 0.18f),
+                    shimmerColor.copy(alpha = 0.06f),
+                    Color.Transparent
+                ),
+                center = Offset(
+                    x = centerX,
+                    y = size.height / 2f
+                ),
+                radius = size.width * 0.34f
+            )
+
+        drawRect(
+            brush = mainShimmer
+        )
+
+        drawCircle(
+            brush = centerGlow,
+            radius = size.width * 0.34f,
+            center = Offset(
+                x = centerX,
+                y = size.height / 2f
+            )
+        )
+    }
+}
 
 @Composable
 private fun RotatingOrbitRing(
@@ -3515,16 +3642,32 @@ private fun RotatingOrbitRing(
     val gapStroke = 7.dp
 
     val inf = rememberInfiniteTransition(label = "ring")
+
+    // סיבוב חלק ורגוע יותר
     val angle by inf.animateFloat(
         initialValue = 0f,
         targetValue = 360f,
         animationSpec = infiniteRepeatable(
             animation = tween(
-                durationMillis = 1600,
+                durationMillis = 2200,
                 easing = LinearEasing
             )
         ),
         label = "ring-angle"
+    )
+
+    // פעימת אור עדינה בזמן הסיבוב
+    val glowAlpha by inf.animateFloat(
+        initialValue = 0.48f,
+        targetValue = 0.92f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(
+                durationMillis = 900,
+                easing = LinearEasing
+            ),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "ring-glow"
     )
 
     /*
@@ -3595,36 +3738,62 @@ private fun RotatingOrbitRing(
         val strokePx = ringStroke.toPx()
         val inset = strokePx / 2f
 
-        // שכבת בסיס עדינה מתחת לטבעת המסתובבת
+        val ringSize = Size(
+            size.width - inset * 2,
+            size.height - inset * 2
+        )
+
+        // שכבת בסיס קבועה ועדינה
         drawArc(
-            color = ringColors.first().copy(alpha = 0.22f),
+            color =
+                ringColors
+                    .first()
+                    .copy(alpha = 0.16f),
             startAngle = 0f,
             sweepAngle = 360f,
             useCenter = false,
             topLeft = Offset(inset, inset),
-            size = Size(
-                size.width - inset * 2,
-                size.height - inset * 2
-            ),
+            size = ringSize,
             style = Stroke(
                 width = gapStroke.toPx()
             )
         )
 
-        // טבעת מסתובבת בגוונים של צבע החגורה בלבד
+        val highlightColor =
+            if (base.luminance() > 0.72f) {
+                Color.Black
+            } else {
+                Color.White
+            }
+
         rotate(degrees = angle) {
+            // הטבעת המדורגת המסתובבת
             drawArc(
                 brush = sweep,
                 startAngle = 0f,
                 sweepAngle = 360f,
                 useCenter = false,
                 topLeft = Offset(inset, inset),
-                size = Size(
-                    size.width - inset * 2,
-                    size.height - inset * 2
-                ),
+                size = ringSize,
                 style = Stroke(
                     width = strokePx,
+                    cap = StrokeCap.Round
+                )
+            )
+
+            // שובל בהיר וברור שמקיף את העיגול
+            drawArc(
+                color =
+                    highlightColor.copy(
+                        alpha = glowAlpha
+                    ),
+                startAngle = -22f,
+                sweepAngle = 78f,
+                useCenter = false,
+                topLeft = Offset(inset, inset),
+                size = ringSize,
+                style = Stroke(
+                    width = strokePx * 0.58f,
                     cap = StrokeCap.Round
                 )
             )
