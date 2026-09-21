@@ -17,6 +17,7 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 import il.kmi.app.KmiViewModel
@@ -26,6 +27,7 @@ import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.ui.draw.scale
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.graphicsLayer
@@ -2986,8 +2988,8 @@ fun MaterialsScreen(
                         .background(Color.Transparent)
                         .padding(
                             top = 4.dp,
-                            start = 12.dp,
-                            end = 12.dp
+                            start = 4.dp,
+                            end = 4.dp
                         )
                 ) {
                     Column(
@@ -3476,13 +3478,34 @@ fun MaterialsScreen(
                                                     .scale(scale)
                                                     .bringIntoViewRequester(bringer)
                                             ) {
+                                                val exerciseCardShape =
+                                                    RoundedCornerShape(15.dp)
+
                                                 Column(
                                                     modifier = Modifier
                                                         .fillMaxWidth()
-                                                        .heightIn(min = 56.dp)
                                                         .padding(
-                                                            horizontal = 4.dp,
-                                                            vertical = 2.dp
+                                                            horizontal = 0.dp,
+                                                            vertical = 3.dp
+                                                        )
+                                                        .background(
+                                                            color =
+                                                                MaterialTheme.colorScheme
+                                                                    .surface
+                                                                    .copy(alpha = 0.94f),
+                                                            shape = exerciseCardShape
+                                                        )
+                                                        .border(
+                                                            width = 1.dp,
+                                                            color =
+                                                                MaterialTheme.colorScheme
+                                                                    .outlineVariant
+                                                                    .copy(alpha = 0.50f),
+                                                            shape = exerciseCardShape
+                                                        )
+                                                        .padding(
+                                                            horizontal = 2.dp,
+                                                            vertical = 5.dp
                                                         )
                                                 ) {
 
@@ -3490,8 +3513,8 @@ fun MaterialsScreen(
                                                         modifier = Modifier
                                                             .fillMaxWidth()
                                                             .padding(
-                                                                start = 4.dp,
-                                                                end = 6.dp
+                                                                start = 2.dp,
+                                                                end = 2.dp
                                                             ),
                                                         horizontalAlignment =
                                                             if (isEnglish) {
@@ -3511,6 +3534,8 @@ fun MaterialsScreen(
                                                                 modifier = Modifier
                                                                     .fillMaxWidth()
                                                                     .padding(
+                                                                        start = 10.dp,
+                                                                        end = 3.dp,
                                                                         top = 2.dp,
                                                                         bottom = 2.dp
                                                                     ),
@@ -3654,7 +3679,7 @@ fun MaterialsScreen(
                                                     }
 
                                                     Spacer(
-                                                        Modifier.height(6.dp)
+                                                        Modifier.height(3.dp)
                                                     )
 
                                                     Box(
@@ -4068,24 +4093,9 @@ fun MaterialsScreen(
                                                     }
                                                 }
 
-                                                // קו מפריד בין התרגיל הנוכחי לתרגיל הבא.
-                                                // הקו לא מוצג אחרי התרגיל האחרון ברשימה.
-                                                if (index < filtered.lastIndex) {
-                                                    Box(
-                                                        modifier = Modifier
-                                                            .fillMaxWidth()
-                                                            .padding(
-                                                                horizontal = 14.dp
-                                                            )
-                                                            .height(1.dp)
-                                                            .background(
-                                                                color =
-                                                                    MaterialTheme.colorScheme
-                                                                        .outlineVariant
-                                                                        .copy(alpha = 0.72f)
-                                                            )
-                                                    )
-                                                }
+                                                Spacer(
+                                                    modifier = Modifier.height(1.dp)
+                                                )
 
                                                 // דיאלוג הערה
                                                 if (showNoteDialog) {
@@ -4991,7 +5001,7 @@ private fun MaterialsTopStatusCard(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(
-                        horizontal = 3.dp,
+                        horizontal = 1.dp,
                         vertical = 3.dp
                     ),
                 horizontalAlignment = Alignment.CenterHorizontally,
@@ -5036,6 +5046,7 @@ internal fun MaterialsExerciseStatusCard(
     isEnglish: Boolean,
     modifier: Modifier = Modifier,
     compact: Boolean = false,
+    infoWidth: Dp = 76.dp,
     info: @Composable () -> Unit,
     statuses: @Composable RowScope.() -> Unit
 ) {
@@ -5043,19 +5054,17 @@ internal fun MaterialsExerciseStatusCard(
 
     CompositionLocalProvider(
         LocalLayoutDirection provides
-                if (isEnglish) LayoutDirection.Ltr else LayoutDirection.Rtl
+                if (isEnglish) {
+                    LayoutDirection.Ltr
+                } else {
+                    LayoutDirection.Rtl
+                }
     ) {
         Surface(
             modifier = modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(14.dp),
-            color = colors.surface,
-            border = BorderStroke(
-                width = 1.dp,
-                color =
-                    colors.primary.copy(
-                        alpha = 0.20f
-                    )
-            ),
+            shape = RoundedCornerShape(12.dp),
+            color = Color.Transparent,
+            border = null,
             shadowElevation = 0.dp,
             tonalElevation = 0.dp
         ) {
@@ -5064,42 +5073,45 @@ internal fun MaterialsExerciseStatusCard(
                     .fillMaxWidth()
                     .height(
                         if (compact) {
-                            48.dp
+                            38.dp
                         } else {
-                            68.dp
+                            40.dp
                         }
+                    )
+                    .padding(
+                        horizontal = 1.dp,
+                        vertical = 1.dp
                     ),
-                verticalAlignment = Alignment.CenterVertically
+                verticalAlignment =
+                    Alignment.CenterVertically
             ) {
                 Row(
                     modifier = Modifier
-                        .weight(1f)
-                        .fillMaxHeight()
-                        .padding(
-                            horizontal = 2.dp,
-                            vertical = 3.dp
-                        ),
-                    horizontalArrangement = Arrangement.spacedBy(0.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    content = statuses
-                )
-
-                Box(
-                    modifier = Modifier
-                        .width(1.dp)
-                        .fillMaxHeight()
-                        .background(
-                            colors.primary.copy(alpha = 0.18f)
-                        )
-                )
-
-                Box(
-                    modifier = Modifier
-                        .width(50.dp)
+                        .fillMaxWidth()
                         .fillMaxHeight(),
-                    contentAlignment = Alignment.Center
+                    horizontalArrangement =
+                        Arrangement.spacedBy(
+                            space = 4.dp,
+                            alignment = Alignment.CenterHorizontally
+                        ),
+                    verticalAlignment =
+                        Alignment.CenterVertically
                 ) {
-                    info()
+                    statuses()
+
+                    Box(
+                        modifier = Modifier
+                            .width(infoWidth)
+                            .fillMaxHeight()
+                            .padding(
+                                horizontal = 1.dp,
+                                vertical = 1.dp
+                            ),
+                        contentAlignment =
+                            Alignment.Center
+                    ) {
+                        info()
+                    }
                 }
             }
         }
@@ -5132,9 +5144,54 @@ private fun MaterialsExerciseStatusOption(
             activeColor
         }
 
+    val optionShape =
+        RoundedCornerShape(7.dp)
+
+    val optionBackground =
+        if (selected) {
+            activeColor.copy(
+                alpha =
+                    if (dark) {
+                        0.18f
+                    } else {
+                        0.10f
+                    }
+            )
+        } else {
+            activeColor.copy(
+                alpha =
+                    if (dark) {
+                        0.08f
+                    } else {
+                        0.05f
+                    }
+            )
+        }
+
+    val optionBorder =
+        if (selected) {
+            accent.copy(alpha = 0.46f)
+        } else {
+            accent.copy(alpha = 0.16f)
+        }
+
     Box(
         modifier = modifier
             .fillMaxHeight()
+            .background(
+                color = optionBackground,
+                shape = optionShape
+            )
+            .border(
+                width =
+                    if (selected) {
+                        0.9.dp
+                    } else {
+                        0.7.dp
+                    },
+                color = optionBorder,
+                shape = optionShape
+            )
             .selectable(
                 selected = selected,
                 role =
@@ -5146,19 +5203,21 @@ private fun MaterialsExerciseStatusOption(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(
-                    horizontal = 2.dp,
-                    vertical = 3.dp
+                    horizontal = 1.dp,
+                    vertical = 1.dp
                 ),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
+            horizontalAlignment =
+                Alignment.CenterHorizontally,
+            verticalArrangement =
+                Arrangement.Center
         ) {
             if (showSymbol) {
                 Surface(
                     modifier = Modifier.size(
                         if (selected) {
-                            26.dp
+                            16.dp
                         } else {
-                            22.dp
+                            14.dp
                         }
                     ),
                     shape = CircleShape,
@@ -5172,51 +5231,61 @@ private fun MaterialsExerciseStatusOption(
                     shadowElevation = 0.dp
                 ) {
                     Box(
-                        contentAlignment = Alignment.Center
+                        contentAlignment =
+                            Alignment.Center
                     ) {
                         Text(
                             text = symbol,
-                            style = KmiTypography.caption.copy(
-                                fontWeight = FontWeight.ExtraBold
-                            ),
+                            style =
+                                KmiTypography.caption.copy(
+                                    fontWeight =
+                                        FontWeight.ExtraBold
+                                ),
                             color =
                                 if (selected) {
                                     Color.White
                                 } else {
                                     colors.onSurfaceVariant
                                 },
-                            textAlign = TextAlign.Center,
+                            textAlign =
+                                TextAlign.Center,
                             maxLines = 1
                         )
                     }
                 }
 
                 Spacer(
-                    modifier = Modifier.height(2.dp)
+                    modifier = Modifier.height(1.dp)
                 )
             }
 
             Text(
                 text = label,
-                style = KmiTypography.caption.copy(
-                    fontWeight =
-                        if (selected) {
-                            FontWeight.ExtraBold
-                        } else {
-                            FontWeight.Bold
-                        }
-                ),
+                style =
+                    KmiTypography.caption.copy(
+                        fontWeight =
+                            if (selected) {
+                                FontWeight.ExtraBold
+                            } else {
+                                FontWeight.Bold
+                            }
+                    ),
                 color =
                     if (selected) {
                         accent
                     } else {
                         colors.onSurfaceVariant
                     },
-                textAlign = TextAlign.Center,
+                textAlign =
+                    TextAlign.Center,
                 maxLines = 1,
-                overflow = TextOverflow.Ellipsis
+                overflow =
+                    TextOverflow.Ellipsis
             )
 
+            /*
+             * התאריך נשאר מתחת לסטטוס שנבחר.
+             */
             if (
                 selected &&
                 dateText.isNotBlank()
@@ -5229,15 +5298,21 @@ private fun MaterialsExerciseStatusOption(
                         text = dateText,
                         style =
                             KmiTypography.caption.copy(
-                                fontWeight = FontWeight.Bold
+                                fontSize =
+                                    KmiTypography.caption.fontSize *
+                                            0.82f,
+                                fontWeight =
+                                    FontWeight.Bold
                             ),
                         color =
                             accent.copy(
                                 alpha = 0.88f
                             ),
-                        textAlign = TextAlign.Center,
+                        textAlign =
+                            TextAlign.Center,
                         maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
+                        overflow =
+                            TextOverflow.Ellipsis
                     )
                 }
             }
@@ -5253,50 +5328,58 @@ internal fun TraineeMaterialStatusSelector(
     showSymbols: Boolean = true,
     onSelect: (TraineeMaterialStatus?) -> Unit
 ) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .fillMaxHeight(),
-        horizontalArrangement = Arrangement.spacedBy(0.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        listOf(
-            TraineeMaterialStatus.KNOWN,
-            TraineeMaterialStatus.PARTIALLY_KNOWN,
-            TraineeMaterialStatus.UNKNOWN
-        ).forEach { status ->
-            val selected = selectedStatus == status
-            MaterialsExerciseStatusOption(
-                selected = selected,
-                symbol = when (status) {
-                    TraineeMaterialStatus.KNOWN -> "✓"
-                    TraineeMaterialStatus.PARTIALLY_KNOWN -> "◐"
-                    TraineeMaterialStatus.UNKNOWN -> "×"
-                },
-                label = when (status) {
-                    TraineeMaterialStatus.KNOWN -> if (isEnglish) "Known" else "יודע"
-                    TraineeMaterialStatus.PARTIALLY_KNOWN -> if (isEnglish) "Partly" else "חלקית"
-                    TraineeMaterialStatus.UNKNOWN -> if (isEnglish) "Unknown" else "לא יודע"
-                },
-                dateText = dateText,
-                activeColor = when (status) {
-                    TraineeMaterialStatus.KNOWN -> Color(0xFF2F9B4E)
-                    TraineeMaterialStatus.PARTIALLY_KNOWN -> Color(0xFFB96B12)
-                    TraineeMaterialStatus.UNKNOWN -> Color(0xFFC64F55)
-                },
-                modifier = Modifier.weight(1f),
-                showSymbol = showSymbols,
-                onClick = {
-                    onSelect(
-                        if (selected) {
-                            null
-                        } else {
-                            status
-                        }
-                    )
-                }
-            )
-        }
+    listOf(
+        TraineeMaterialStatus.KNOWN,
+        TraineeMaterialStatus.PARTIALLY_KNOWN,
+        TraineeMaterialStatus.UNKNOWN
+    ).forEach { status ->
+        val selected = selectedStatus == status
+
+        MaterialsExerciseStatusOption(
+            selected = selected,
+            symbol = when (status) {
+                TraineeMaterialStatus.KNOWN -> "✓"
+                TraineeMaterialStatus.PARTIALLY_KNOWN -> "◐"
+                TraineeMaterialStatus.UNKNOWN -> "×"
+            },
+            label = when (status) {
+                TraineeMaterialStatus.KNOWN ->
+                    if (isEnglish) "Known" else "יודע"
+
+                TraineeMaterialStatus.PARTIALLY_KNOWN ->
+                    if (isEnglish) "Partly" else "חלקית"
+
+                TraineeMaterialStatus.UNKNOWN ->
+                    if (isEnglish) "Unknown" else "לא יודע"
+            },
+            dateText = dateText,
+            activeColor = when (status) {
+                TraineeMaterialStatus.KNOWN ->
+                    Color(0xFF2F9B4E)
+
+                TraineeMaterialStatus.PARTIALLY_KNOWN ->
+                    Color(0xFFB96B12)
+
+                TraineeMaterialStatus.UNKNOWN ->
+                    Color(0xFFC64F55)
+            },
+            modifier = Modifier
+                .width(76.dp)
+                .padding(
+                    horizontal = 2.dp,
+                    vertical = 1.dp
+                ),
+            showSymbol = showSymbols,
+            onClick = {
+                onSelect(
+                    if (selected) {
+                        null
+                    } else {
+                        status
+                    }
+                )
+            }
+        )
     }
 }
 
@@ -5308,6 +5391,7 @@ internal fun CoachMaterialStatusSelector(
     excluded: Boolean = false,
     isFav: Boolean = false,
     hasNote: Boolean = false,
+    infoWidth: Dp = 76.dp,
     onToggleExclude: () -> Unit = {},
     onInfo: () -> Unit,
     onToggleFavorite: () -> Unit = {},
@@ -5319,6 +5403,7 @@ internal fun CoachMaterialStatusSelector(
         isEnglish = isEnglish,
         modifier = modifier,
         compact = true,
+        infoWidth = infoWidth,
         info = {
             ItemFloatingActions(
                 isEnglish = isEnglish,
@@ -5359,7 +5444,12 @@ internal fun CoachMaterialStatusSelector(
                     CoachMaterialStatus.PRACTICED -> Color(0xFF6D4BD8)
                     else -> Color(0xFFB96B12)
                 },
-                modifier = Modifier.weight(1f),
+                modifier = Modifier
+                    .width(76.dp)
+                    .padding(
+                        horizontal = 2.dp,
+                        vertical = 1.dp
+                    ),
                 showSymbol = false,
                 onClick = {
                     if (selected || progress.selectedStatuses.size < 2) {
@@ -5520,15 +5610,18 @@ internal fun ItemFloatingActions(
     ) {
         Surface(
             onClick = { expanded = true },
-            shape = RoundedCornerShape(10.dp),
+            shape = RoundedCornerShape(7.dp),
             color = MaterialTheme.colorScheme.primary,
             shadowElevation = 0.dp,
             tonalElevation = 0.dp,
             border = null,
             modifier = Modifier
-                .width(42.dp)
+                .fillMaxWidth()
                 .fillMaxHeight()
-                .padding(vertical = 3.dp)
+                .padding(
+                    horizontal = 0.dp,
+                    vertical = 0.dp
+                )
                 .graphicsLayer {
                     scaleX = infoScale
                     scaleY = infoScale
@@ -5538,17 +5631,36 @@ internal fun ItemFloatingActions(
                 modifier = Modifier.fillMaxSize(),
                 contentAlignment = Alignment.Center
             ) {
-                Text(
-                    text = if (isEnglish) "ⓘ\nInfo" else "ⓘ\nמידע",
-                    textAlign = TextAlign.Center,
-                    style = KmiTypography.caption.copy(
-                        fontWeight = FontWeight.ExtraBold
-                    ),
-                    color = MaterialTheme.colorScheme.onPrimary,
-                    modifier = Modifier.graphicsLayer {
-                        rotationZ = infoRotation
-                    }
-                )
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .graphicsLayer {
+                            rotationZ = infoRotation
+                        },
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Info,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onPrimary,
+                        modifier = Modifier.size(12.dp)
+                    )
+
+                    Spacer(
+                        modifier = Modifier.height(1.dp)
+                    )
+
+                    Text(
+                        text = if (isEnglish) "Info" else "מידע",
+                        textAlign = TextAlign.Center,
+                        style = KmiTypography.caption.copy(
+                            fontWeight = FontWeight.ExtraBold
+                        ),
+                        color = MaterialTheme.colorScheme.onPrimary,
+                        maxLines = 1
+                    )
+                }
             }
         }
 
@@ -5589,7 +5701,8 @@ internal fun ItemFloatingActions(
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 14.dp, vertical = 5.dp),
+                        .padding(horizontal = 14.dp,
+                            vertical = 5.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = if (isEnglish) Arrangement.Start else Arrangement.End
                 ) {

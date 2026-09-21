@@ -22,10 +22,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.shape.AbsoluteRoundedCornerShape
-import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
@@ -76,11 +72,6 @@ import il.kmi.app.ui.dialogs.ExerciseNoteEditorDialog
 import il.kmi.app.domain.color
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material3.HorizontalDivider
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.scaleIn
-import androidx.compose.animation.scaleOut
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
@@ -102,9 +93,12 @@ import il.kmi.app.database.KmiDatabaseProvider
 import il.kmi.app.domain.ExerciseExplanationResolver
 import il.kmi.app.privacy.DemoPrivacy
 import il.kmi.app.training.TrainingCatalog
+import il.kmi.app.ui.FloatingQuickMenu
+import il.kmi.app.ui.FloatingQuickMenuAction
 import il.kmi.app.ui.KmiIconSize
 import il.kmi.app.ui.KmiTopBar
 import il.kmi.app.ui.KmiTypography
+import il.kmi.app.ui.QuickMenuTriggerMode
 import il.kmi.app.ui.pdf.KmiPdfDirection
 import il.kmi.app.ui.scaledIconSize
 import il.kmi.app.ui.pdf.KmiPdfFooter
@@ -643,51 +637,6 @@ fun HomeScreen(
                         Context.MODE_PRIVATE
                     )
                 }
-
-            val homeQuickMenuPositionKey =
-                "home_quick_menu_bottom_position_dp"
-
-            val homeQuickMenuDensity =
-                LocalDensity.current
-
-            val homeScreenHeightDp =
-                with(homeQuickMenuDensity) {
-                    LocalWindowInfo
-                        .current
-                        .containerSize
-                        .height
-                        .toDp()
-                        .value
-                }
-
-            val minHomeQuickMenuBottomDp =
-                24f
-
-            val openHomeQuickMenuReservedHeightDp =
-                300f
-
-            val homeQuickMenuTopSafetyMarginDp =
-                20f
-
-            val maxHomeQuickMenuBottomDp =
-                (
-                        homeScreenHeightDp -
-                                openHomeQuickMenuReservedHeightDp -
-                                homeQuickMenuTopSafetyMarginDp
-                        )
-                    .coerceAtLeast(140f)
-
-            var homeQuickMenuBottomDp by rememberSaveable {
-                mutableFloatStateOf(
-                    settingsSp.getFloat(
-                        homeQuickMenuPositionKey,
-                        86f
-                    ).coerceIn(
-                        minHomeQuickMenuBottomDp,
-                        maxHomeQuickMenuBottomDp
-                    )
-                )
-            }
 
             val activeHomeBelt =
                 remember(
@@ -2368,200 +2317,75 @@ fun HomeScreen(
                 Spacer(Modifier.height(2.dp))
             }
 
-            val lockSuffix = if (hasFullAccess) "" else " 🔒"
-
-            val quickMenuItems = listOf(
-                Triple(
-                    (
-                            if (isEnglish) {
-                                "Training Archive"
-                            } else {
-                                "ארכיון אימונים"
-                            }
-                            ) + lockSuffix,
-                    Icons.Filled.History
-                ) {
-                    clickSound()
-                    haptic(true)
-                    fabExpanded = false
-
-                    if (hasFullAccess) {
-                        onOpenTrainingArchive()
-                    } else {
-                        onOpenSubscription()
-                    }
-                },
-
-                Triple(
-                    (
-                            if (isEnglish) {
-                                "Free Trainings"
-                            } else {
-                                "אימונים חופשיים"
-                            }
-                            ) + lockSuffix,
-                    Icons.Filled.Add
-                ) {
-                    clickSound()
-                    haptic(true)
-                    fabExpanded = false
-
-                    if (hasFullAccess) {
-                        onOpenFreeSessions(
-                            freeBranchUi,
-                            freeGroupKeyUi,
-                            freeUidUi,
-                            freeNameUi
-                        )
-                    } else {
-                        onOpenSubscription()
-                    }
-                }
-            )
-
-            if (fabExpanded) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(Color.Transparent)
-                )
-            }
-
-            AnimatedVisibility(
-                visible = fabExpanded,
-                modifier = Modifier
-                    .align(Alignment.BottomStart)
-                    .wrapContentSize()
-                    .padding(
-                        bottom = homeQuickMenuBottomDp.dp
+            val homeQuickMenuActions =
+                listOf(
+                    FloatingQuickMenuAction(
+                        titleHe = "ארכיון\nאימונים",
+                        titleEn = "Training\nArchive",
+                        icon = Icons.Filled.History,
+                        action = {
+                            clickSound()
+                            haptic(true)
+                            onOpenTrainingArchive()
+                        },
+                        isLocked = !hasFullAccess,
+                        iconTint = Color(0xFF6D4CFF),
+                        iconBackground = Color(0xFFF0ECFF)
                     ),
-                enter =
-                    fadeIn(animationSpec = tween(180)) +
-                            scaleIn(
-                                initialScale = 0.92f,
-                                animationSpec = tween(220)
-                            ),
-                exit =
-                    fadeOut(animationSpec = tween(140)) +
-                            scaleOut(
-                                targetScale = 0.96f,
-                                animationSpec = tween(160)
-                            )
-            ) {
-                HomePremiumQuickMenuPanel(
-                    isEnglish = isEnglish,
-                    accentColor = homeBeltAccent,
-                    items = quickMenuItems,
-                    modifier =
-                        Modifier.pointerInput(
-                            minHomeQuickMenuBottomDp,
-                            maxHomeQuickMenuBottomDp,
-                            homeQuickMenuDensity
-                        ) {
-                            detectDragGesturesAfterLongPress(
-                                onDrag = { change, dragAmount ->
-                                    change.consume()
+                    FloatingQuickMenuAction(
+                        titleHe = "אימונים\nחופשיים",
+                        titleEn = "Free\nTrainings",
+                        icon = Icons.Filled.Add,
+                        action = {
+                            clickSound()
+                            haptic(true)
 
-                                    val dragDp =
-                                        dragAmount.y /
-                                                homeQuickMenuDensity.density
-
-                                    homeQuickMenuBottomDp =
-                                        (
-                                                homeQuickMenuBottomDp -
-                                                        dragDp
-                                                )
-                                            .coerceIn(
-                                                minHomeQuickMenuBottomDp,
-                                                maxHomeQuickMenuBottomDp
-                                            )
-                                },
-                                onDragEnd = {
-                                    settingsSp.edit {
-                                        putFloat(
-                                            homeQuickMenuPositionKey,
-                                            homeQuickMenuBottomDp
-                                        )
-                                    }
-                                },
-                                onDragCancel = {
-                                    settingsSp.edit {
-                                        putFloat(
-                                            homeQuickMenuPositionKey,
-                                            homeQuickMenuBottomDp
-                                        )
-                                    }
-                                }
+                            onOpenFreeSessions(
+                                freeBranchUi,
+                                freeGroupKeyUi,
+                                freeUidUi,
+                                freeNameUi
                             )
                         },
-                    onClose = {
-                        fabExpanded = false
-                    }
+                        isLocked = !hasFullAccess,
+                        iconTint = Color(0xFF00897B),
+                        iconBackground = Color(0xFFE0F2F1)
+                    )
                 )
-            }
 
-            AnimatedVisibility(
-                visible = showFab && !fabExpanded,
-                modifier = Modifier
-                    .align(Alignment.BottomStart)
-                    .padding(
-                        bottom = homeQuickMenuBottomDp.dp
-                    ),
-                enter = fadeIn() + scaleIn(),
-                exit = fadeOut() + scaleOut()
-            ) {
-                ModernHomeQuickFab(
-                    isEnglish = isEnglish,
-                    accentColor = homeBeltAccent,
-                    modifier = Modifier.pointerInput(
-                        minHomeQuickMenuBottomDp,
-                        maxHomeQuickMenuBottomDp,
-                        homeQuickMenuDensity
-                    ) {
-                        detectDragGesturesAfterLongPress(
-                            onDragStart = {
-                                // לחיצה ממושכת בלבד מתחילה גרירה.
-                            },
-                            onDrag = { change, dragAmount ->
-                                change.consume()
-
-                                val dragDp =
-                                    dragAmount.y /
-                                            homeQuickMenuDensity.density
-
-                                homeQuickMenuBottomDp =
-                                    (
-                                            homeQuickMenuBottomDp -
-                                                    dragDp
-                                            )
-                                        .coerceIn(
-                                            minHomeQuickMenuBottomDp,
-                                            maxHomeQuickMenuBottomDp
-                                        )
-                            },
-                            onDragEnd = {
-                                settingsSp.edit {
-                                    putFloat(
-                                        homeQuickMenuPositionKey,
-                                        homeQuickMenuBottomDp
-                                    )
-                                }
-                            },
-                            onDragCancel = {
-                                settingsSp.edit {
-                                    putFloat(
-                                        homeQuickMenuPositionKey,
-                                        homeQuickMenuBottomDp
-                                    )
-                                }
-                            }
-                        )
+            if (showFab) {
+                FloatingQuickMenu(
+                    belt = activeHomeBelt,
+                    modifier = Modifier
+                        .align(Alignment.CenterStart),
+                    expanded = fabExpanded,
+                    onExpandedChange = { expanded ->
+                        fabExpanded = expanded
                     },
-                    onClick = {
+                    triggerMode =
+                        QuickMenuTriggerMode.SideRail,
+                    includePractice = false,
+                    includeAllLists = false,
+                    includeSummary = false,
+                    includeReset = false,
+                    customActions =
+                        homeQuickMenuActions,
+                    accentColorOverride =
+                        homeBeltAccent,
+                    hasFullAccess =
+                        hasFullAccess,
+                    onLockedItemClick = {
                         clickSound()
                         haptic(true)
-                        fabExpanded = true
-                    }
+                        onOpenSubscription()
+                    },
+                    onWeakPoints = {},
+                    onAllLists = {},
+                    onPractice = {},
+                    onSummary = {},
+                    onReset = {},
+                    onVoice = {},
+                    onPdf = {}
                 )
             }
 

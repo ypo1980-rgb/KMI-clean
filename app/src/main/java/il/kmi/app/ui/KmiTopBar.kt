@@ -1037,9 +1037,8 @@ fun KmiTopBar(
     val shareActionColors =
         kmiQuickActionColors(KmiQuickActionType.SHARE)
 
-    // ✅ טור האייקונים נפתח כ-overlay מעל המסך,
-    // לכן ה-TopBar עצמו נשאר בגובה הכותרת בלבד.
-    val quickActionsWidth = 46.dp
+    // ✅ מקור אמת אחד לרוחב סרגל האייקונים והידית העליונה.
+    val quickActionsWidth = 52.dp
 
     // Back בטוח
     val backDispatcher =
@@ -1575,7 +1574,7 @@ fun KmiTopBar(
                             effectiveQuickActionsAccentColor.copy(
                                 alpha = 0.96f
                             ),
-                        shadowElevation = 7.dp,
+                        shadowElevation = 0.dp,
                         tonalElevation = 0.dp,
                         border = BorderStroke(
                             width = 1.4.dp,
@@ -2550,7 +2549,7 @@ private fun VoiceCommandsAttachedHandle(
     Surface(
         modifier = Modifier
             .size(
-                width = 48.dp,
+                width = 52.dp,
                 height = 28.dp
             )
             .graphicsLayer {
@@ -2664,7 +2663,7 @@ private fun IconsRailAttachedHandle(
     Surface(
         modifier = Modifier
             .size(
-                width = 46.dp,
+                width = 52.dp,
                 height = 28.dp
             )
             .graphicsLayer {
@@ -2789,6 +2788,13 @@ private fun VerticalQuickActionItem(
 
         Spacer(Modifier.height(1.dp))
 
+        val labelScale =
+            if (label == "סטטיסטיקה") {
+                0.70f
+            } else {
+                0.78f
+            }
+
         Text(
             text = label,
             color = Color.White.copy(alpha = itemAlpha),
@@ -2796,10 +2802,10 @@ private fun VerticalQuickActionItem(
                 KmiTypography.caption.copy(
                     fontSize =
                         KmiTypography.caption.fontSize *
-                                0.78f,
+                                labelScale,
                     lineHeight =
                         KmiTypography.caption.lineHeight *
-                                0.78f,
+                                labelScale,
                     fontWeight = FontWeight.Bold
                 ),
             textAlign = TextAlign.Center,
@@ -2808,7 +2814,7 @@ private fun VerticalQuickActionItem(
             overflow = TextOverflow.Clip,
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 1.dp)
+                .padding(horizontal = 0.dp)
         )
     }
 }

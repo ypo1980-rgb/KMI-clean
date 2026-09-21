@@ -75,6 +75,13 @@ fun NavGraphBuilder.materialsNavGraph(
                 }
             },
 
+            onAllLists = { b ->
+                nav.navigate("ex_tabs_all/${b.id}") {
+                    launchSingleTop = true
+                    restoreState = true
+                }
+            },
+
             onOpenHome = {
                 nav.navigate(Route.Home.route) {
                     launchSingleTop = true
@@ -148,6 +155,13 @@ fun NavGraphBuilder.materialsNavGraph(
 
             onPractice = { b, t ->
                 nav.navigate(Route.Practice.make(b, t)) {
+                    launchSingleTop = true
+                    restoreState = true
+                }
+            },
+
+            onAllLists = { b ->
+                nav.navigate("ex_tabs_all/${b.id}") {
                     launchSingleTop = true
                     restoreState = true
                 }

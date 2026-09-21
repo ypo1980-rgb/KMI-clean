@@ -17,7 +17,6 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.core.content.edit
 import androidx.compose.material.icons.filled.SportsMma
-import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.filled.Replay
 import androidx.compose.material.icons.filled.Summarize
 import androidx.compose.material3.Icon
@@ -30,6 +29,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.AbsoluteAlignment
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.BiasAbsoluteAlignment
 import androidx.compose.ui.Modifier
@@ -49,6 +49,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.MutableTransitionState
 import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
@@ -64,7 +65,6 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.IconButton
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
@@ -82,6 +82,20 @@ enum class QuickMenuTriggerMode {
     // ✅ מפעיל צדדי למסך "תרגילים לפי חגורה"
     SideRail
 }
+
+/**
+ * פעולה מותאמת שאפשר להעביר לתפריט המהיר הגלובלי
+ * ממסך הבית, ממסך הרשימות וממסכים נוספים.
+ */
+data class FloatingQuickMenuAction(
+    val titleHe: String,
+    val titleEn: String,
+    val icon: ImageVector,
+    val action: () -> Unit,
+    val isLocked: Boolean = false,
+    val iconTint: Color = Color(0xFF1976D2),
+    val iconBackground: Color = Color(0xFFE3F2FD)
+)
 
 private data class QuickMenuItemUi(
     val title: String,
@@ -280,8 +294,10 @@ private fun SideRailQuickMenuTrigger(
     modifier: Modifier = Modifier,
     onClick: () -> Unit
 ) {
+    val triggerAccentColor = accentColor
+
     val accentContentColor =
-        if (accentColor.luminance() < 0.55f) {
+        if (triggerAccentColor.luminance() < 0.55f) {
             Color.White
         } else {
             Color.Black
@@ -294,6 +310,35 @@ private fun SideRailQuickMenuTrigger(
             stiffness = 500f
         ),
         label = "sideRailIconRotation"
+    )
+
+    val triggerVisualWidth by animateDpAsState(
+        targetValue =
+            if (expanded) {
+                50.6.dp
+            } else {
+                24.dp
+            },
+        animationSpec = tween(durationMillis = 180),
+        label = "sideRailVisualWidth"
+    )
+
+    val glowTransition =
+        rememberInfiniteTransition(
+            label = "sideRailPremiumGlow"
+        )
+
+    val glowAlpha by glowTransition.animateFloat(
+        initialValue = 0.16f,
+        targetValue = 0.34f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(
+                durationMillis = 1300,
+                easing = LinearEasing
+            ),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "sideRailGlowAlpha"
     )
 
     val triggerShape =
@@ -319,70 +364,163 @@ private fun SideRailQuickMenuTrigger(
         color = Color.Transparent,
         shadowElevation = 0.dp,
         tonalElevation = 0.dp,
-        border = BorderStroke(
-            width = 0.75.dp,
-            color = MaterialTheme.colorScheme.outlineVariant.copy(
-                alpha = 0.55f
-            )
-        ),
         modifier = Modifier
             .width(46.dp)
             .height(58.dp)
             .then(modifier)
     ) {
         Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .clip(triggerShape)
-                .background(
-                    Brush.verticalGradient(
-                        colors = listOf(
-                            accentColor.copy(alpha = 0.84f),
-                            accentColor,
-                            accentColor.copy(alpha = 0.88f)
-                        )
-                    )
-                ),
-            contentAlignment = Alignment.Center
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment =
+                if (isEnglish) {
+                    AbsoluteAlignment.CenterLeft
+                } else {
+                    AbsoluteAlignment.CenterRight
+                }
         ) {
+
+            /*
+             * הילה חיצונית עדינה.
+             * הצבע תמיד נגזר מצבע החגורה.
+             */
             Box(
                 modifier = Modifier
-                    .matchParentSize()
+                    .width(triggerVisualWidth + 5.dp)
+                    .fillMaxHeight()
+                    .graphicsLayer {
+                        alpha = glowAlpha
+                    }
+                    .clip(triggerShape)
                     .background(
                         Brush.horizontalGradient(
                             colors = listOf(
-                                accentContentColor.copy(
-                                    alpha = 0.22f
-                                ),
+                                triggerAccentColor.copy(alpha = 0.62f),
+                                triggerAccentColor.copy(alpha = 0.22f),
                                 Color.Transparent
                             )
                         )
                     )
             )
 
-            Icon(
-                imageVector = Icons.Filled.Menu,
-                contentDescription =
-                    if (expanded) {
-                        if (isEnglish) {
-                            "Close quick menu"
-                        } else {
-                            "סגור תפריט מהיר"
-                        }
-                    } else {
-                        if (isEnglish) {
-                            "Open quick menu"
-                        } else {
-                            "פתח תפריט מהיר"
-                        }
-                    },
-                tint = accentContentColor,
+            /*
+             * גוף הזכוכית הראשי.
+             */
+            Box(
                 modifier = Modifier
-                    .size(KmiIconSize.large)
-                    .graphicsLayer {
-                        rotationZ = iconRotation
-                    }
-            )
+                    .width(triggerVisualWidth)
+                    .fillMaxHeight()
+                    .clip(triggerShape)
+                    .background(
+                        Brush.verticalGradient(
+                            colors = listOf(
+                                triggerAccentColor.copy(alpha = 0.76f),
+                                triggerAccentColor,
+                                triggerAccentColor.copy(alpha = 0.90f)
+                            )
+                        )
+                    )
+                    .border(
+                        width = 1.25.dp,
+                        color =
+                            accentContentColor.copy(
+                                alpha = 0.72f
+                            ),
+                        shape = triggerShape
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+
+                /*
+                 * שכבת זכוכית מבריקה בחלק העליון.
+                 */
+                Box(
+                    modifier = Modifier
+                        .matchParentSize()
+                        .background(
+                            Brush.verticalGradient(
+                                colors = listOf(
+                                    Color.White.copy(alpha = 0.30f),
+                                    Color.White.copy(alpha = 0.08f),
+                                    Color.Transparent,
+                                    Color.Black.copy(alpha = 0.10f)
+                                )
+                            )
+                        )
+                )
+
+                /*
+                 * השתקפות אלכסונית עדינה שנותנת תחושת
+                 * Glass / Premium בלי לשנות את צבע החגורה.
+                 */
+                Box(
+                    modifier = Modifier
+                        .matchParentSize()
+                        .background(
+                            Brush.horizontalGradient(
+                                colors = listOf(
+                                    Color.White.copy(alpha = 0.20f),
+                                    Color.Transparent,
+                                    triggerAccentColor.copy(alpha = 0.16f)
+                                )
+                            )
+                        )
+                )
+
+                /*
+                 * מסגרת פנימית דקה.
+                 */
+                Box(
+                    modifier = Modifier
+                        .width(
+                            if (triggerVisualWidth > 6.dp) {
+                                triggerVisualWidth - 4.dp
+                            } else {
+                                triggerVisualWidth
+                            }
+                        )
+                        .fillMaxHeight()
+                        .padding(vertical = 2.dp)
+                        .clip(triggerShape)
+                        .border(
+                            width = 0.7.dp,
+                            color =
+                                Color.White.copy(
+                                    alpha = 0.34f
+                                ),
+                            shape = triggerShape
+                        )
+                )
+
+                Icon(
+                    imageVector = Icons.Filled.Menu,
+                    contentDescription =
+                        if (expanded) {
+                            if (isEnglish) {
+                                "Close quick menu"
+                            } else {
+                                "סגור תפריט מהיר"
+                            }
+                        } else {
+                            if (isEnglish) {
+                                "Open quick menu"
+                            } else {
+                                "פתח תפריט מהיר"
+                            }
+                        },
+                    tint = accentContentColor,
+                    modifier = Modifier
+                        .size(
+                            if (expanded) {
+                                KmiIconSize.large
+                            } else {
+                                KmiIconSize.small
+                            }
+                        )
+                        .graphicsLayer {
+                            rotationZ = iconRotation
+                        }
+                )
+            }
         }
     }
 }
@@ -398,6 +536,8 @@ fun FloatingQuickMenu(
     includeAllLists: Boolean = true,
     includeSummary: Boolean = true,
     includeReset: Boolean = false,
+    customActions: List<FloatingQuickMenuAction> =
+        emptyList(),
     accentColorOverride: Color? = null,
     hasFullAccess: Boolean = true,
     onLockedItemClick: () -> Unit = {},
@@ -547,6 +687,7 @@ fun FloatingQuickMenu(
         includePractice,
         includeSummary,
         includeReset,
+        customActions,
         onWeakPoints,
         onAllLists,
         onPractice,
@@ -618,6 +759,27 @@ fun FloatingQuickMenu(
                         isLocked = isMenuLocked,
                         iconTint = Color(0xFF1976D2),
                         iconBackground = Color(0xFFE3F2FD)
+                    )
+                )
+            }
+
+            customActions.forEach { customAction ->
+                add(
+                    QuickMenuItemUi(
+                        title =
+                            if (isEnglish) {
+                                customAction.titleEn
+                            } else {
+                                customAction.titleHe
+                            },
+                        icon = customAction.icon,
+                        action = customAction.action,
+                        isLocked =
+                            customAction.isLocked,
+                        iconTint =
+                            customAction.iconTint,
+                        iconBackground =
+                            customAction.iconBackground
                     )
                 )
             }
@@ -799,9 +961,20 @@ fun FloatingQuickMenu(
             }
         }
 
+        /*
+   * הידית הסגורה מופיעה רק לאחר שהפאנל
+   * סיים לחלוטין את אנימציית הסגירה.
+   *
+   * כך בזמן בחירת פעולה / ניווט לא מוצגים
+   * בו-זמנית גם הסרגל הפתוח וגם הידית הסגורה.
+   */
         val shouldShowTrigger =
-            (triggerMode == QuickMenuTriggerMode.Fab ||
-                    triggerMode == QuickMenuTriggerMode.SideRail) &&
+            (
+                    triggerMode ==
+                            QuickMenuTriggerMode.Fab ||
+                            triggerMode ==
+                            QuickMenuTriggerMode.SideRail
+                    ) &&
                     !menuVisibilityState.currentState &&
                     !menuVisibilityState.targetState
 
@@ -933,7 +1106,7 @@ private fun SideRailQuickMenuPanel(
         }
 
     Surface(
-        modifier = Modifier.width(46.dp),
+        modifier = Modifier.width(50.6.dp),
         shape = railShape,
         color = accentColor.copy(alpha = 0.96f),
         tonalElevation = 0.dp,
