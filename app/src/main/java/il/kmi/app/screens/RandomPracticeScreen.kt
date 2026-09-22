@@ -23,7 +23,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.ui.draw.alpha
+import il.kmi.app.ui.practice.PracticeStartConfigDialog
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.material.icons.outlined.Info
@@ -48,7 +48,6 @@ import il.kmi.shared.domain.ContentRepo as SharedContentRepo
 import android.app.Activity
 import android.media.AudioManager
 import android.media.ToneGenerator
-import androidx.compose.foundation.border
 import androidx.compose.ui.platform.LocalContext
 import il.kmi.shared.localization.AppLanguage
 import il.kmi.shared.localization.AppLanguageManager
@@ -62,7 +61,6 @@ import il.kmi.shared.domain.content.ExerciseTitlesEn
 import il.kmi.shared.domain.content.ExerciseIdentityRegistry
 import il.yuval.ui.theme.kmiScreenBackgroundBrush
 import il.yuval.ui.theme.kmiSectionHeaderBackground
-import il.yuval.ui.theme.kmiSectionHeaderBrush
 import il.yuval.ui.theme.kmiSectionHeaderContentColor
 
 //==========================================================================
@@ -1301,45 +1299,82 @@ fun RandomPracticeScreen(
     // ===== דיאלוג בחירת זמן =====
     var showDurationDialog by rememberSaveable { mutableStateOf(true) }
     if (showDurationDialog) {
-        DurationPickerDialog(
+        PracticeStartConfigDialog(
             show = showDurationDialog,
             isEnglish = isEnglish,
-            initMinutes = durationMinutes,
-            initHalfAlert = beepHalfTimeState,
-            initLast10 = beepLast10State,
+            initialMinutes = durationMinutes,
+            initialHalfAlert = beepHalfTimeState,
+            initialLast10Alert = beepLast10State,
             onDismiss = {
-                requestExit() // ✅ יציאה בטוחה (לא נכנס לתרגיל ראשון)
+                requestExit()
             },
-            onConfirm = { durationSeconds: Int, playHalf: Boolean, playCountdown: Boolean ->
-                durationMinutes = (durationSeconds / 60).coerceAtLeast(1)
-                beepHalfTimeState = playHalf
-                beepLast10State = playCountdown
+            onConfirm = {
+                    durationSeconds,
+                    playHalf,
+                    playCountdown ->
+
+                durationMinutes =
+                    (durationSeconds / 60)
+                        .coerceAtLeast(1)
+
+                beepHalfTimeState =
+                    playHalf
+
+                beepLast10State =
+                    playCountdown
 
                 sp.edit()
-                    .putInt("timer_minutes", durationMinutes)
-                    .putBoolean("beep_half", beepHalfTimeState)
-                    .putBoolean("beep_last10", beepLast10State)
+                    .putInt(
+                        "timer_minutes",
+                        durationMinutes
+                    )
+                    .putBoolean(
+                        "beep_half",
+                        beepHalfTimeState
+                    )
+                    .putBoolean(
+                        "beep_last10",
+                        beepLast10State
+                    )
                     .apply()
 
-                timeLeft = durationMinutes * 60
+                timeLeft =
+                    durationMinutes * 60
+
                 currentIndex = 0
                 lastSpokenIndex = -1
                 halfAnnouncementDone = false
                 sessionStarted = true
-                isRunning = false          // לא מתחילים טיימר עדיין
+                isRunning = false
                 showDurationDialog = false
 
-                // 🔊 קודם LETSGO, ואז מתחיל הטיימר והתרגיל הראשון מוקרא אם הקול לא מושתק
                 playLetsGo {
-                    if (isExiting) return@playLetsGo
+                    if (isExiting) {
+                        return@playLetsGo
+                    }
+
                     isRunning = true
-                    if (currentIndex in weightedItems.indices) {
-                        weightedPracticeItems.getOrNull(currentIndex)?.let { currentItem ->
-                            if (!isMuted) {
-                                speak(uiTitleFor(currentItem))
+
+                    if (
+                        currentIndex in
+                        weightedItems.indices
+                    ) {
+                        weightedPracticeItems
+                            .getOrNull(
+                                currentIndex
+                            )
+                            ?.let { currentItem ->
+                                if (!isMuted) {
+                                    speak(
+                                        uiTitleFor(
+                                            currentItem
+                                        )
+                                    )
+                                }
                             }
-                        }
-                        lastSpokenIndex = currentIndex
+
+                        lastSpokenIndex =
+                            currentIndex
                     }
                 }
             }
@@ -2142,380 +2177,6 @@ fun RandomPracticeScreen(
     }
 }
 
-/* ===== דיאלוג בחירת זמן תרגול (Top-level) ===== */
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun DurationPickerDialog(
-    show: Boolean,
-    isEnglish: Boolean,
-    initMinutes: Int,
-    initHalfAlert: Boolean,
-    initLast10: Boolean,
-    onDismiss: () -> Unit,
-    onConfirm: (durationSeconds: Int, playHalf: Boolean, playCountdown: Boolean) -> Unit
-) {
-
-    if (!show) return
-
-    var selectedMin by remember { mutableStateOf(initMinutes.coerceIn(1, 60)) }
-    var playHalf by remember { mutableStateOf(initHalfAlert) }
-    var playCountdown by remember { mutableStateOf(initLast10) }
-
-    val sheetState =
-        rememberModalBottomSheetState(
-            skipPartiallyExpanded = true
-        )
-
-    // גרדיאנט רך שמתכנס לטון המותג
-    val headerBrush = Brush.verticalGradient(
-        colors = listOf(
-            MaterialTheme.colorScheme.primary.copy(alpha = 0.18f),
-            MaterialTheme.colorScheme.surface.copy(alpha = 0.0f)
-        )
-    )
-
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        sheetState = sheetState,
-        containerColor = MaterialTheme.colorScheme.surface,
-        contentColor = MaterialTheme.colorScheme.onSurface,
-        tonalElevation = 0.dp,
-        dragHandle = {
-            Box(
-                modifier = Modifier
-                    .padding(top = 8.dp, bottom = 4.dp)
-                    .size(width = 44.dp, height = 4.dp)
-                    .clip(RoundedCornerShape(100))
-                    .background(
-                        MaterialTheme.colorScheme.primary.copy(
-                            alpha = 0.35f
-                        )
-                    )
-            )
-        }
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .navigationBarsPadding()
-                .imePadding()
-                .padding(bottom = 8.dp)
-        ) {
-            // ===== Header זכוכיתי עם טיימר גדול =====
-            Surface(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp),
-                shape = RoundedCornerShape(24.dp),
-                color = MaterialTheme.colorScheme.surfaceVariant.copy(
-                    alpha = 0.55f
-                ),
-                tonalElevation = 0.dp,
-                shadowElevation = 0.dp,
-                border = BorderStroke(
-                    width = 1.dp,
-                    color = MaterialTheme.colorScheme.primary.copy(
-                        alpha = 0.24f
-                    )
-                )
-            ) {
-                Box(
-                    modifier = Modifier
-                        .background(headerBrush)
-                        .padding(horizontal = 18.dp, vertical = 16.dp)
-                ) {
-                    Column(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Text(
-                            text = if (isEnglish) {
-                                "Choose Practice Duration"
-                            } else {
-                                "בחר זמן תרגול"
-                            },
-                            style = KmiTypography.sectionTitle.copy(
-                                fontWeight = FontWeight.ExtraBold
-                            ),
-                            textAlign = TextAlign.Center
-                        )
-
-                        Spacer(Modifier.height(8.dp))
-
-                        Text(
-                            text = String.format(
-                                "%02d:00",
-                                selectedMin
-                            ),
-                            style = KmiTypography.metric.copy(
-                                color = MaterialTheme.colorScheme.primary,
-                                fontWeight = FontWeight.Black
-                            )
-                        )
-                    }
-                }
-            }
-
-            Spacer(Modifier.height(18.dp))
-
-            // ===== בחירת זמן בסגמנטים עגולים =====
-            SegmentedTimeChooser(
-                values = listOf(1, 3, 5),
-                selected = selectedMin,
-                isEnglish = isEnglish,
-                onSelect = { selectedMin = it }
-            )
-
-            Spacer(Modifier.height(10.dp))
-
-            // ===== הגדרות שמע בכרטיס פרמיום מאוחד =====
-            Surface(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp),
-                shape = RoundedCornerShape(22.dp),
-                color = MaterialTheme.colorScheme.surfaceVariant.copy(
-                    alpha = 0.38f
-                ),
-                tonalElevation = 0.dp,
-                shadowElevation = 0.dp,
-                border = BorderStroke(
-                    width = 1.dp,
-                    color = MaterialTheme.colorScheme.outlineVariant.copy(
-                        alpha = 0.75f
-                    )
-                )
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 4.dp)
-                ) {
-                    SettingRow(
-                        title =
-                            if (isEnglish) {
-                                "Mid-time alert"
-                            } else {
-                                "התראה באמצע הזמן"
-                            },
-                        subtitle =
-                            if (isEnglish) {
-                                "Beep + voice announcement at halfway point"
-                            } else {
-                                "צפצוף + הודעה קולית בחצי הזמן"
-                            },
-                        checked = playHalf,
-                        isEnglish = isEnglish,
-                        onCheckedChange = {
-                            playHalf = it
-                        }
-                    )
-
-                    HorizontalDivider(
-                        modifier = Modifier.padding(horizontal = 16.dp),
-                        color = MaterialTheme.colorScheme.outlineVariant.copy(
-                            alpha = 0.55f
-                        )
-                    )
-
-                    SettingRow(
-                        title =
-                            if (isEnglish) {
-                                "Sound in the last 10 seconds"
-                            } else {
-                                "צליל ב־10 השניות האחרונות"
-                            },
-                        subtitle =
-                            if (isEnglish) {
-                                "Short beep every second until the end"
-                            } else {
-                                "צפצוף קצר כל שנייה עד לסיום"
-                            },
-                        checked = playCountdown,
-                        isEnglish = isEnglish,
-                        onCheckedChange = {
-                            playCountdown = it
-                        }
-                    )
-                }
-            }
-
-            Spacer(Modifier.height(6.dp))
-
-            // ===== כפתורי פעולה – מודרניים ורחבים =====
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 6.dp),
-                horizontalArrangement = Arrangement.spacedBy(12.dp, Alignment.End)
-            ) {
-                TextButton(
-                    onClick = {
-                        onDismiss()
-                    },
-                    modifier = Modifier.heightIn(min = 52.dp)
-                ) {
-                    Text(
-                        text = if (isEnglish) "Cancel" else "בטל",
-                        style = KmiTypography.action.copy(
-                            fontWeight = FontWeight.SemiBold
-                        )
-                    )
-                }
-
-
-                Button(
-                    onClick = {
-                        onConfirm(
-                            selectedMin * 60,
-                            playHalf,
-                            playCountdown
-                        )
-                    },
-                    modifier = Modifier
-                        .weight(1f)
-                        .heightIn(min = 52.dp),
-                    shape = RoundedCornerShape(16.dp),
-                    elevation = ButtonDefaults.buttonElevation(
-                        defaultElevation = 0.dp,
-                        pressedElevation = 1.dp,
-                        disabledElevation = 0.dp
-                    )
-                ) {
-                    Text(
-                        text = if (isEnglish) "Start" else "התחל",
-                        style = KmiTypography.action.copy(
-                            fontWeight = FontWeight.ExtraBold
-                        )
-                    )
-                }
-            }
-
-            Spacer(Modifier.height(4.dp))
-        }
-    }
-}
-
-/* ---------- רכיבים קטנים ומלוטשים ---------- */
-
-/** בורר זמן פרמיום קומפקטי */
-@Composable
-private fun SegmentedTimeChooser(
-    values: List<Int>,
-    selected: Int,
-    isEnglish: Boolean,
-    onSelect: (Int) -> Unit
-) {
-    Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp),
-        shape = RoundedCornerShape(22.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(
-            alpha = 0.42f
-        ),
-        tonalElevation = 0.dp,
-        shadowElevation = 0.dp,
-        border = BorderStroke(
-            width = 1.dp,
-            color = MaterialTheme.colorScheme.outlineVariant.copy(
-                alpha = 0.75f
-            )
-        )
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(6.dp),
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            values
-                .distinct()
-                .sorted()
-                .forEach { value ->
-                    val isSelected = selected == value
-
-                    val itemBrush =
-                        if (isSelected) {
-                            Brush.linearGradient(
-                                colors = listOf(
-                                    MaterialTheme.colorScheme.primary,
-                                    MaterialTheme.colorScheme.tertiary
-                                )
-                            )
-                        } else {
-                            Brush.linearGradient(
-                                colors = listOf(
-                                    MaterialTheme.colorScheme.surface,
-                                    MaterialTheme.colorScheme.surface
-                                )
-                            )
-                        }
-
-                    val contentColor =
-                        if (isSelected) {
-                            MaterialTheme.colorScheme.onPrimary
-                        } else {
-                            MaterialTheme.colorScheme.onSurfaceVariant
-                        }
-
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .heightIn(min = 58.dp)
-                            .clip(RoundedCornerShape(17.dp))
-                            .background(itemBrush)
-                            .border(
-                                width = 1.dp,
-                                color =
-                                    if (isSelected) {
-                                        MaterialTheme.colorScheme.primary.copy(
-                                            alpha = 0.55f
-                                        )
-                                    } else {
-                                        MaterialTheme.colorScheme.outlineVariant
-                                    },
-                                shape = RoundedCornerShape(17.dp)
-                            )
-                            .clickable {
-                                onSelect(value)
-                            }
-                            .padding(
-                                horizontal = 6.dp,
-                                vertical = 8.dp
-                            ),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.Center
-                        ) {
-                            Text(
-                                text = "$value",
-                                style = KmiTypography.metric.copy(
-                                    color = contentColor,
-                                    fontWeight = FontWeight.ExtraBold
-                                ),
-                                maxLines = 1
-                            )
-
-                            Text(
-                                text = if (isEnglish) "min" else "דק׳",
-                                style = KmiTypography.caption.copy(
-                                    color = contentColor
-                                ),
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                                modifier = Modifier.alpha(0.9f)
-                            )
-                        }
-                    }
-                }
-        }
-    }
-}
-
 /* ====================== כפתורים חדשניים ====================== */
 
 @Composable
@@ -2945,90 +2606,6 @@ private fun GlassHelpButton(
                 overflow = TextOverflow.Ellipsis
             )
         }
-    }
-}
-
-/** שורת הגדרה קומפקטית בתוך כרטיס ההגדרות המאוחד */
-@Composable
-private fun SettingRow(
-    title: String,
-    subtitle: String,
-    checked: Boolean,
-    isEnglish: Boolean,
-    onCheckedChange: (Boolean) -> Unit
-) {
-    val rowTextAlign =
-        if (isEnglish) {
-            TextAlign.Left
-        } else {
-            TextAlign.Right
-        }
-
-    val rowHorizontalAlignment =
-        if (isEnglish) {
-            Alignment.Start
-        } else {
-            Alignment.End
-        }
-
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable {
-                onCheckedChange(!checked)
-            }
-            .padding(
-                horizontal = 14.dp,
-                vertical = 10.dp
-            ),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Column(
-            modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(2.dp),
-            horizontalAlignment = rowHorizontalAlignment
-        ) {
-            Text(
-                text = title,
-                style = KmiTypography.cardTitle.copy(
-                    fontWeight = FontWeight.SemiBold
-                ),
-                color = MaterialTheme.colorScheme.onSurface,
-                textAlign = rowTextAlign,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.fillMaxWidth()
-            )
-
-            Text(
-                text = subtitle,
-                style = KmiTypography.caption,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                textAlign = rowTextAlign,
-                maxLines = 3,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.fillMaxWidth()
-            )
-        }
-
-        Spacer(Modifier.width(10.dp))
-
-        Switch(
-            checked = checked,
-            onCheckedChange = onCheckedChange,
-            thumbContent = {
-                if (checked) {
-                    Box(
-                        modifier = Modifier
-                            .size(10.dp)
-                            .clip(CircleShape)
-                            .background(
-                                MaterialTheme.colorScheme.onPrimary
-                            )
-                    )
-                }
-            }
-        )
     }
 }
 

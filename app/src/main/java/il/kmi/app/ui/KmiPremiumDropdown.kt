@@ -18,6 +18,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.Surface
@@ -48,7 +49,8 @@ fun KmiPremiumDropdown(
     onSelected: (String) -> Unit,
     modifier: Modifier = Modifier,
     placeholder: String = "",
-    enabled: Boolean = true
+    enabled: Boolean = true,
+    dividerAfterIndex: Int? = null
 ) {
     val cleanOptions =
         remember(options) {
@@ -352,17 +354,33 @@ fun KmiPremiumDropdown(
                 )
 
                 if (index < cleanOptions.lastIndex) {
-                    Spacer(
-                        modifier =
-                            Modifier
+                    val isStrongDivider =
+                        dividerAfterIndex == index
+
+                    if (isStrongDivider) {
+                        HorizontalDivider(
+                            modifier = Modifier
                                 .fillMaxWidth()
-                                .heightIn(min = 1.dp)
-                                .background(
-                                    Color.White.copy(
-                                        alpha = 0.10f
-                                    )
+                                .padding(
+                                    horizontal = 12.dp
+                                ),
+                            thickness = 2.dp,
+                            color =
+                                Color.White.copy(
+                                    alpha = 0.95f
                                 )
-                    )
+                        )
+                    } else {
+                        HorizontalDivider(
+                            modifier =
+                                Modifier.fillMaxWidth(),
+                            thickness = 1.dp,
+                            color =
+                                Color.White.copy(
+                                    alpha = 0.10f
+                                )
+                        )
+                    }
                 }
             }
         }

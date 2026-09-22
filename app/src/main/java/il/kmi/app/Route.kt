@@ -156,6 +156,14 @@ sealed class Route(val route: String) {
                 "practice/${belt.id}?topic=${enc(topic)}"
             }
     }
+    object PracticeByTopics :
+        Route("practice_by_topics?selection={selection}") {
+
+        fun make(
+            selectionToken: String
+        ): String =
+            "practice_by_topics?selection=${enc(selectionToken)}"
+    }
 
     object Settings : Route("settings")
     object Progress : Route("progress")

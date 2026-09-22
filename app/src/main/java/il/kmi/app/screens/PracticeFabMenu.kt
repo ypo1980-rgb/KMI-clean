@@ -94,6 +94,8 @@ fun PracticeMenuScreen(
     onLocked: () -> Unit,
     onRandomPractice: (Belt) -> Unit,
     onFinalExam: (Belt) -> Unit,
+    onPracticeByTopics:
+        (PracticeByTopicsSelection) -> Unit,
     onPracticeByTopicSelected:
         (
         belt: Belt,
@@ -145,6 +147,16 @@ fun PracticeMenuScreen(
         )
     }
 
+    var useAllBelts by rememberSaveable {
+        mutableStateOf(false)
+    }
+
+    val allBeltsLabel =
+        tr(
+            "כל החגורות",
+            "All belts"
+        )
+
     var showTopicSelection by rememberSaveable {
         mutableStateOf(false)
     }
@@ -163,21 +175,39 @@ fun PracticeMenuScreen(
     val beltOptions =
         remember(
             allBelts,
-            isEnglish
+            isEnglish,
+            allBeltsLabel
         ) {
-            allBelts.map { belt ->
-                if (isEnglish) {
-                    belt.en
-                } else {
-                    belt.heb
-                }
-            }
+            listOf(
+                allBeltsLabel
+            ) +
+                    allBelts.map { belt ->
+                        if (isEnglish) {
+                            belt.en
+                        } else {
+                            belt.heb
+                        }
+                    }
         }
 
     val topicOptions =
-        remember(selectedBelt) {
-            ContentRepo
-                .listTopicTitles(selectedBelt)
+        remember(
+            selectedBelt,
+            useAllBelts,
+            allBelts
+        ) {
+            val sourceBelts =
+                if (useAllBelts) {
+                    allBelts
+                } else {
+                    listOf(selectedBelt)
+                }
+
+            sourceBelts
+                .flatMap { belt ->
+                    ContentRepo
+                        .listTopicTitles(belt)
+                }
                 .map {
                     it.trim()
                 }
@@ -202,16 +232,29 @@ fun PracticeMenuScreen(
     val realSubTopics =
         remember(
             selectedBelt,
+            useAllBelts,
+            allBelts,
             effectiveTopic
         ) {
             if (effectiveTopic.isBlank()) {
                 emptyList()
             } else {
-                ContentRepo
-                    .listSubTopicTitles(
-                        belt = selectedBelt,
-                        topicTitle = effectiveTopic
-                    )
+                val sourceBelts =
+                    if (useAllBelts) {
+                        allBelts
+                    } else {
+                        listOf(selectedBelt)
+                    }
+
+                sourceBelts
+                    .flatMap { belt ->
+                        ContentRepo
+                            .listSubTopicTitles(
+                                belt = belt,
+                                topicTitle =
+                                    effectiveTopic
+                            )
+                    }
                     .map {
                         it.trim()
                     }
@@ -263,7 +306,9 @@ fun PracticeMenuScreen(
     }
 
     val selectedBeltName =
-        if (isEnglish) {
+        if (useAllBelts) {
+            allBeltsLabel
+        } else if (isEnglish) {
             selectedBelt.en
         } else {
             selectedBelt.heb
@@ -659,26 +704,36 @@ fun PracticeMenuScreen(
                                         selectedBeltName,
                                     isEnglish =
                                         isEnglish,
+                                    dividerAfterIndex = 0,
                                     onSelected = { selectedValue ->
+
+                                        if (
+                                            selectedValue ==
+                                            allBeltsLabel
+                                        ) {
+                                            useAllBelts = true
+                                            selectedTopic = ""
+                                            selectedSubTopic = ""
+
+                                            return@KmiPremiumDropdown
+                                        }
 
                                         val belt =
                                             allBelts
                                                 .firstOrNull { candidate ->
 
                                                     val name =
-                                                        if (
-                                                            isEnglish
-                                                        ) {
+                                                        if (isEnglish) {
                                                             candidate.en
                                                         } else {
                                                             candidate.heb
                                                         }
 
-                                                    name ==
-                                                            selectedValue
+                                                    name == selectedValue
                                                 }
                                                 ?: return@KmiPremiumDropdown
 
+                                        useAllBelts = false
                                         selectedBelt = belt
                                         selectedTopic = ""
                                         selectedSubTopic = ""
@@ -767,7 +822,7 @@ fun PracticeMenuScreen(
                                                 return@clickable
                                             }
 
-                                            val topicToken =
+                                            val baseTopicToken =
                                                 if (
                                                     showSubTopicDropdown &&
                                                     selectedSubTopic
@@ -780,10 +835,36 @@ fun PracticeMenuScreen(
                                                     effectiveTopic
                                                 }
 
-                                            onPracticeByTopicSelected(
-                                                selectedBelt,
-                                                topicToken
-                                            )
+                                            if (useAllBelts) {
+                                                val matchingBelts =
+                                                    allBelts.filter { belt ->
+                                                        ContentRepo
+                                                            .listTopicTitles(belt)
+                                                            .any { topic ->
+                                                                topic.trim() ==
+                                                                        effectiveTopic.trim()
+                                                            }
+                                                    }
+
+                                                val topicsByBelt =
+                                                    matchingBelts.associateWith {
+                                                        setOf(baseTopicToken)
+                                                    }
+
+                                                onPracticeByTopics(
+                                                    PracticeByTopicsSelection(
+                                                        belts =
+                                                            matchingBelts.toSet(),
+                                                        topicsByBelt =
+                                                            topicsByBelt
+                                                    )
+                                                )
+                                            } else {
+                                                onPracticeByTopicSelected(
+                                                    selectedBelt,
+                                                    baseTopicToken
+                                                )
+                                            }
                                         },
                                     shape =
                                         RoundedCornerShape(

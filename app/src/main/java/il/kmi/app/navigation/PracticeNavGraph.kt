@@ -9,6 +9,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
 import il.kmi.app.KmiViewModel
 import il.kmi.app.Route
+import il.kmi.app.screens.PracticeByTopicsScreen
 import il.kmi.shared.domain.Belt
 import il.kmi.app.screens.PracticeMenuScreen
 import il.kmi.app.screens.RandomPracticeScreen
@@ -104,6 +105,21 @@ fun NavGraphBuilder.practiceNavGraph(
                     Route.Exam.make(belt)
                 )
             },
+
+            onPracticeByTopics = { selection ->
+
+                val topicToken =
+                    buildTopicsPickToken(
+                        selection
+                    )
+
+                nav.navigate(
+                    Route.PracticeByTopics.make(
+                        topicToken
+                    )
+                )
+            },
+
             onPracticeByTopicSelected = {
                     belt,
                     topicToken ->
@@ -158,4 +174,52 @@ fun NavGraphBuilder.practiceNavGraph(
             }
         )
     }
-}
+
+    composable(
+            route = Route.PracticeByTopics.route,
+            arguments = listOf(
+                navArgument("selection") {
+                    type = NavType.StringType
+                    nullable = false
+                }
+            )
+        ) { backStackEntry ->
+
+            val selectionToken =
+                backStackEntry
+                    .arguments
+                    ?.getString("selection")
+                    .orEmpty()
+
+            PracticeByTopicsScreen(
+                selectionToken = selectionToken,
+                onBack = {
+                    val popped =
+                        nav.popBackStack()
+
+                    if (!popped) {
+                        nav.navigate(
+                            Route.PracticeMenu.route
+                        ) {
+                            launchSingleTop = true
+                        }
+                    }
+                },
+                onHome = {
+                    nav.navigate(
+                        Route.Home.route
+                    ) {
+                        popUpTo(
+                            nav.graph.startDestinationId
+                        ) {
+                            saveState = true
+                        }
+
+                        launchSingleTop = true
+                        restoreState = true
+                    }
+                }
+            )
+        }
+    }
+
