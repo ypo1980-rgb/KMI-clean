@@ -3,7 +3,9 @@ package il.kmi.app.screens
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
+import androidx.compose.runtime.LaunchedEffect
+import kotlinx.coroutines.delay
+import il.kmi.app.ui.practice.PracticeExerciseCenterCard
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -31,15 +33,9 @@ import java.net.URLDecoder
 import il.kmi.app.ui.ext.color
 import androidx.compose.foundation.background
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.layout.navigationBarsPadding
-import androidx.compose.foundation.Image
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.res.painterResource
-import il.kmi.app.R
 import il.yuval.ui.theme.kmiScreenBackgroundBrush
-import il.yuval.ui.theme.kmiSectionHeaderBrush
+import androidx.compose.material3.Scaffold
+import il.yuval.ui.theme.kmiSectionHeaderBackground
 import il.yuval.ui.theme.kmiSectionHeaderContentColor
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -300,6 +296,23 @@ fun PracticeByTopicsScreen(
         mutableStateOf(true)
     }
 
+    var timeLeft by
+    rememberSaveable {
+        mutableIntStateOf(
+            durationMinutes * 60
+        )
+    }
+
+    var isRunning by
+    rememberSaveable {
+        mutableStateOf(false)
+    }
+
+    var isMuted by
+    rememberSaveable {
+        mutableStateOf(false)
+    }
+
     PracticeStartConfigDialog(
         show = showStartDialog,
         isEnglish = false,
@@ -325,6 +338,12 @@ fun PracticeByTopicsScreen(
                 playCountdown
 
             currentIndex = 0
+
+            timeLeft =
+                durationSeconds
+
+            isRunning = true
+
             showStartDialog = false
         }
     )
@@ -336,352 +355,244 @@ fun PracticeByTopicsScreen(
     val totalItems =
         practiceItems.size
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(
-                brush =
-                    kmiScreenBackgroundBrush()
-            )
+    LaunchedEffect(
+        currentIndex,
+        durationMinutes
     ) {
-        KmiTopBar(
-            title = "תרגול לפי נושא",
-            onBack = onBack,
-            onHome = onHome,
-            showMenu = true,
-            showBottomActions = true,
-            showBottomHelp = false,
-            showBottomShare = false,
-            showTopSearch = false,
-            showTopShare = false,
-            showSettings = false,
-            showCoachBroadcastFab = false
-        )
+        timeLeft =
+            durationMinutes * 60
+    }
 
-        /*
-         * הפס הכחול הגלובלי נשאר קבוע
-         * מתחת לכותרת.
-         */
+    LaunchedEffect(
+        isRunning,
+        currentIndex,
+        showStartDialog
+    ) {
+        if (
+            !showStartDialog &&
+            isRunning &&
+            currentItem != null
+        ) {
+            while (
+                timeLeft > 0 &&
+                isRunning
+            ) {
+                delay(1000)
+                timeLeft--
+            }
+
+            if (
+                isRunning &&
+                timeLeft == 0
+            ) {
+                if (
+                    currentIndex <
+                    practiceItems.lastIndex
+                ) {
+                    currentIndex++
+                } else {
+                    isRunning = false
+                }
+            }
+        }
+    }
+
+    Scaffold(
+        topBar = {
+            KmiTopBar(
+                title = "תרגול לפי נושא",
+                onBack = onBack,
+                onHome = onHome,
+                showMenu = true,
+                showBottomActions = true,
+                showBottomHelp = false,
+                showBottomShare = false,
+                showTopSearch = false,
+                showTopShare = false,
+                showSettings = false,
+                showCoachBroadcastFab = false
+            )
+        }
+    ) { padding ->
+
         Box(
             modifier = Modifier
-                .fillMaxWidth()
+                .fillMaxSize()
+                .padding(padding)
                 .background(
-                    brush =
-                        kmiSectionHeaderBrush()
+                    brush = kmiScreenBackgroundBrush()
                 )
-                .padding(
-                    horizontal = 16.dp,
-                    vertical = 7.dp
-                ),
-            contentAlignment =
-                Alignment.Center
         ) {
-            Column(
-                modifier =
-                    Modifier.fillMaxWidth(),
-                horizontalAlignment =
-                    Alignment.CenterHorizontally,
-                verticalArrangement =
-                    Arrangement.Center
+
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .fillMaxWidth()
+                    .height(56.dp)
+                    .kmiSectionHeaderBackground()
+                    .padding(horizontal = 16.dp),
+                contentAlignment = Alignment.Center
             ) {
-                Text(
-                    text =
-                        "תרגול מכל החגורות",
-                    modifier =
-                        Modifier.fillMaxWidth(),
-                    color =
-                        kmiSectionHeaderContentColor(),
-                    style =
-                        KmiTypography.secondary.copy(
-                            fontWeight =
-                                FontWeight.Black
-                        ),
-                    textAlign =
-                        TextAlign.Center,
-                    maxLines = 1
-                )
-
-                Spacer(
-                    modifier =
-                        Modifier.height(2.dp)
-                )
-
                 Text(
                     text =
                         if (totalItems > 0) {
-                            "$totalItems תרגילים בתרגול"
+                            "תרגול מכל החגורות\n$totalItems תרגילים בתרגול"
                         } else {
-                            "תרגול לפי הנושא שנבחר"
+                            "תרגול מכל החגורות\nתרגול לפי הנושא שנבחר"
                         },
-                    modifier =
-                        Modifier.fillMaxWidth(),
-                    color =
-                        kmiSectionHeaderContentColor()
-                            .copy(alpha = 0.92f),
+                    modifier = Modifier.fillMaxWidth(),
+                    color = kmiSectionHeaderContentColor(),
                     style =
-                        KmiTypography.caption.copy(
-                            fontWeight =
-                                FontWeight.SemiBold
+                        KmiTypography.secondary.copy(
+                            fontWeight = FontWeight.Black
                         ),
-                    textAlign =
-                        TextAlign.Center,
-                    maxLines = 1
+                    textAlign = TextAlign.Center,
+                    maxLines = 2
                 )
             }
-        }
 
-        if (currentItem == null) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(24.dp),
-                contentAlignment =
-                    Alignment.Center
-            ) {
-                Surface(
-                    shape =
-                        RoundedCornerShape(22.dp),
-                    color =
-                        MaterialTheme
-                            .colorScheme
-                            .surface
-                            .copy(alpha = 0.95f),
-                    border =
-                        BorderStroke(
-                            width = 1.dp,
-                            color =
-                                MaterialTheme
-                                    .colorScheme
-                                    .outlineVariant
-                        ),
-                    tonalElevation = 0.dp,
-                    shadowElevation = 2.dp
-                ) {
-                    Text(
-                        text =
-                            "לא נמצאו תרגילים לתרגול",
-                        modifier =
-                            Modifier.padding(
-                                horizontal = 24.dp,
-                                vertical = 20.dp
-                            ),
-                        style =
-                            KmiTypography.sectionTitle,
-                        color =
-                            MaterialTheme
-                                .colorScheme
-                                .onSurface,
-                        textAlign =
-                            TextAlign.Center
-                    )
-                }
-            }
+            val sectionHeaderPadding = 56.dp
 
-            return
-        }
+            if (currentItem == null) {
 
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .navigationBarsPadding()
-                .padding(
-                    horizontal = 18.dp,
-                    vertical = 12.dp
-                ),
-            verticalArrangement =
-                Arrangement.Top,
-            horizontalAlignment =
-                Alignment.CenterHorizontally
-        ) {
-            Surface(
-                modifier =
-                    Modifier.fillMaxWidth(),
-                shape =
-                    RoundedCornerShape(26.dp),
-                color =
-                    MaterialTheme
-                        .colorScheme
-                        .surface
-                        .copy(alpha = 0.96f),
-                border =
-                    BorderStroke(
-                        width = 1.5.dp,
-                        color =
-                            currentItem
-                                .belt
-                                .color
-                                .copy(alpha = 0.55f)
-                    ),
-                tonalElevation = 0.dp,
-                shadowElevation = 4.dp
-            ) {
-                Column(
+                Box(
                     modifier = Modifier
-                        .fillMaxWidth()
+                        .fillMaxSize()
                         .padding(
-                            horizontal = 22.dp,
-                            vertical = 18.dp
+                            top = sectionHeaderPadding
                         ),
-                    horizontalAlignment =
-                        Alignment.CenterHorizontally,
-                    verticalArrangement =
-                        Arrangement.spacedBy(6.dp)
+                    contentAlignment = Alignment.Center
                 ) {
-                    Image(
-                        painter =
-                            painterResource(
-                                id =
-                                    practiceBeltImageRes(
-                                        currentItem.belt
-                                    )
-                            ),
-                        contentDescription =
-                            currentItem.belt.heb,
-                        modifier =
-                            Modifier
-                                .width(130.dp)
-                                .height(52.dp),
-                        contentScale =
-                            ContentScale.Fit
-                    )
-
-                    Text(
-                        text =
-                            currentItem.belt.heb,
-                        style =
-                            KmiTypography.secondary.copy(
-                                fontWeight =
-                                    FontWeight.Black
-                            ),
-                        color =
-                            currentItem.belt.color,
-                        textAlign =
-                            TextAlign.Center
-                    )
-
-                    Text(
-                        text =
-                            currentItem.topic,
-                        style =
-                            KmiTypography.secondary.copy(
-                                fontWeight =
-                                    FontWeight.Bold
-                            ),
+                    Surface(
+                        shape =
+                            RoundedCornerShape(22.dp),
                         color =
                             MaterialTheme
                                 .colorScheme
-                                .onSurfaceVariant,
-                        textAlign =
-                            TextAlign.Center
-                    )
-
-                    currentItem.subTopic
-                        ?.takeIf {
-                            it.isNotBlank()
-                        }
-                        ?.let { subTopic ->
-                            Text(
-                                text = subTopic,
-                                style =
-                                    KmiTypography.caption.copy(
-                                        fontWeight =
-                                            FontWeight.SemiBold
-                                    ),
+                                .surface
+                                .copy(alpha = 0.95f),
+                        border =
+                            BorderStroke(
+                                width = 1.dp,
                                 color =
                                     MaterialTheme
                                         .colorScheme
-                                        .onSurfaceVariant,
-                                textAlign =
-                                    TextAlign.Center
-                            )
-                        }
-
-                    Spacer(
-                        modifier =
-                            Modifier.height(4.dp)
-                    )
-
-                    Text(
-                        text =
-                            currentItem.title,
-                        modifier =
-                            Modifier.fillMaxWidth(),
-                        style =
-                            KmiTypography.screenTitle.copy(
-                                fontWeight =
-                                    FontWeight.Black
+                                        .outlineVariant
                             ),
-                        color =
-                            MaterialTheme
-                                .colorScheme
-                                .onSurface,
-                        textAlign =
-                            TextAlign.Center
-                    )
-
-                    Spacer(
-                        modifier =
-                            Modifier.height(4.dp)
-                    )
-
-                    Surface(
-                        shape =
-                            RoundedCornerShape(999.dp),
-                        color =
-                            MaterialTheme
-                                .colorScheme
-                                .surfaceVariant
-                                .copy(alpha = 0.60f),
                         tonalElevation = 0.dp,
-                        shadowElevation = 0.dp
+                        shadowElevation = 2.dp
                     ) {
                         Text(
                             text =
-                                "${currentIndex + 1} מתוך $totalItems",
+                                "לא נמצאו תרגילים לתרגול",
                             modifier =
                                 Modifier.padding(
-                                    horizontal = 12.dp,
-                                    vertical = 4.dp
+                                    horizontal = 24.dp,
+                                    vertical = 20.dp
                                 ),
                             style =
-                                KmiTypography.caption.copy(
-                                    fontWeight =
-                                        FontWeight.Bold
-                                ),
+                                KmiTypography.sectionTitle,
                             color =
                                 MaterialTheme
                                     .colorScheme
-                                    .onSurfaceVariant
+                                    .onSurface,
+                            textAlign = TextAlign.Center
                         )
                     }
                 }
-            }
 
-            Spacer(
-                modifier =
-                    Modifier.height(12.dp)
-            )
+            } else {
 
-            PracticeBottomControls(
-                isEnglish = false,
-                showSkip =
-                    currentIndex <
-                            practiceItems.lastIndex,
-                onHelp = {
-                    showHelp = true
-                },
-                onSkip = {
-                    if (
-                        currentIndex <
-                        practiceItems.lastIndex
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(
+                            top = sectionHeaderPadding
+                        )
+                ) {
+
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(
+                                start = 16.dp,
+                                end = 16.dp,
+                                top = 14.dp,
+                                bottom = 150.dp
+                            ),
+                        horizontalAlignment =
+                            Alignment.CenterHorizontally
                     ) {
-                        currentIndex++
+
+                        PracticeExerciseCenterCard(
+                            belt =
+                                currentItem.belt,
+                            exerciseTitle =
+                                currentItem.title,
+                            exerciseSubtitle =
+                                null,
+                            timeText =
+                                String.format(
+                                    "%02d:%02d",
+                                    timeLeft / 60,
+                                    timeLeft % 60
+                                ),
+                            currentIndex =
+                                currentIndex,
+                            totalCount =
+                                totalItems,
+                            centerLabel =
+                                null,
+                            isRunning =
+                                isRunning,
+                            isMuted =
+                                isMuted,
+                            onToggleRunning = {
+                                isRunning =
+                                    !isRunning
+                            },
+                            onToggleMute = {
+                                isMuted =
+                                    !isMuted
+                            },
+                            onCardClick = {
+                                showHelp = true
+                            }
+                        )
                     }
-                },
-                onFinish = {
-                    onBack()
+
+                    PracticeBottomControls(
+                        isEnglish = false,
+                        showSkip =
+                            currentIndex <
+                                    practiceItems.lastIndex,
+                        modifier = Modifier
+                            .align(
+                                Alignment.BottomCenter
+                            )
+                            .padding(
+                                start = 16.dp,
+                                end = 16.dp,
+                                bottom = 8.dp
+                            ),
+                        onHelp = {
+                            showHelp = true
+                        },
+                        onSkip = {
+                            if (
+                                currentIndex <
+                                practiceItems.lastIndex
+                            ) {
+                                currentIndex++
+                            }
+                        },
+                        onFinish = {
+                            isRunning = false
+                            onBack()
+                        }
+                    )
                 }
-            )
+            }
         }
     }
 
@@ -717,16 +628,3 @@ fun PracticeByTopicsScreen(
         )
     }
 }
-
-private fun practiceBeltImageRes(
-    belt: Belt
-): Int =
-    when (belt) {
-        Belt.YELLOW -> R.drawable.intro_belt_yellow
-        Belt.ORANGE -> R.drawable.intro_belt_orange
-        Belt.GREEN -> R.drawable.intro_belt_green
-        Belt.BLUE -> R.drawable.intro_belt_blue
-        Belt.BROWN -> R.drawable.intro_belt_brown
-        Belt.BLACK -> R.drawable.intro_belt_black
-        else -> R.drawable.intro_belt_yellow
-    }

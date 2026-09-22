@@ -7,9 +7,10 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -35,23 +36,22 @@ import il.kmi.app.ui.KmiTypography
 fun PracticeBottomControls(
     isEnglish: Boolean,
     showSkip: Boolean,
+    modifier: Modifier = Modifier,
     onHelp: () -> Unit,
     onSkip: () -> Unit,
-    onFinish: () -> Unit,
-    modifier: Modifier = Modifier
+    onFinish: () -> Unit
 ) {
     Surface(
         modifier =
             modifier
-                .fillMaxWidth()
-                .navigationBarsPadding(),
+                .fillMaxWidth(),
         shape =
-            RoundedCornerShape(26.dp),
+            RoundedCornerShape(24.dp),
         color =
             MaterialTheme
                 .colorScheme
                 .surface
-                .copy(alpha = 0.96f),
+                .copy(alpha = 0.98f),
         tonalElevation = 0.dp,
         shadowElevation = 0.dp,
         border =
@@ -61,36 +61,19 @@ fun PracticeBottomControls(
                     MaterialTheme
                         .colorScheme
                         .outlineVariant
+                        .copy(alpha = 0.70f)
             )
     ) {
         Column(
             modifier =
                 Modifier
                     .fillMaxWidth()
-                    .background(
-                        brush =
-                            Brush.verticalGradient(
-                                colors =
-                                    listOf(
-                                        MaterialTheme
-                                            .colorScheme
-                                            .surface,
-                                        MaterialTheme
-                                            .colorScheme
-                                            .surfaceVariant
-                                            .copy(alpha = 0.58f),
-                                        MaterialTheme
-                                            .colorScheme
-                                            .surface
-                                    )
-                            )
-                    )
                     .padding(
-                        horizontal = 14.dp,
-                        vertical = 12.dp
+                        horizontal = 10.dp,
+                        vertical = 8.dp
                     ),
             verticalArrangement =
-                Arrangement.spacedBy(8.dp)
+                Arrangement.spacedBy(6.dp)
         ) {
             PracticeBottomActionsRow(
                 isEnglish = isEnglish,
@@ -101,18 +84,23 @@ fun PracticeBottomControls(
 
             Surface(
                 onClick = onFinish,
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .height(46.dp),
+                shape =
+                    RoundedCornerShape(17.dp),
                 color =
                     MaterialTheme
                         .colorScheme
-                        .primaryContainer,
+                        .primaryContainer
+                        .copy(alpha = 0.72f),
                 contentColor =
                     MaterialTheme
                         .colorScheme
                         .onPrimaryContainer,
-                shape =
-                    RoundedCornerShape(20.dp),
-                shadowElevation = 0.dp,
                 tonalElevation = 0.dp,
+                shadowElevation = 0.dp,
                 border =
                     BorderStroke(
                         width = 1.dp,
@@ -120,21 +108,12 @@ fun PracticeBottomControls(
                             MaterialTheme
                                 .colorScheme
                                 .primary
-                                .copy(alpha = 0.30f)
-                    ),
-                modifier =
-                    Modifier
-                        .fillMaxWidth()
-                        .heightIn(min = 54.dp)
+                                .copy(alpha = 0.22f)
+                    )
             ) {
                 Box(
                     modifier =
-                        Modifier
-                            .fillMaxWidth()
-                            .padding(
-                                horizontal = 16.dp,
-                                vertical = 10.dp
-                            ),
+                        Modifier.fillMaxSize(),
                     contentAlignment =
                         Alignment.Center
                 ) {
@@ -148,7 +127,7 @@ fun PracticeBottomControls(
                         style =
                             KmiTypography.action.copy(
                                 fontWeight =
-                                    FontWeight.Black
+                                    FontWeight.ExtraBold
                             ),
                         color =
                             MaterialTheme
@@ -156,9 +135,7 @@ fun PracticeBottomControls(
                                 .onPrimaryContainer,
                         textAlign =
                             TextAlign.Center,
-                        maxLines = 2,
-                        overflow =
-                            TextOverflow.Ellipsis
+                        maxLines = 1
                     )
                 }
             }
@@ -249,7 +226,7 @@ private fun PracticeBottomActionsRow(
                                 MaterialTheme
                                     .colorScheme
                                     .onPrimary
-                                    .copy(alpha = 0.18f),
+                                    .copy(alpha = 0.08f),
                                 Color.Transparent
                             )
                     ),
@@ -272,8 +249,8 @@ private fun PracticeBottomPillButton(
     overlayGradient: Brush? =
         Brush.linearGradient(
             listOf(
-                Color.White.copy(alpha = 0.22f),
-                Color.White.copy(alpha = 0.06f)
+                Color.White.copy(alpha = 0.10f),
+                Color.Transparent
             )
         ),
     modifier: Modifier = Modifier,
@@ -296,7 +273,7 @@ private fun PracticeBottomPillButton(
                     content.copy(alpha = 0.20f)
             ),
         modifier =
-            modifier.heightIn(min = 54.dp)
+            modifier.heightIn(min = 48.dp)
     ) {
         Box(
             modifier =
@@ -319,7 +296,7 @@ private fun PracticeBottomPillButton(
                         .fillMaxWidth()
                         .padding(
                             horizontal = 12.dp,
-                            vertical = 10.dp
+                            vertical = 7.dp
                         ),
                 verticalAlignment =
                     Alignment.CenterVertically,

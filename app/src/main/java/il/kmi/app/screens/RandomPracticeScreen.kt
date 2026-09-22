@@ -3,16 +3,10 @@ package il.kmi.app.screens
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Pause
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.VolumeOff
-import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -22,14 +16,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.shape.CircleShape
 import il.kmi.app.ui.practice.PracticeStartConfigDialog
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.material.icons.outlined.Info
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import il.kmi.app.ui.KmiTtsManager
@@ -51,7 +38,6 @@ import android.media.ToneGenerator
 import androidx.compose.ui.platform.LocalContext
 import il.kmi.shared.localization.AppLanguage
 import il.kmi.shared.localization.AppLanguageManager
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -62,6 +48,8 @@ import il.kmi.shared.domain.content.ExerciseIdentityRegistry
 import il.yuval.ui.theme.kmiScreenBackgroundBrush
 import il.yuval.ui.theme.kmiSectionHeaderBackground
 import il.yuval.ui.theme.kmiSectionHeaderContentColor
+import il.kmi.app.ui.practice.PracticeBottomControls
+import il.kmi.app.ui.practice.PracticeExerciseCenterCard
 
 //==========================================================================
 
@@ -262,7 +250,12 @@ fun RandomPracticeScreen(
     val langManager = remember { AppLanguageManager(context) }
     val isEnglish = langManager.getCurrentLanguage() == AppLanguage.ENGLISH
 
-    val sp = remember { context.getSharedPreferences("kmi_settings", android.content.Context.MODE_PRIVATE) }
+    val sp = remember {
+        context.getSharedPreferences(
+            "kmi_settings",
+            android.content.Context.MODE_PRIVATE
+        )
+    }
     val notePrefs = remember(context) {
         context.getSharedPreferences("kmi_exercise_notes", android.content.Context.MODE_PRIVATE)
     }
@@ -308,14 +301,14 @@ fun RandomPracticeScreen(
 
     // ----- תוכן לתרגול -----
     // ✅ FIX: מקור האמת עבר ל-shared, לכן fallback חייב לקרוא מ-SharedContentRepo
-     fun sharedTopicTitlesFor(b: Belt): List<String> {
+    fun sharedTopicTitlesFor(b: Belt): List<String> {
         return SharedContentRepo.data[b]?.topics
             ?.map { it.title.trim() }
             ?.filter { it.isNotBlank() }
             .orEmpty()
     }
 
-     fun sharedItemsFor(b: Belt, topicTitle: String, subTopicTitle: String? = null): List<String> {
+    fun sharedItemsFor(b: Belt, topicTitle: String, subTopicTitle: String? = null): List<String> {
         return SharedContentRepo.getAllItemsFor(
             belt = b,
             topicTitle = topicTitle,
@@ -359,24 +352,25 @@ fun RandomPracticeScreen(
         ) {
             val rawFilter = topicFilter?.trim().orEmpty()
 
-        // אם הגיע טוקן עם encoding, נעשה decode כאן (כמו קודם)
-        val decodedTopicsToken = if (rawFilter.isNotBlank() && rawFilter.startsWith("$TOPICS_PICK_TOKEN:")) {
-            val payload = rawFilter.removePrefix("$TOPICS_PICK_TOKEN:")
-            val decoded = payload.split(';').joinToString(";") { seg ->
-                val parts = seg.split('|', limit = 2)
-                if (parts.size != 2) seg
-                else {
-                    val beltId = parts[0]
-                    val topicsDecoded = parts[1]
-                        .split(',')
-                        .joinToString(",") { enc -> decTokenPart(enc.trim()) }
-                    "$beltId|$topicsDecoded"
+            // אם הגיע טוקן עם encoding, נעשה decode כאן (כמו קודם)
+            val decodedTopicsToken =
+                if (rawFilter.isNotBlank() && rawFilter.startsWith("$TOPICS_PICK_TOKEN:")) {
+                    val payload = rawFilter.removePrefix("$TOPICS_PICK_TOKEN:")
+                    val decoded = payload.split(';').joinToString(";") { seg ->
+                        val parts = seg.split('|', limit = 2)
+                        if (parts.size != 2) seg
+                        else {
+                            val beltId = parts[0]
+                            val topicsDecoded = parts[1]
+                                .split(',')
+                                .joinToString(",") { enc -> decTokenPart(enc.trim()) }
+                            "$beltId|$topicsDecoded"
+                        }
+                    }
+                    "$TOPICS_PICK_TOKEN:$decoded"
+                } else {
+                    rawFilter
                 }
-            }
-            "$TOPICS_PICK_TOKEN:$decoded"
-        } else {
-            rawFilter
-        }
 
             // בתרגול של תת־נושא, PracticeFacade מקבל את נושא האב.
             val fixedFilter = when {
@@ -386,15 +380,33 @@ fun RandomPracticeScreen(
                 decodedTopicsToken.isBlank() ->
                     il.kmi.shared.practice.PracticeFilters.ALL
 
-            decodedTopicsToken.equals(belt.heb.trim(), ignoreCase = true) -> il.kmi.shared.practice.PracticeFilters.ALL
-            decodedTopicsToken.equals(belt.id.trim(), ignoreCase = true) -> il.kmi.shared.practice.PracticeFilters.ALL
+                decodedTopicsToken.equals(
+                    belt.heb.trim(),
+                    ignoreCase = true
+                ) -> il.kmi.shared.practice.PracticeFilters.ALL
 
-            decodedTopicsToken.equals("אקראי", ignoreCase = true) -> il.kmi.shared.practice.PracticeFilters.ALL
-            decodedTopicsToken.equals("random", ignoreCase = true) -> il.kmi.shared.practice.PracticeFilters.ALL
-            decodedTopicsToken.equals("all", ignoreCase = true) -> il.kmi.shared.practice.PracticeFilters.ALL
+                decodedTopicsToken.equals(
+                    belt.id.trim(),
+                    ignoreCase = true
+                ) -> il.kmi.shared.practice.PracticeFilters.ALL
 
-            else -> decodedTopicsToken
-        }
+                decodedTopicsToken.equals(
+                    "אקראי",
+                    ignoreCase = true
+                ) -> il.kmi.shared.practice.PracticeFilters.ALL
+
+                decodedTopicsToken.equals(
+                    "random",
+                    ignoreCase = true
+                ) -> il.kmi.shared.practice.PracticeFilters.ALL
+
+                decodedTopicsToken.equals(
+                    "all",
+                    ignoreCase = true
+                ) -> il.kmi.shared.practice.PracticeFilters.ALL
+
+                else -> decodedTopicsToken
+            }
 
             /*
        * טוקנים שמייצגים טאב במסך הרשימות.
@@ -460,105 +472,110 @@ fun RandomPracticeScreen(
                     fixedFilter
                 }
 
-        // ===================== ✅ NEW: resolve נושא יחיד =====================
-        val resolvedSingleTopic: String? =
-            if (!isSingleTopicFilter) null
-            else {
-                val wanted = fixedFilter.trim()
-                val wantedN = wanted.normHeb()
+            // ===================== ✅ NEW: resolve נושא יחיד =====================
+            val resolvedSingleTopic: String? =
+                if (!isSingleTopicFilter) null
+                else {
+                    val wanted = fixedFilter.trim()
+                    val wantedN = wanted.normHeb()
 
-                val titlesFromBridge = runCatching { il.kmi.app.search.KmiSearchBridge.topicTitlesFor(belt) }
-                    .getOrDefault(emptyList())
+                    val titlesFromBridge =
+                        runCatching { il.kmi.app.search.KmiSearchBridge.topicTitlesFor(belt) }
+                            .getOrDefault(emptyList())
 
-                val titles = titlesFromBridge.ifEmpty { sharedTopicTitlesFor(belt) }
+                    val titles = titlesFromBridge.ifEmpty { sharedTopicTitlesFor(belt) }
 
-                when {
-                    titles.isEmpty() -> wanted
-                    titles.any { it.trim() == wanted } -> titles.first { it.trim() == wanted }
-                    titles.any { it.trim().normHeb() == wantedN } -> titles.first { it.trim().normHeb() == wantedN }
-                    else -> wanted
-                }
-            }
-        // ================================================================
-
-        val built = il.kmi.shared.practice.PracticeFacade.buildPracticeItems(
-            request = il.kmi.shared.practice.PracticeRequest(
-                beltId = belt.id,
-                topicFilter = requestFilterForFacade
-            ),
-
-            // ===================== ✅ FIX: TopicTitlesProvider =====================
-            topicTitlesProvider = il.kmi.shared.practice.PracticeFacade.TopicTitlesProvider { beltId ->
-                val b = Belt.fromId(beltId) ?: belt
-
-                // ✅ אם זה תרגול של נושא יחיד — תחזיר רק אותו
-                if (isSingleTopicFilter && b.id == belt.id) {
-                    return@TopicTitlesProvider listOf(resolvedSingleTopic ?: fixedFilter.trim())
-                }
-
-                // ✅ קודם shared (האמת)
-                val sharedTitles = sharedTopicTitlesFor(b)
-                if (sharedTitles.isNotEmpty()) return@TopicTitlesProvider sharedTitles
-
-                // ואז Bridge אם צריך
-                runCatching { il.kmi.app.search.KmiSearchBridge.topicTitlesFor(b) }
-                    .getOrDefault(emptyList())
-            },
-
-            // =====================================================================
-
-            itemsProvider =
-                il.kmi.shared.practice.PracticeFacade
-                    .ItemsProvider { beltId, topicTitle ->
-
-                        val currentBelt =
-                            Belt.fromId(beltId) ?: belt
-
-                        val matchingSubTopic =
-                            selectedSubjectFilter
-                                ?.takeIf {
-                                    currentBelt.id == belt.id &&
-                                            it.topic.normHeb() ==
-                                            topicTitle.normHeb()
-                                }
-                                ?.subTopic
-
-                        val sharedItems =
-                            sharedItemsFor(
-                                b = currentBelt,
-                                topicTitle = topicTitle,
-                                subTopicTitle =
-                                    matchingSubTopic
-                            )
-
-                        if (sharedItems.isNotEmpty()) {
-                            return@ItemsProvider sharedItems
+                    when {
+                        titles.isEmpty() -> wanted
+                        titles.any { it.trim() == wanted } -> titles.first { it.trim() == wanted }
+                        titles.any { it.trim().normHeb() == wantedN } -> titles.first {
+                            it.trim().normHeb() == wantedN
                         }
 
-                        // Bridge הוא fallback לנושא ללא תת־נושא.
-                        if (matchingSubTopic == null) {
-                            runCatching {
-                                il.kmi.app.search
-                                    .KmiSearchBridge
-                                    .itemsFor(
-                                        currentBelt,
-                                        topicTitle
-                                    )
-                            }.getOrDefault(emptyList())
-                        } else {
-                            emptyList()
-                        }
-                    },
-            setsProvider = il.kmi.shared.practice.PracticeFacade.SetProvider { key ->
-                sp.getStringSet(key, emptySet()) ?: emptySet()
-            },
-            excludedProvider = il.kmi.shared.practice.PracticeFacade.ExcludedProvider { beltId, topicTitle, rawItem, disp ->
-                val excluded = sp.getStringSet("excluded_${beltId}_${topicTitle}", emptySet()) ?: emptySet()
-                (rawItem in excluded) || (disp in excluded)
-            },
-            canonicalKeyFor = { rawItem -> canonicalKeyFor(rawItem) },
-            displayNameFor = { rawItem -> displayName(rawItem) }
-        )
+                        else -> wanted
+                    }
+                }
+            // ================================================================
+
+            val built = il.kmi.shared.practice.PracticeFacade.buildPracticeItems(
+                request = il.kmi.shared.practice.PracticeRequest(
+                    beltId = belt.id,
+                    topicFilter = requestFilterForFacade
+                ),
+
+                // ===================== ✅ FIX: TopicTitlesProvider =====================
+                topicTitlesProvider = il.kmi.shared.practice.PracticeFacade.TopicTitlesProvider { beltId ->
+                    val b = Belt.fromId(beltId) ?: belt
+
+                    // ✅ אם זה תרגול של נושא יחיד — תחזיר רק אותו
+                    if (isSingleTopicFilter && b.id == belt.id) {
+                        return@TopicTitlesProvider listOf(resolvedSingleTopic ?: fixedFilter.trim())
+                    }
+
+                    // ✅ קודם shared (האמת)
+                    val sharedTitles = sharedTopicTitlesFor(b)
+                    if (sharedTitles.isNotEmpty()) return@TopicTitlesProvider sharedTitles
+
+                    // ואז Bridge אם צריך
+                    runCatching { il.kmi.app.search.KmiSearchBridge.topicTitlesFor(b) }
+                        .getOrDefault(emptyList())
+                },
+
+                // =====================================================================
+
+                itemsProvider =
+                    il.kmi.shared.practice.PracticeFacade
+                        .ItemsProvider { beltId, topicTitle ->
+
+                            val currentBelt =
+                                Belt.fromId(beltId) ?: belt
+
+                            val matchingSubTopic =
+                                selectedSubjectFilter
+                                    ?.takeIf {
+                                        currentBelt.id == belt.id &&
+                                                it.topic.normHeb() ==
+                                                topicTitle.normHeb()
+                                    }
+                                    ?.subTopic
+
+                            val sharedItems =
+                                sharedItemsFor(
+                                    b = currentBelt,
+                                    topicTitle = topicTitle,
+                                    subTopicTitle =
+                                        matchingSubTopic
+                                )
+
+                            if (sharedItems.isNotEmpty()) {
+                                return@ItemsProvider sharedItems
+                            }
+
+                            // Bridge הוא fallback לנושא ללא תת־נושא.
+                            if (matchingSubTopic == null) {
+                                runCatching {
+                                    il.kmi.app.search
+                                        .KmiSearchBridge
+                                        .itemsFor(
+                                            currentBelt,
+                                            topicTitle
+                                        )
+                                }.getOrDefault(emptyList())
+                            } else {
+                                emptyList()
+                            }
+                        },
+                setsProvider = il.kmi.shared.practice.PracticeFacade.SetProvider { key ->
+                    sp.getStringSet(key, emptySet()) ?: emptySet()
+                },
+                excludedProvider = il.kmi.shared.practice.PracticeFacade.ExcludedProvider { beltId, topicTitle, rawItem, disp ->
+                    val excluded = sp.getStringSet("excluded_${beltId}_${topicTitle}", emptySet())
+                        ?: emptySet()
+                    (rawItem in excluded) || (disp in excluded)
+                },
+                canonicalKeyFor = { rawItem -> canonicalKeyFor(rawItem) },
+                displayNameFor = { rawItem -> displayName(rawItem) }
+            )
 
             /*
        * מחזיר את אותו ex_XXX שבו משתמש
@@ -620,8 +637,7 @@ fun RandomPracticeScreen(
                 isFavoritesTab -> {
                     val favoriteIds =
                         favorites
-                            .mapTo(linkedSetOf()) {
-                                    storedValue ->
+                            .mapTo(linkedSetOf()) { storedValue ->
 
                                 val cleanValue =
                                     storedValue.trim()
@@ -969,7 +985,8 @@ fun RandomPracticeScreen(
             val masteredKey = "mastered_${belt.id}_${key}"
             val unknownKey = "unknown_${belt.id}_${key}"
 
-            val masteredSet = (sp.getStringSet(masteredKey, emptySet()) ?: emptySet()).toMutableSet()
+            val masteredSet =
+                (sp.getStringSet(masteredKey, emptySet()) ?: emptySet()).toMutableSet()
             val unknownSet = (sp.getStringSet(unknownKey, emptySet()) ?: emptySet()).toMutableSet()
 
             when (newStatus) {
@@ -1308,10 +1325,9 @@ fun RandomPracticeScreen(
             onDismiss = {
                 requestExit()
             },
-            onConfirm = {
-                    durationSeconds,
-                    playHalf,
-                    playCountdown ->
+            onConfirm = { durationSeconds,
+                          playHalf,
+                          playCountdown ->
 
                 durationMinutes =
                     (durationSeconds / 60)
@@ -1563,84 +1579,66 @@ fun RandomPracticeScreen(
                     brush = kmiScreenBackgroundBrush()
                 )
         ) {
-            selectedSubjectFilter?.let { selectedFilter ->
-                PracticeSubjectHeader(
-                    topic = topicTitleForUi(
-                        selectedFilter.topic
-                    ),
-                    subTopic =
-                        selectedFilter.subTopic
-                            ?.let(::topicTitleForUi),
-                    isEnglish = isEnglish,
-                    modifier = Modifier
-                        .align(Alignment.TopCenter)
-                        .fillMaxWidth()
-                )
-            }
-
             Box(
                 modifier = Modifier
                     .align(Alignment.TopCenter)
                     .fillMaxWidth()
-                    .heightIn(min = 72.dp)
-                    .then(
-                        if (selectedSubjectFilter == null) {
-                            Modifier.kmiSectionHeaderBackground()
-                        } else {
-                            Modifier.padding(top = 56.dp)
-                        }
-                    )
+                    .kmiSectionHeaderBackground()
                     .padding(
                         horizontal = 16.dp,
-                        vertical = 12.dp
+                        vertical = 7.dp
                     ),
                 contentAlignment = Alignment.Center
             ) {
-                Row(
+                Column(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.Center,
-                    verticalAlignment = Alignment.CenterVertically
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
                 ) {
-
                     Text(
-                        text = String.format(
-                            "%02d:%02d",
-                            timeLeft / 60,
-                            timeLeft % 60
-                        ),
-                        style = KmiTypography.screenTitle.copy(
-                            fontSize =
-                                KmiTypography.screenTitle.fontSize * 1.5f,
+                        text =
+                            selectedSubjectFilter?.let { selectedFilter ->
+                                val topic =
+                                    topicTitleForUi(
+                                        selectedFilter.topic
+                                    )
+
+                                val subTopic =
+                                    selectedFilter.subTopic
+                                        ?.takeIf { it.isNotBlank() }
+                                        ?.let(::topicTitleForUi)
+
+                                if (subTopic != null) {
+                                    if (isEnglish) {
+                                        "$topic\nSubtopic: $subTopic"
+                                    } else {
+                                        "$topic\nתת־נושא: $subTopic"
+                                    }
+                                } else {
+                                    topic
+                                }
+                            } ?: if (isEnglish) {
+                                "Practice and improve\nyour skills"
+                            } else {
+                                "תרגלו ושפרו את הידע\nוהביצועים שלכם"
+                            },
+                        modifier = Modifier.fillMaxWidth(),
+                        color = kmiSectionHeaderContentColor(),
+                        style = KmiTypography.secondary.copy(
                             fontWeight = FontWeight.Black
                         ),
-                        color =
-                            if (selectedSubjectFilter == null) {
-                                kmiSectionHeaderContentColor()
-                            } else {
-                                MaterialTheme.colorScheme.primary
-                            },
                         textAlign = TextAlign.Center,
-                        maxLines = 1
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
                     )
 
-                    Spacer(Modifier.width(12.dp))
-
-                    Text(
-                        text = "⏳",
-                        style = KmiTypography.screenTitle.copy(
-                            fontSize =
-                                KmiTypography.screenTitle.fontSize * 1.5f
-                        )
+                    Spacer(
+                        modifier = Modifier.height(2.dp)
                     )
                 }
             }
 
-            val subjectHeaderPadding =
-                if (selectedSubjectFilter != null) {
-                    128.dp
-                } else {
-                    72.dp
-                }
+            val subjectHeaderPadding = 56.dp
 
             if (weightedItems.isEmpty()) {
                 Box(
@@ -1664,138 +1662,160 @@ fun RandomPracticeScreen(
                     }
                 }
             } else {
-                Column(
+                Box(
                     modifier = Modifier
                         .fillMaxSize()
                         .padding(top = subjectHeaderPadding)
-                        .padding(
-                            horizontal = 16.dp,
-                            vertical = 14.dp
-                        ),
-                    verticalArrangement = Arrangement.SpaceBetween,
-                    horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Column(
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(
+                                start = 16.dp,
+                                end = 16.dp,
+                                top = 14.dp,
+                                bottom = 150.dp
+                            ),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        if (currentIndex in weightedItems.indices) {
-                            Surface(
-                                onClick = {
-                                    showHelp = true
-                                },
-                                modifier = Modifier.fillMaxWidth(),
-                                shape = RoundedCornerShape(20.dp),
-                                color = MaterialTheme.colorScheme.surfaceVariant.copy(
-                                    alpha = 0.82f
-                                ),
-                                contentColor = MaterialTheme.colorScheme.onSurface,
-                                tonalElevation = 0.dp,
-                                shadowElevation = 0.dp,
-                                border = BorderStroke(
-                                    width = 1.dp,
-                                    color = belt.color.copy(alpha = 0.30f)
-                                )
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(
-                                            horizontal = 18.dp,
-                                            vertical = 22.dp
-                                        ),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Text(
-                                        text = weightedPracticeItems
-                                            .getOrNull(currentIndex)
-                                            ?.let { uiTitleFor(it) }
-                                            .orEmpty(),
-                                        style = KmiTypography.screenTitle.copy(
-                                            fontWeight = FontWeight.Black
-                                        ),
-                                        color = MaterialTheme.colorScheme.onSurface,
-                                        textAlign = TextAlign.Center,
-                                        maxLines = 4,
-                                        overflow = TextOverflow.Ellipsis,
-                                        modifier = Modifier.fillMaxWidth()
-                                    )
-                                }
-                            }
-
-                            Spacer(Modifier.height(18.dp))
-
-                            // ✅ רמקול מצד אחד, סטטוס באמצע, עצירה/המשך מצד שני
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 4.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                PremiumSoundIconButton(
-                                    isMuted = isMuted,
-                                    isEnglish = isEnglish,
-                                    onClick = {
-                                        isMuted = !isMuted
-                                        if (!isMuted && sessionStarted && currentIndex in weightedItems.indices) {
-                                            weightedPracticeItems.getOrNull(currentIndex)?.let { currentItem ->
-                                                speak(uiTitleFor(currentItem))
-                                            }
-                                            lastSpokenIndex = currentIndex
-                                        } else {
-                                            KmiTtsManager.stop()
+                        Column(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            PracticeExerciseCenterCard(
+                                belt = belt,
+                                exerciseTitle =
+                                    weightedPracticeItems
+                                        .getOrNull(currentIndex)
+                                        ?.let { uiTitleFor(it) }
+                                        .orEmpty(),
+                                exerciseSubtitle =
+                                    currentPracticeItem
+                                        ?.topicTitle
+                                        ?.takeIf {
+                                            it.isNotBlank()
                                         }
+                                        ?.let {
+                                            topicTitleForUi(it)
+                                        },
+                                timeText =
+                                    String.format(
+                                        "%02d:%02d",
+                                        timeLeft / 60,
+                                        timeLeft % 60
+                                    ),
+                                currentIndex =
+                                    currentIndex,
+                                totalCount =
+                                    weightedItems.size,
+                                centerLabel =
+                                    when (currentPracticeStatus) {
+                                        true ->
+                                            if (isEnglish) {
+                                                "Known"
+                                            } else {
+                                                "יודע"
+                                            }
+
+                                        false ->
+                                            if (isEnglish) {
+                                                "Not known"
+                                            } else {
+                                                "לא יודע"
+                                            }
+
+                                        null ->
+                                            if (isEnglish) {
+                                                "Not marked"
+                                            } else {
+                                                "לא סומן"
+                                            }
                                     },
-                                    modifier = Modifier.align(Alignment.CenterStart)
-                                )
+                                isRunning =
+                                    isRunning,
+                                isMuted =
+                                    isMuted,
+                                onToggleRunning = {
+                                    isRunning =
+                                        !isRunning
 
-                                key(currentStatusId, currentPracticeStatus) {
-                                    Box(modifier = Modifier.align(Alignment.Center)) {
-                                        PracticeStatusCircle(
-                                            status = currentPracticeStatus,
-                                            beltColor = belt.color,
-                                            isEnglish = isEnglish,
-                                            onClick = {
-                                                val nextStatus = when (currentPracticeStatus) {
-                                                    null -> true
-                                                    true -> false
-                                                    false -> null
-                                                }
-
-                                                setPracticeStatus(
-                                                    weightedPracticeItems.getOrNull(currentIndex),
-                                                    nextStatus
+                                    if (
+                                        isRunning &&
+                                        sessionStarted &&
+                                        currentIndex in
+                                        weightedItems.indices
+                                    ) {
+                                        weightedPracticeItems
+                                            .getOrNull(currentIndex)
+                                            ?.let { currentItem ->
+                                                speak(
+                                                    uiTitleFor(currentItem)
                                                 )
                                             }
-                                        )
-                                    }
-                                }
 
-                                PremiumPauseResumeButton(
-                                    isRunning = isRunning,
-                                    isEnglish = isEnglish,
-                                    onClick = {
-                                        isRunning = !isRunning
-                                        if (isRunning && sessionStarted && currentIndex in weightedItems.indices) {
-                                            weightedPracticeItems.getOrNull(currentIndex)?.let { currentItem ->
-                                                speak(uiTitleFor(currentItem))
+                                        lastSpokenIndex =
+                                            currentIndex
+                                    } else {
+                                        KmiTtsManager.stop()
+                                    }
+                                },
+                                onToggleMute = {
+                                    isMuted =
+                                        !isMuted
+
+                                    if (
+                                        !isMuted &&
+                                        sessionStarted &&
+                                        currentIndex in
+                                        weightedItems.indices
+                                    ) {
+                                        weightedPracticeItems
+                                            .getOrNull(currentIndex)
+                                            ?.let { currentItem ->
+                                                speak(
+                                                    uiTitleFor(currentItem)
+                                                )
                                             }
-                                            lastSpokenIndex = currentIndex
-                                        } else {
-                                            KmiTtsManager.stop()
+
+                                        lastSpokenIndex =
+                                            currentIndex
+                                    } else {
+                                        KmiTtsManager.stop()
+                                    }
+                                },
+                                onCenterClick = {
+                                    val nextStatus =
+                                        when (currentPracticeStatus) {
+                                            null -> true
+                                            true -> false
+                                            false -> null
                                         }
-                                    },
-                                    modifier = Modifier.align(Alignment.CenterEnd)
-                                )
-                            }
+
+                                    setPracticeStatus(
+                                        weightedPracticeItems
+                                            .getOrNull(currentIndex),
+                                        nextStatus
+                                    )
+                                },
+                                onCardClick = {
+                                    showHelp = true
+                                }
+                            )
                         }
                     }
 
-                    PracticeBottomActionCard(
+                    PracticeBottomControls(
                         isEnglish = isEnglish,
                         showSkip =
                             currentIndex <
                                     weightedItems.lastIndex,
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .padding(
+                                start = 16.dp,
+                                end = 16.dp,
+                                bottom = 8.dp
+                            ),
                         onHelp = {
                             showHelp = true
                         },
@@ -1810,7 +1830,10 @@ fun RandomPracticeScreen(
                         onFinish = {
                             isRunning = false
                             sessionStarted = false
-                            runCatching { KmiTtsManager.stop() }
+
+                            runCatching {
+                                KmiTtsManager.stop()
+                            }
 
                             playStopRest()
                             requestExit()
@@ -1818,358 +1841,363 @@ fun RandomPracticeScreen(
                     )
                 }
             }
-        }
 
-        when {
-            pickedSearchHit != null -> {
-                val (b, t, item) = pickedSearchHit!!
+            when {
+                pickedSearchHit != null -> {
+                    val (b, t, item) = pickedSearchHit!!
 
-                val explanation = remember(b, t, item, isEnglish) {
-                    findExplanationForPractice(
-                        belt = b,
-                        topic = t,
-                        rawItem = item,
-                        isEnglish = isEnglish
-                    )
-                }
-
-                val itemTitleUi = remember(item, isEnglish) {
-                    searchTitleForUi(item)
-                }
-
-                val topicTitleUi = remember(t, isEnglish) {
-                    topicTitleForUi(t)
-                }
-
-                val sheetTextAlign = if (isEnglish) TextAlign.Left else TextAlign.Right
-                val sheetHorizontalAlignment = if (isEnglish) Alignment.Start else Alignment.End
-                val actionAlignment = if (isEnglish) Alignment.Start else Alignment.End
-
-                val favId = remember(item) { normalizeFavoriteId(item) }
-                val isFav = favorites.contains(favId)
-
-                val noteKey = remember(b, t, favId) {
-                    "note_${b.id}_${t.trim()}_${favId}"
-                }
-                var noteText by remember(noteKey) {
-                    mutableStateOf(notePrefs.getString(noteKey, "").orEmpty())
-                }
-                var showNoteEditor by remember { mutableStateOf(false) }
-
-                fun toggleFav() {
-                    if (item.isBlank()) return
-                    FavoritesStore.toggle(favId)
-                }
-
-                ExerciseExplanationDialog(
-                    title = itemTitleUi,
-                    beltLabel = "$topicTitleUi • ${if (isEnglish) b.en else b.heb}",
-                    explanation = explanation,
-                    noteText = noteText,
-                    isFavorite = isFav,
-                    accentColor = b.color,
-                    isEnglish = isEnglish,
-                    onDismiss = {
-                        pickedSearchHit = null
-                        showHelp = false
-                        showSearch = false
-                        searchQuery = ""
-                    },
-                    onEditNote = {
-                        showNoteEditor = true
-                    },
-                    onDeleteNote = {
-                        noteText = ""
-
-                        savePracticeNote(
-                            prefs = notePrefs,
-                            key = noteKey,
-                            text = ""
-                        )
-                    },
-                    onToggleFavorite = {
-                        toggleFav()
-                    }
-                )
-
-                if (showNoteEditor) {
-                    ExerciseNoteEditorDialog(
-                        exerciseTitle = itemTitleUi,
-                        noteText = noteText,
-                        isEnglish = isEnglish,
-                        accentColor = b.color,
-                        onNoteChange = { noteText = it },
-                        onDismiss = {
-                            showNoteEditor = false
-                        },
-                        onSave = {
-                            val cleanNote = noteText.trim()
-                            noteText = cleanNote
-
-                            savePracticeNote(
-                                prefs = notePrefs,
-                                key = noteKey,
-                                text = cleanNote
-                            )
-
-                            showNoteEditor = false
-                        }
-                    )
-                }
-            }
-
-            showHelp -> {
-                val currentHelpItem = weightedPracticeItems.getOrNull(currentIndex)
-                val rawItemForHelp = currentHelpItem?.displayTitle?.trim().orEmpty()
-
-                val explanation = remember(belt, rawItemForHelp, isEnglish) {
-                    if (rawItemForHelp.isBlank()) {
-                        if (isEnglish) "No exercise selected to display." else "לא נבחר תרגיל להצגה."
-                    } else {
+                    val explanation = remember(b, t, item, isEnglish) {
                         findExplanationForPractice(
-                            belt = belt,
-                            topic = currentHelpItem?.topicTitle.orEmpty(),
-                            rawItem = rawItemForHelp,
+                            belt = b,
+                            topic = t,
+                            rawItem = item,
                             isEnglish = isEnglish
                         )
                     }
-                }
 
-                val safeItem = rawItemForHelp
-
-                val safeItemTitleUi = remember(currentHelpItem, safeItem, isEnglish) {
-                    if (safeItem.isBlank()) {
-                        if (isEnglish) "Exercise" else "תרגיל"
-                    } else {
-                        currentHelpItem?.let { uiTitleFor(it) } ?: searchTitleForUi(safeItem)
+                    val itemTitleUi = remember(item, isEnglish) {
+                        searchTitleForUi(item)
                     }
-                }
 
-                val helpTextAlign = if (isEnglish) TextAlign.Left else TextAlign.Right
-                val helpHorizontalAlignment = if (isEnglish) Alignment.Start else Alignment.End
-
-                val favId = remember(safeItem) { normalizeFavoriteId(safeItem) }
-
-                val isFav = safeItem.isNotBlank() && favorites.contains(favId)
-
-                val noteTopic = remember(currentHelpItem, topicFilter) {
-                    currentHelpItem?.topicTitle?.trim()?.takeIf { it.isNotBlank() }
-                        ?: topicFilter?.takeIf { it.isNotBlank() }
-                        ?: "general"
-                }
-                val noteKey = remember(belt, noteTopic, favId) {
-                    "note_${belt.id}_${noteTopic.trim()}_${favId}"
-                }
-                var noteText by remember(noteKey) {
-                    mutableStateOf(notePrefs.getString(noteKey, "").orEmpty())
-                }
-                var showNoteEditor by remember { mutableStateOf(false) }
-
-                fun toggleFav() {
-                    if (safeItem.isBlank()) return
-                    FavoritesStore.toggle(favId)
-                }
-
-                ExerciseExplanationDialog(
-                    title = safeItemTitleUi,
-                    beltLabel = "(${if (isEnglish) belt.en else belt.heb})",
-                    explanation = explanation,
-                    noteText = noteText,
-                    isFavorite = isFav,
-                    accentColor = belt.color,
-                    isEnglish = isEnglish,
-                    onDismiss = {
-                        showHelp = false
-                    },
-                    onEditNote = {
-                        showNoteEditor = true
-                    },
-                    onDeleteNote = {
-                        noteText = ""
-
-                        savePracticeNote(
-                            prefs = notePrefs,
-                            key = noteKey,
-                            text = ""
-                        )
-                    },
-                    onToggleFavorite = {
-                        toggleFav()
+                    val topicTitleUi = remember(t, isEnglish) {
+                        topicTitleForUi(t)
                     }
-                )
 
-                if (showNoteEditor) {
-                    ExerciseNoteEditorDialog(
-                        exerciseTitle = safeItemTitleUi,
+                    val sheetTextAlign = if (isEnglish) TextAlign.Left else TextAlign.Right
+                    val sheetHorizontalAlignment = if (isEnglish) Alignment.Start else Alignment.End
+                    val actionAlignment = if (isEnglish) Alignment.Start else Alignment.End
+
+                    val favId = remember(item) { normalizeFavoriteId(item) }
+                    val isFav = favorites.contains(favId)
+
+                    val noteKey = remember(b, t, favId) {
+                        "note_${b.id}_${t.trim()}_${favId}"
+                    }
+                    var noteText by remember(noteKey) {
+                        mutableStateOf(notePrefs.getString(noteKey, "").orEmpty())
+                    }
+                    var showNoteEditor by remember { mutableStateOf(false) }
+
+                    fun toggleFav() {
+                        if (item.isBlank()) return
+                        FavoritesStore.toggle(favId)
+                    }
+
+                    ExerciseExplanationDialog(
+                        title = itemTitleUi,
+                        beltLabel = "$topicTitleUi • ${if (isEnglish) b.en else b.heb}",
+                        explanation = explanation,
                         noteText = noteText,
+                        isFavorite = isFav,
+                        accentColor = b.color,
                         isEnglish = isEnglish,
-                        accentColor = belt.color,
-                        onNoteChange = { noteText = it },
                         onDismiss = {
-                            showNoteEditor = false
+                            pickedSearchHit = null
+                            showHelp = false
+                            showSearch = false
+                            searchQuery = ""
                         },
-                        onSave = {
-                            val cleanNote = noteText.trim()
-                            noteText = cleanNote
+                        onEditNote = {
+                            showNoteEditor = true
+                        },
+                        onDeleteNote = {
+                            noteText = ""
 
                             savePracticeNote(
                                 prefs = notePrefs,
                                 key = noteKey,
-                                text = cleanNote
+                                text = ""
                             )
-
-                            showNoteEditor = false
+                        },
+                        onToggleFavorite = {
+                            toggleFav()
                         }
                     )
-                }
-            }
 
-            showSearch -> {
-                val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-
-                ModalBottomSheet(
-                    onDismissRequest = {
-                        showSearch = false
-                        searchQuery = ""
-                    },
-                    sheetState = sheetState,
-                    containerColor = MaterialTheme.colorScheme.surface,
-                    tonalElevation = 4.dp
-                ) {
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .navigationBarsPadding()
-                            .padding(16.dp)
-                            .verticalScroll(rememberScrollState()),
-                        horizontalAlignment = Alignment.CenterHorizontally
-                    ) {
-                        Text(
-                            text = if (isEnglish) {
-                                "Search exercise (for example: \"kick\", \"defense\")"
-                            } else {
-                                "חפש תרגיל (למשל: \"בעיטה\", \"הגנה\")"
+                    if (showNoteEditor) {
+                        ExerciseNoteEditorDialog(
+                            exerciseTitle = itemTitleUi,
+                            noteText = noteText,
+                            isEnglish = isEnglish,
+                            accentColor = b.color,
+                            onNoteChange = { noteText = it },
+                            onDismiss = {
+                                showNoteEditor = false
                             },
-                            style = KmiTypography.sectionTitle.copy(
-                                fontWeight = FontWeight.ExtraBold
-                            ),
-                            color = MaterialTheme.colorScheme.onSurface,
-                            textAlign = TextAlign.Center,
-                            modifier = Modifier.fillMaxWidth()
-                        )
+                            onSave = {
+                                val cleanNote = noteText.trim()
+                                noteText = cleanNote
 
-                        Spacer(Modifier.height(10.dp))
-
-                        OutlinedTextField(
-                            value = searchQuery,
-                            onValueChange = { searchQuery = it },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .heightIn(min = 52.dp),
-                            singleLine = true,
-                            textStyle = KmiTypography.body,
-                            label = {
-                                Text(
-                                    text = if (isEnglish) {
-                                        "Type exercise name"
-                                    } else {
-                                        "הקלד/י שם תרגיל"
-                                    },
-                                    style = KmiTypography.secondary
+                                savePracticeNote(
+                                    prefs = notePrefs,
+                                    key = noteKey,
+                                    text = cleanNote
                                 )
+
+                                showNoteEditor = false
                             }
                         )
+                    }
+                }
 
-                        Spacer(Modifier.height(8.dp))
+                showHelp -> {
+                    val currentHelpItem = weightedPracticeItems.getOrNull(currentIndex)
+                    val rawItemForHelp = currentHelpItem?.displayTitle?.trim().orEmpty()
 
-                        if (searchQuery.isNotBlank() && searchResults.isEmpty()) {
+                    val explanation = remember(belt, rawItemForHelp, isEnglish) {
+                        if (rawItemForHelp.isBlank()) {
+                            if (isEnglish) "No exercise selected to display." else "לא נבחר תרגיל להצגה."
+                        } else {
+                            findExplanationForPractice(
+                                belt = belt,
+                                topic = currentHelpItem?.topicTitle.orEmpty(),
+                                rawItem = rawItemForHelp,
+                                isEnglish = isEnglish
+                            )
+                        }
+                    }
+
+                    val safeItem = rawItemForHelp
+
+                    val safeItemTitleUi = remember(currentHelpItem, safeItem, isEnglish) {
+                        if (safeItem.isBlank()) {
+                            if (isEnglish) "Exercise" else "תרגיל"
+                        } else {
+                            currentHelpItem?.let { uiTitleFor(it) } ?: searchTitleForUi(safeItem)
+                        }
+                    }
+
+                    val helpTextAlign = if (isEnglish) TextAlign.Left else TextAlign.Right
+                    val helpHorizontalAlignment = if (isEnglish) Alignment.Start else Alignment.End
+
+                    val favId = remember(safeItem) { normalizeFavoriteId(safeItem) }
+
+                    val isFav = safeItem.isNotBlank() && favorites.contains(favId)
+
+                    val noteTopic = remember(currentHelpItem, topicFilter) {
+                        currentHelpItem?.topicTitle?.trim()?.takeIf { it.isNotBlank() }
+                            ?: topicFilter?.takeIf { it.isNotBlank() }
+                            ?: "general"
+                    }
+                    val noteKey = remember(belt, noteTopic, favId) {
+                        "note_${belt.id}_${noteTopic.trim()}_${favId}"
+                    }
+                    var noteText by remember(noteKey) {
+                        mutableStateOf(notePrefs.getString(noteKey, "").orEmpty())
+                    }
+                    var showNoteEditor by remember { mutableStateOf(false) }
+
+                    fun toggleFav() {
+                        if (safeItem.isBlank()) return
+                        FavoritesStore.toggle(favId)
+                    }
+
+                    ExerciseExplanationDialog(
+                        title = safeItemTitleUi,
+                        beltLabel = "(${if (isEnglish) belt.en else belt.heb})",
+                        explanation = explanation,
+                        noteText = noteText,
+                        isFavorite = isFav,
+                        accentColor = belt.color,
+                        isEnglish = isEnglish,
+                        onDismiss = {
+                            showHelp = false
+                        },
+                        onEditNote = {
+                            showNoteEditor = true
+                        },
+                        onDeleteNote = {
+                            noteText = ""
+
+                            savePracticeNote(
+                                prefs = notePrefs,
+                                key = noteKey,
+                                text = ""
+                            )
+                        },
+                        onToggleFavorite = {
+                            toggleFav()
+                        }
+                    )
+
+                    if (showNoteEditor) {
+                        ExerciseNoteEditorDialog(
+                            exerciseTitle = safeItemTitleUi,
+                            noteText = noteText,
+                            isEnglish = isEnglish,
+                            accentColor = belt.color,
+                            onNoteChange = { noteText = it },
+                            onDismiss = {
+                                showNoteEditor = false
+                            },
+                            onSave = {
+                                val cleanNote = noteText.trim()
+                                noteText = cleanNote
+
+                                savePracticeNote(
+                                    prefs = notePrefs,
+                                    key = noteKey,
+                                    text = cleanNote
+                                )
+
+                                showNoteEditor = false
+                            }
+                        )
+                    }
+                }
+
+                showSearch -> {
+                    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+                    ModalBottomSheet(
+                        onDismissRequest = {
+                            showSearch = false
+                            searchQuery = ""
+                        },
+                        sheetState = sheetState,
+                        containerColor = MaterialTheme.colorScheme.surface,
+                        tonalElevation = 4.dp
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .navigationBarsPadding()
+                                .padding(16.dp)
+                                .verticalScroll(rememberScrollState()),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
                             Text(
                                 text = if (isEnglish) {
-                                    "No matching exercises found."
+                                    "Search exercise (for example: \"kick\", \"defense\")"
                                 } else {
-                                    "לא נמצאו תרגילים תואמים."
+                                    "חפש תרגיל (למשל: \"בעיטה\", \"הגנה\")"
                                 },
-                                style = KmiTypography.body,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.fillMaxWidth(),
-                                textAlign = TextAlign.Center
+                                style = KmiTypography.sectionTitle.copy(
+                                    fontWeight = FontWeight.ExtraBold
+                                ),
+                                color = MaterialTheme.colorScheme.onSurface,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.fillMaxWidth()
                             )
-                        } else {
-                            Column(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                searchResults.forEach { (hitBelt, hitTopic, hitItem) ->
-                                    val resultTextAlign = if (isEnglish) TextAlign.Left else TextAlign.Right
-                                    val resultHorizontalAlignment = if (isEnglish) Alignment.Start else Alignment.End
-                                    val hitItemUi = searchTitleForUi(hitItem)
-                                    val hitTopicUi = topicTitleForUi(hitTopic)
 
-                                    Surface(
-                                        shape = RoundedCornerShape(12.dp),
-                                        tonalElevation = 1.dp,
-                                        shadowElevation = 0.dp,
-                                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .clickable {
-                                                pickedSearchHit = Triple(hitBelt, hitTopic, hitItem)
-                                                showSearch = false
-                                                searchQuery = ""
-                                            }
-                                    ) {
-                                        Column(
+                            Spacer(Modifier.height(10.dp))
+
+                            OutlinedTextField(
+                                value = searchQuery,
+                                onValueChange = { searchQuery = it },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(min = 52.dp),
+                                singleLine = true,
+                                textStyle = KmiTypography.body,
+                                label = {
+                                    Text(
+                                        text = if (isEnglish) {
+                                            "Type exercise name"
+                                        } else {
+                                            "הקלד/י שם תרגיל"
+                                        },
+                                        style = KmiTypography.secondary
+                                    )
+                                }
+                            )
+
+                            Spacer(Modifier.height(8.dp))
+
+                            if (searchQuery.isNotBlank() && searchResults.isEmpty()) {
+                                Text(
+                                    text = if (isEnglish) {
+                                        "No matching exercises found."
+                                    } else {
+                                        "לא נמצאו תרגילים תואמים."
+                                    },
+                                    style = KmiTypography.body,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.fillMaxWidth(),
+                                    textAlign = TextAlign.Center
+                                )
+                            } else {
+                                Column(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    searchResults.forEach { (hitBelt, hitTopic, hitItem) ->
+                                        val resultTextAlign =
+                                            if (isEnglish) TextAlign.Left else TextAlign.Right
+                                        val resultHorizontalAlignment =
+                                            if (isEnglish) Alignment.Start else Alignment.End
+                                        val hitItemUi = searchTitleForUi(hitItem)
+                                        val hitTopicUi = topicTitleForUi(hitTopic)
+
+                                        Surface(
+                                            shape = RoundedCornerShape(12.dp),
+                                            tonalElevation = 1.dp,
+                                            shadowElevation = 0.dp,
+                                            color = MaterialTheme.colorScheme.surfaceVariant.copy(
+                                                alpha = 0.35f
+                                            ),
                                             modifier = Modifier
                                                 .fillMaxWidth()
-                                                .padding(horizontal = 12.dp, vertical = 10.dp),
-                                            horizontalAlignment = resultHorizontalAlignment
+                                                .clickable {
+                                                    pickedSearchHit =
+                                                        Triple(hitBelt, hitTopic, hitItem)
+                                                    showSearch = false
+                                                    searchQuery = ""
+                                                }
                                         ) {
-                                            Text(
-                                                text = hitItemUi,
-                                                style = KmiTypography.cardTitle,
-                                                color = MaterialTheme.colorScheme.onSurface,
-                                                textAlign = resultTextAlign,
-                                                maxLines = 2,
-                                                overflow = TextOverflow.Ellipsis,
-                                                modifier = Modifier.fillMaxWidth()
-                                            )
+                                            Column(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .padding(horizontal = 12.dp, vertical = 10.dp),
+                                                horizontalAlignment = resultHorizontalAlignment
+                                            ) {
+                                                Text(
+                                                    text = hitItemUi,
+                                                    style = KmiTypography.cardTitle,
+                                                    color = MaterialTheme.colorScheme.onSurface,
+                                                    textAlign = resultTextAlign,
+                                                    maxLines = 2,
+                                                    overflow = TextOverflow.Ellipsis,
+                                                    modifier = Modifier.fillMaxWidth()
+                                                )
 
-                                            Text(
-                                                text = "$hitTopicUi • ${
-                                                    if (isEnglish) {
-                                                        hitBelt.en
-                                                    } else {
-                                                        hitBelt.heb
-                                                    }
-                                                }",
-                                                style = KmiTypography.caption,
-                                                textAlign = resultTextAlign,
-                                                maxLines = 2,
-                                                overflow = TextOverflow.Ellipsis,
-                                                modifier = Modifier.fillMaxWidth(),
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                                            )
+                                                Text(
+                                                    text = "$hitTopicUi • ${
+                                                        if (isEnglish) {
+                                                            hitBelt.en
+                                                        } else {
+                                                            hitBelt.heb
+                                                        }
+                                                    }",
+                                                    style = KmiTypography.caption,
+                                                    textAlign = resultTextAlign,
+                                                    maxLines = 2,
+                                                    overflow = TextOverflow.Ellipsis,
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
+                                            }
                                         }
                                     }
                                 }
                             }
-                        }
 
-                        Spacer(Modifier.height(12.dp))
+                            Spacer(Modifier.height(12.dp))
 
-                        TextButton(
-                            onClick = {
-                                showSearch = false
-                                searchQuery = ""
+                            TextButton(
+                                onClick = {
+                                    showSearch = false
+                                    searchQuery = ""
+                                }
+                            ) {
+                                Text(
+                                    text = if (isEnglish) "Close" else "סגור",
+                                    style = KmiTypography.action
+                                )
                             }
-                        ) {
-                            Text(
-                                text = if (isEnglish) "Close" else "סגור",
-                                style = KmiTypography.action
-                            )
+
+                            Spacer(Modifier.height(6.dp))
                         }
-
-                        Spacer(Modifier.height(6.dp))
                     }
                 }
             }
@@ -2177,591 +2205,4 @@ fun RandomPracticeScreen(
     }
 }
 
-/* ====================== כפתורים חדשניים ====================== */
 
-@Composable
-private fun ModernActionsRow(
-    isEnglish: Boolean,
-    showSkip: Boolean,
-    onHelp: () -> Unit,
-    onSkip: () -> Unit
-) {
-    Row(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        ModernPillButton(
-            text = if (isEnglish) "Help" else "עזרה",
-            leading = {
-                Icon(
-                    imageVector = Icons.Outlined.Info,
-                    contentDescription =
-                        if (isEnglish) "Help" else "עזרה"
-                )
-            },
-            container = MaterialTheme.colorScheme.secondaryContainer,
-            content = MaterialTheme.colorScheme.onSecondaryContainer,
-            overlayGradient = null,
-            onClick = onHelp,
-            modifier = Modifier.weight(1f)
-        )
-
-        if (showSkip) {
-            ModernPillButton(
-                text = if (isEnglish) "Skip" else "דלג",
-                leading = {
-                    Icon(
-                        imageVector = Icons.Filled.PlayArrow,
-                        contentDescription =
-                            if (isEnglish) "Skip" else "דלג"
-                    )
-                },
-                container = MaterialTheme.colorScheme.primary,
-                content = MaterialTheme.colorScheme.onPrimary,
-                overlayGradient = Brush.horizontalGradient(
-                    colors = listOf(
-                        MaterialTheme.colorScheme.onPrimary.copy(
-                            alpha = 0.18f
-                        ),
-                        Color.Transparent
-                    )
-                ),
-                onClick = onSkip,
-                modifier = Modifier.weight(1f)
-            )
-        }
-    }
-}
-
-@Composable
-private fun PracticeBottomActionCard(
-    isEnglish: Boolean,
-    showSkip: Boolean,
-    onHelp: () -> Unit,
-    onSkip: () -> Unit,
-    onFinish: () -> Unit
-) {
-    Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .navigationBarsPadding(),
-        shape = RoundedCornerShape(26.dp),
-        color = MaterialTheme.colorScheme.surface.copy(
-            alpha = 0.96f
-        ),
-        tonalElevation = 0.dp,
-        shadowElevation = 0.dp,
-        border = BorderStroke(
-            width = 1.dp,
-            color = MaterialTheme.colorScheme.outlineVariant
-        )
-    ) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(
-                    brush = Brush.verticalGradient(
-                        colors = listOf(
-                            MaterialTheme.colorScheme.surface,
-                            MaterialTheme.colorScheme.surfaceVariant.copy(
-                                alpha = 0.58f
-                            ),
-                            MaterialTheme.colorScheme.surface
-                        )
-                    )
-                )
-                .padding(
-                    horizontal = 14.dp,
-                    vertical = 12.dp
-                ),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            ModernActionsRow(
-                isEnglish = isEnglish,
-                showSkip = showSkip,
-                onHelp = onHelp,
-                onSkip = onSkip
-            )
-
-            Surface(
-                onClick = onFinish,
-                color = MaterialTheme.colorScheme.primaryContainer,
-                contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                shape = RoundedCornerShape(20.dp),
-                shadowElevation = 0.dp,
-                tonalElevation = 0.dp,
-                border = BorderStroke(
-                    width = 1.dp,
-                    color = MaterialTheme.colorScheme.primary.copy(
-                        alpha = 0.30f
-                    )
-                ),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = 54.dp)
-            ) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(
-                            horizontal = 16.dp,
-                            vertical = 10.dp
-                        ),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        text = if (isEnglish) {
-                            "Finish and Return"
-                        } else {
-                            "סיום וחזרה"
-                        },
-                        style = KmiTypography.action.copy(
-                            fontWeight = FontWeight.Black
-                        ),
-                        color = MaterialTheme.colorScheme.onPrimaryContainer,
-                        textAlign = TextAlign.Center,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun PremiumSoundIconButton(
-    isMuted: Boolean,
-    isEnglish: Boolean,
-    modifier: Modifier = Modifier,
-    onClick: () -> Unit
-) {
-    val containerColor =
-        if (isMuted) {
-            MaterialTheme.colorScheme.surfaceVariant
-        } else {
-            MaterialTheme.colorScheme.secondaryContainer
-        }
-
-    val iconColor =
-        if (isMuted) {
-            MaterialTheme.colorScheme.onSurfaceVariant
-        } else {
-            MaterialTheme.colorScheme.onSecondaryContainer
-        }
-
-    Surface(
-        onClick = onClick,
-        shape = RoundedCornerShape(18.dp),
-        color = containerColor,
-        contentColor = iconColor,
-        shadowElevation = 0.dp,
-        tonalElevation = 0.dp,
-        border = BorderStroke(
-            width = 1.dp,
-            color = MaterialTheme.colorScheme.outlineVariant
-        ),
-        modifier = modifier.size(54.dp)
-    ) {
-        Box(
-            modifier = Modifier.fillMaxSize(),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                imageVector =
-                    if (isMuted) {
-                        Icons.Filled.VolumeOff
-                    } else {
-                        Icons.Filled.VolumeUp
-                    },
-                contentDescription =
-                    if (isMuted) {
-                        if (isEnglish) "Resume audio" else "המשך קול"
-                    } else {
-                        if (isEnglish) "Mute" else "השתק"
-                    },
-                modifier = Modifier.size(26.dp)
-            )
-        }
-    }
-}
-
-@Composable
-private fun PremiumPauseResumeButton(
-    isRunning: Boolean,
-    isEnglish: Boolean,
-    modifier: Modifier = Modifier,
-    onClick: () -> Unit
-) {
-    Surface(
-        onClick = onClick,
-        shape = RoundedCornerShape(18.dp),
-        color = MaterialTheme.colorScheme.primaryContainer,
-        contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-        shadowElevation = 0.dp,
-        tonalElevation = 0.dp,
-        border = BorderStroke(
-            width = 1.dp,
-            color = MaterialTheme.colorScheme.primary.copy(
-                alpha = 0.30f
-            )
-        ),
-        modifier = modifier.size(54.dp)
-    ) {
-        Box(
-            modifier = Modifier.fillMaxSize(),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                imageVector =
-                    if (isRunning) {
-                        Icons.Filled.Pause
-                    } else {
-                        Icons.Filled.PlayArrow
-                    },
-                contentDescription =
-                    if (isRunning) {
-                        if (isEnglish) "Pause" else "השהה"
-                    } else {
-                        if (isEnglish) "Resume" else "המשך"
-                    },
-                modifier = Modifier.size(26.dp)
-            )
-        }
-    }
-}
-
-@Composable
-private fun ModernPillButton(
-    text: String,
-    leading: @Composable (() -> Unit)? = null,
-    container: Color = MaterialTheme.colorScheme.primary,
-    content: Color = MaterialTheme.colorScheme.onPrimary,
-    overlayGradient: Brush? = Brush.linearGradient(
-        listOf(
-            Color.White.copy(alpha = 0.22f),
-            Color.White.copy(alpha = 0.06f)
-        )
-    ),
-    modifier: Modifier = Modifier,
-    onClick: () -> Unit
-) {
-    val shape = RoundedCornerShape(28.dp)
-
-    Surface(
-        onClick = onClick,
-        shape = shape,
-        color = container,
-        contentColor = content,
-        shadowElevation = 0.dp,
-        tonalElevation = 0.dp,
-        border = BorderStroke(
-            width = 1.dp,
-            color = content.copy(alpha = 0.20f)
-        ),
-        modifier = modifier.heightIn(min = 54.dp)
-    ) {
-        Box(
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            if (overlayGradient != null) {
-                Box(
-                    modifier = Modifier
-                        .matchParentSize()
-                        .background(overlayGradient)
-                )
-            }
-
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(
-                        horizontal = 12.dp,
-                        vertical = 10.dp
-                    ),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.Center
-            ) {
-                if (leading != null) {
-                    leading()
-                    Spacer(Modifier.width(6.dp))
-                }
-
-                Text(
-                    text = text,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    style = KmiTypography.action.copy(
-                        fontWeight = FontWeight.ExtraBold
-                    )
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun PremiumSoundButton(
-    isMuted: Boolean,
-    isEnglish: Boolean,
-    onClick: () -> Unit
-) {
-    Surface(
-        onClick = onClick,
-        shape = RoundedCornerShape(18.dp),
-        color = MaterialTheme.colorScheme.secondaryContainer,
-        contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
-        shadowElevation = 0.dp,
-        tonalElevation = 0.dp,
-        border = BorderStroke(
-            width = 1.dp,
-            color = MaterialTheme.colorScheme.outlineVariant
-        ),
-        modifier = Modifier.heightIn(min = 52.dp)
-    ) {
-        Row(
-            modifier = Modifier.padding(
-                horizontal = 14.dp,
-                vertical = 8.dp
-            ),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Icon(
-                imageVector =
-                    if (isMuted) {
-                        Icons.Filled.VolumeOff
-                    } else {
-                        Icons.Filled.VolumeUp
-                    },
-                contentDescription =
-                    if (isMuted) {
-                        if (isEnglish) "Resume audio" else "המשך קול"
-                    } else {
-                        if (isEnglish) "Mute" else "השתק"
-                    },
-                modifier = Modifier.size(26.dp)
-            )
-
-            Text(
-                text =
-                    if (isMuted) {
-                        if (isEnglish) "Audio off" else "קול כבוי"
-                    } else {
-                        if (isEnglish) "Audio on" else "קול פעיל"
-                    },
-                style = KmiTypography.action.copy(
-                    fontWeight = FontWeight.ExtraBold
-                ),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-        }
-    }
-}
-
-@Composable
-private fun GlassHelpButton(
-    label: String = "עזרה",
-    onClick: () -> Unit
-) {
-    Surface(
-        onClick = onClick,
-        shape = RoundedCornerShape(18.dp),
-        color = MaterialTheme.colorScheme.primaryContainer.copy(
-            alpha = 0.72f
-        ),
-        contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-        shadowElevation = 0.dp,
-        tonalElevation = 0.dp,
-        border = BorderStroke(
-            width = 1.dp,
-            color = MaterialTheme.colorScheme.primary.copy(
-                alpha = 0.28f
-            )
-        )
-    ) {
-        Row(
-            modifier = Modifier
-                .heightIn(min = 52.dp)
-                .padding(
-                    horizontal = 14.dp,
-                    vertical = 8.dp
-                ),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Icon(
-                imageVector = Icons.Outlined.Info,
-                contentDescription = label
-            )
-
-            Text(
-                text = label,
-                style = KmiTypography.action.copy(
-                    fontWeight = FontWeight.ExtraBold
-                ),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-        }
-    }
-}
-
-@Composable
-private fun PracticeSubjectHeader(
-    topic: String,
-    subTopic: String?,
-    isEnglish: Boolean,
-    modifier: Modifier = Modifier
-) {
-    Box(
-        modifier = modifier
-            .heightIn(min = 52.dp)
-            .kmiSectionHeaderBackground()
-            .padding(
-                horizontal = 16.dp,
-                vertical = 4.dp
-            ),
-        contentAlignment = Alignment.Center
-    ) {
-        Column(
-            horizontalAlignment =
-                Alignment.CenterHorizontally,
-            verticalArrangement =
-                Arrangement.Center
-        ) {
-            Text(
-                text = topic,
-                color =
-                    kmiSectionHeaderContentColor(),
-                style =
-                    KmiTypography.secondary.copy(
-                        fontWeight = FontWeight.Bold
-                    ),
-                textAlign = TextAlign.Center,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-
-            if (!subTopic.isNullOrBlank()) {
-                Text(
-                    text =
-                        if (isEnglish) {
-                            "Subtopic: $subTopic"
-                        } else {
-                            "תת־נושא: $subTopic"
-                        },
-                    color =
-                        kmiSectionHeaderContentColor()
-                            .copy(alpha = 0.92f),
-                    style = KmiTypography.caption,
-                    textAlign = TextAlign.Center,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun PracticeStatusCircle(
-    status: Boolean?,
-    beltColor: Color,
-    isEnglish: Boolean,
-    onClick: () -> Unit
-) {
-    val label = when (status) {
-        true -> if (isEnglish) "Known" else "יודע"
-        false -> if (isEnglish) "Don't know" else "לא יודע"
-        null -> if (isEnglish) "Not marked" else "לא סומן"
-    }
-
-    val circleColor = when (status) {
-        true -> Color(0xFF22C55E)
-        false -> MaterialTheme.colorScheme.error
-        null -> MaterialTheme.colorScheme.surfaceVariant
-    }
-
-    val borderColor = when (status) {
-        true -> Color(0xFF16A34A)
-        false -> MaterialTheme.colorScheme.error
-        null -> beltColor.copy(alpha = 0.42f)
-    }
-
-    val iconColor = when (status) {
-        true, false -> Color.White
-        null -> MaterialTheme.colorScheme.onSurfaceVariant
-    }
-
-    val textColor = MaterialTheme.colorScheme.onSurface
-
-    Surface(
-        onClick = onClick,
-        shape = RoundedCornerShape(999.dp),
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(
-            alpha = 0.72f
-        ),
-        shadowElevation = 0.dp,
-        tonalElevation = 0.dp,
-        border = BorderStroke(
-            width = 1.dp,
-            color = beltColor.copy(alpha = 0.28f)
-        )
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.Center
-        ) {
-            Surface(
-                shape = CircleShape,
-                color = circleColor,
-                border = BorderStroke(2.dp, borderColor),
-                modifier = Modifier.size(34.dp)
-            ) {
-                Box(
-                    modifier = Modifier.fillMaxSize(),
-                    contentAlignment = Alignment.Center
-                ) {
-                    when (status) {
-                        true -> Icon(
-                            imageVector = Icons.Filled.Check,
-                            contentDescription = label,
-                            tint = iconColor,
-                            modifier = Modifier.size(21.dp)
-                        )
-
-                        false -> Icon(
-                            imageVector = Icons.Filled.Close,
-                            contentDescription = label,
-                            tint = iconColor,
-                            modifier = Modifier.size(21.dp)
-                        )
-
-                        null -> Box(
-                            modifier = Modifier
-                                .size(12.dp)
-                                .clip(CircleShape)
-                                .background(iconColor.copy(alpha = 0.18f))
-                        )
-                    }
-                }
-            }
-
-            Spacer(Modifier.width(10.dp))
-
-            Text(
-                text = label,
-                color = textColor,
-                style = KmiTypography.action.copy(
-                    fontWeight = FontWeight.ExtraBold
-                ),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-        }
-    }
-}

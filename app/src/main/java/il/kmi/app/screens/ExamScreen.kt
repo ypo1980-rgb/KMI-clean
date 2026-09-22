@@ -1,14 +1,10 @@
 package il.kmi.app.screens
 
 import android.content.SharedPreferences
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.VolumeOff
-import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -29,10 +25,9 @@ import il.kmi.app.ui.dialogs.ExerciseNoteEditorDialog
 import il.kmi.app.domain.ExerciseExplanationResolver
 import il.kmi.app.ui.KmiTypography
 import il.kmi.app.ui.ext.color
-import il.kmi.app.ui.ext.lightColor
 import il.kmi.shared.localization.AppLanguage
 import il.yuval.ui.theme.kmiScreenBackgroundBrush
-import il.yuval.ui.theme.kmiSectionHeaderBrush
+import il.kmi.app.ui.practice.PracticeBottomControls
 import il.yuval.ui.theme.kmiSectionHeaderContentColor
 import il.kmi.shared.localization.AppLanguageManager
 import il.yuval.ui.theme.kmiSectionHeaderBackground
@@ -40,6 +35,9 @@ import kotlinx.coroutines.delay
 import java.util.Locale
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
+import il.kmi.app.ui.practice.PracticeExerciseCenterCard
+
+//===============================================================
 
 // ✅ קבוע אחד למבחן (לא דיאלוג, לא שינוי, לא כפילויות)
 private const val EXAM_SECONDS_PER_EXERCISE = 20
@@ -332,29 +330,9 @@ fun ExamScreen(
     }
 
     val total = items.size.coerceAtLeast(1)
-    val progress =
-        (currentIndex + 1).toFloat() /
-                total.toFloat()
-
     val colorScheme = MaterialTheme.colorScheme
     val isDarkMode =
         colorScheme.background.luminance() < 0.5f
-
-    val headerCardColor =
-        if (isDarkMode) {
-            colorScheme.surfaceVariant.copy(
-                alpha = 0.92f
-            )
-        } else {
-            belt.lightColor.copy(alpha = 0.20f)
-        }
-
-    val exerciseCardColor =
-        if (isDarkMode) {
-            colorScheme.surface
-        } else {
-            colorScheme.surface.copy(alpha = 0.96f)
-        }
 
     Scaffold(
         topBar = {
@@ -491,515 +469,321 @@ fun ExamScreen(
                 }
             }
 
-            Column(
+            Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .verticalScroll(
-                        rememberScrollState()
-                    )
                     .navigationBarsPadding()
-                    .padding(
-                        horizontal = 16.dp,
-                        vertical = 12.dp
-                    ),
-                verticalArrangement =
-                    Arrangement.spacedBy(12.dp)
-            ) {
-
-                Surface(
-                shape = MaterialTheme.shapes.large,
-                color = headerCardColor,
-                tonalElevation = 0.dp,
-                shadowElevation = 0.dp,
-                border =
-                    BorderStroke(
-                        width = 0.75.dp,
-                        color =
-                            belt.color.copy(
-                                alpha = 0.24f
-                            )
-                    ),
-                modifier = Modifier.fillMaxWidth()
             ) {
                 Column(
-                    Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    Row(
-                        Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column {
-                            Text(
-                                text =
-                                    if (isEnglish) {
-                                        belt.en
-                                    } else {
-                                        belt.heb
-                                    },
-                                style =
-                                    KmiTypography.cardTitle.copy(
-                                        fontWeight =
-                                            FontWeight.SemiBold
-                                    ),
-                                color =
-                                    MaterialTheme.colorScheme.onSurface
-                            )
-
-                            Text(
-                                text =
-                                    tr(
-                                        "תרגיל ${currentIndex + 1} מתוך $total",
-                                        "Exercise ${currentIndex + 1} of $total"
-                                    ),
-                                style = KmiTypography.secondary,
-                                color =
-                                    MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-
-                        Surface(
-                            shape = MaterialTheme.shapes.large,
-                            color = belt.color.copy(alpha = 0.12f)
-                        ) {
-                            Text(
-                                text =
-                                    String.format(
-                                        Locale.getDefault(),
-                                        "%02d",
-                                        timeLeft
-                                    ),
-                                modifier =
-                                    Modifier.padding(
-                                        horizontal = 14.dp,
-                                        vertical = 6.dp
-                                    ),
-                                color = belt.color,
-                                style =
-                                    KmiTypography.cardTitle.copy(
-                                        fontWeight =
-                                            FontWeight.Bold
-                                    )
-                            )
-                        }
-                    }
-
-                    LinearProgressIndicator(
-                        progress = { progress },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(10.dp),
-                        trackColor =
-                            colorScheme.onSurface.copy(
-                                alpha = 0.12f
-                            ),
-                        color = belt.color
-                    )
-
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = 4.dp),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        repeat(items.size) { idx ->
-                            val isCurrent = idx == currentIndex
-                            Box(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .height(6.dp)
-                                    .background(
-                                        color = if (isCurrent) belt.color else belt.color.copy(alpha = 0.25f),
-                                        shape = MaterialTheme.shapes.large
-                                    )
-                            )
-                        }
-                    }
-                }
-            }
-
-            Surface(
-                shape = MaterialTheme.shapes.extraLarge,
-                color = exerciseCardColor,
-                tonalElevation = 0.dp,
-                shadowElevation = 0.dp,
-                border =
-                    BorderStroke(
-                        width = 0.75.dp,
-                        color =
-                            belt.color.copy(
-                                alpha = 0.22f
-                            )
-                    ),
-                modifier =
-                    Modifier
-                        .fillMaxWidth()
-                        .heightIn(min = 180.dp),
-                onClick = {
-                    showHelp = true
-                }
-            ) {
-                Column(
-                    modifier =
-                        Modifier
-                            .fillMaxWidth()
-                            .padding(
-                                horizontal = 16.dp,
-                                vertical = 14.dp
-                            ),
-                    horizontalAlignment =
-                        Alignment.CenterHorizontally,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .verticalScroll(
+                            rememberScrollState()
+                        )
+                        .padding(
+                            start = 16.dp,
+                            end = 16.dp,
+                            top = 12.dp,
+                            bottom = 150.dp
+                        ),
                     verticalArrangement =
-                        Arrangement.spacedBy(18.dp)
+                        Arrangement.spacedBy(12.dp)
                 ) {
 
-                    Text(
-                        text = displayItems[currentIndex],
-                        style =
-                            KmiTypography.sectionTitle.copy(
-                                fontWeight =
-                                    FontWeight.Bold
+                    PracticeExerciseCenterCard(
+                        belt = belt,
+                        exerciseTitle =
+                            displayItems[currentIndex],
+                        exerciseSubtitle = null,
+                        timeText =
+                            String.format(
+                                Locale.getDefault(),
+                                "00:%02d",
+                                timeLeft
                             ),
-                        color =
-                            MaterialTheme.colorScheme.onSurface,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.fillMaxWidth(),
-                        maxLines = 3
+                        currentIndex =
+                            currentIndex,
+                        totalCount =
+                            total,
+                        centerLabel = null,
+                        isRunning =
+                            isRunning,
+                        isMuted =
+                            isMuted,
+                        onToggleRunning = {
+                            isRunning =
+                                !isRunning
+
+                            if (!isRunning) {
+                                KmiTtsManager.stop()
+                            } else if (
+                                currentIndex in
+                                items.indices
+                            ) {
+                                KmiTtsManager.speak(
+                                    displayItems[currentIndex]
+                                )
+                            }
+                        },
+                        onToggleMute = {
+                            isMuted =
+                                !isMuted
+
+                            if (isMuted) {
+                                KmiTtsManager.stop()
+                            } else if (
+                                currentIndex in
+                                items.indices
+                            ) {
+                                KmiTtsManager.speak(
+                                    displayItems[currentIndex]
+                                )
+                            }
+                        },
+                        onCardClick = {
+                            showHelp = true
+                        }
                     )
+                }
 
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        IconButton(
-                            onClick = {
-                                isMuted = !isMuted
-                                if (isMuted) {
-                                    KmiTtsManager.stop()
-                                } else if (currentIndex in items.indices) {
-                                    KmiTtsManager.speak(displayItems[currentIndex])
-                                }
-                            },
-                            modifier = Modifier.size(50.dp)
-                        ) {
-                            Icon(
-                                imageVector =
-                                    if (isMuted) {
-                                        Icons.AutoMirrored.Filled.VolumeOff
-                                    } else {
-                                        Icons.AutoMirrored.Filled.VolumeUp
-                                    },
-                                contentDescription =
-                                    if (isMuted) {
-                                        tr(
-                                            "בטל השתק",
-                                            "Unmute"
-                                        )
-                                    } else {
-                                        tr(
-                                            "השתק",
-                                            "Mute"
-                                        )
-                                    },
-                                tint = belt.color
-                            )
-                        }
+                PracticeBottomControls(
+                    isEnglish = isEnglish,
+                    showSkip =
+                        currentIndex <
+                                items.lastIndex,
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(
+                            start = 16.dp,
+                            end = 16.dp,
+                            bottom = 12.dp
+                        ),
+                    onHelp = {
+                        showHelp = true
+                    },
+                    onSkip = {
+                        KmiTtsManager.stop()
 
-                        OutlinedButton(
-                            onClick = {
-                                showHelp = true
-                            },
-                            modifier = Modifier.weight(1f),
-                            shape = MaterialTheme.shapes.large
-                        ) {
-                            Text(
-                                text =
-                                    tr(
-                                        "עזרה",
-                                        "Help"
-                                    ),
-                                style = KmiTypography.action
-                            )
-                        }
-
-                        /*
-                         * בתרגיל האחרון אין תרגיל נוסף
-                         * שאליו ניתן לדלג.
-                         */
                         if (
                             currentIndex <
                             items.lastIndex
                         ) {
-                            Button(
-                                onClick = {
-                                    KmiTtsManager.stop()
-
-                                    if (
-                                        currentIndex <
-                                        items.lastIndex
-                                    ) {
-                                        currentIndex++
-                                    }
-                                },
-                                modifier =
-                                    Modifier.weight(1f),
-                                shape =
-                                    MaterialTheme.shapes.large
-                            ) {
-                                Text(
-                                    text =
-                                        tr(
-                                            "דלג",
-                                            "Skip"
-                                        ),
-                                    style =
-                                        KmiTypography.action
-                                )
-                            }
+                            currentIndex++
                         }
-                    }
-                }
-            }
-
-            Button(
-                onClick = {
-                    KmiTtsManager.stop()
-                    onBack()
-                },
-                modifier =
-                    Modifier
-                        .fillMaxWidth()
-                        .heightIn(min = 52.dp),
-                shape = MaterialTheme.shapes.large,
-                colors =
-                    ButtonDefaults.buttonColors(
-                        containerColor =
-                            colorScheme.primaryContainer,
-                        contentColor =
-                            colorScheme.onPrimaryContainer
-                    )
-            ) {
-                Text(
-                    text =
-                        tr(
-                            "סיום מבחן",
-                            "End Exam"
-                        ),
-                    style =
-                        KmiTypography.action.copy(
-                            fontWeight =
-                                FontWeight.Bold
-                        )
-                )
-            }
-            }
-        }
-
-        pickedSearchKey?.let { key ->
-
-            val (b, topic, item) =
-                parseSearchKey(key)
-
-            val explanation =
-                remember(
-                    b,
-                    item,
-                    topic,
-                    isEnglish
-                ) {
-                    findExplanationForExam(
-                        belt = b,
-                        rawItem = item,
-                        isEnglish = isEnglish,
-                        topic = topic
-                    )
-                }
-
-            val favId = remember(item) { normalizeFavoriteId(item) }
-            val isFav = favorites.contains(favId)
-
-            val noteId = remember(item) { exerciseNoteIdFor(item) }
-
-            val noteKey = remember(b, noteId) {
-                "note_${b.id}_${noteId}"
-            }
-
-            val legacyTopicNoteKey = remember(b, topic, favId) {
-                "note_${b.id}_${topic.trim()}_${favId}"
-            }
-
-            var noteText by remember(noteKey, legacyTopicNoteKey) {
-                mutableStateOf(
-                    readExerciseNote(
-                        prefs = notePrefs,
-                        primaryKey = noteKey,
-                        legacyTopicNoteKey
-                    )
-                )
-            }
-
-            var showNoteEditor by remember { mutableStateOf(false) }
-
-            fun toggleFav() {
-                if (item.isBlank()) return
-                FavoritesStore.toggle(favId)
-            }
-
-            ExerciseExplanationDialog(
-                title = toDisplayItem(item),
-                beltLabel =
-                    if (isEnglish) {
-                        "$topic • ${b.en}"
-                    } else {
-                        "$topic • ${b.heb}"
                     },
-                explanation = explanation,
-                noteText = noteText,
-                isFavorite = isFav,
-                accentColor = b.color,
-                isEnglish = isEnglish,
-                onDismiss = { pickedSearchKey = null },
-                onEditNote = { showNoteEditor = true },
-                onDeleteNote = {
-                    noteText = ""
+                    onFinish = {
+                        isRunning = false
+                        examStarted = false
 
-                    saveExerciseNote(
-                        prefs = notePrefs,
-                        text = "",
-                        primaryKey = noteKey,
-                        legacyTopicNoteKey
-                    )
-                },
-                onToggleFavorite = { toggleFav() }
-            )
-
-            if (showNoteEditor) {
-                ExerciseNoteEditorDialog(
-                    exerciseTitle = toDisplayItem(item),
-                    noteText = noteText,
-                    isEnglish = isEnglish,
-                    accentColor = b.color,
-                    onNoteChange = { noteText = it },
-                    onDismiss = { showNoteEditor = false },
-                    onSave = {
-                        val cleanNote = noteText.trim()
-                        noteText = cleanNote
-
-                        saveExerciseNote(
-                            prefs = notePrefs,
-                            text = cleanNote,
-                            primaryKey = noteKey,
-                            legacyTopicNoteKey
-                        )
-
-                        showNoteEditor = false
-                    }
-                )
-            }
-        }
-
-        if (showHelp && currentIndex in items.indices) {
-            val rawItem = items[currentIndex]
-            val displayItem = displayItems[currentIndex]
-
-            val explanation =
-                remember(
-                    belt,
-                    rawItem,
-                    isEnglish
-                ) {
-                    findExplanationForExam(
-                        belt = belt,
-                        rawItem = rawItem,
-                        isEnglish = isEnglish,
-                        topic = ""
-                    )
-                }
-
-            val favId = remember(rawItem) { normalizeFavoriteId(rawItem) }
-            val isFav = favorites.contains(favId)
-
-            val noteId = remember(rawItem) { exerciseNoteIdFor(rawItem) }
-
-            val noteKey = remember(belt, noteId) {
-                "note_${belt.id}_${noteId}"
-            }
-
-            val legacyExamNoteKey = remember(belt, favId) {
-                "note_${belt.id}_exam_${favId}"
-            }
-
-            var noteText by remember(noteKey, legacyExamNoteKey) {
-                mutableStateOf(
-                    readExerciseNote(
-                        prefs = notePrefs,
-                        primaryKey = noteKey,
-                        legacyExamNoteKey
-                    )
-                )
-            }
-
-            var showNoteEditor by remember { mutableStateOf(false) }
-
-            fun toggleFav() {
-                if (rawItem.isBlank()) return
-                FavoritesStore.toggle(favId)
-            }
-
-            ExerciseExplanationDialog(
-                title = displayItem,
-                beltLabel =
-                    tr(
-                        "מבחן מסכם • ${belt.heb}",
-                        "Final Exam • ${belt.en}"
-                    ),
-                explanation = explanation,
-                noteText = noteText,
-                isFavorite = isFav,
-                accentColor = belt.color,
-                isEnglish = isEnglish,
-                onDismiss = { showHelp = false },
-                onEditNote = { showNoteEditor = true },
-                onDeleteNote = {
-                    noteText = ""
-
-                    saveExerciseNote(
-                        prefs = notePrefs,
-                        text = "",
-                        primaryKey = noteKey,
-                        legacyExamNoteKey
-                    )
-                },
-                onToggleFavorite = { toggleFav() }
-            )
-
-            if (showNoteEditor) {
-                ExerciseNoteEditorDialog(
-                    exerciseTitle = displayItem,
-                    noteText = noteText,
-                    isEnglish = isEnglish,
-                    accentColor = belt.color,
-                    onNoteChange = { noteText = it },
-                    onDismiss = { showNoteEditor = false },
-                    onSave = {
-                        val cleanNote = noteText.trim()
-                        noteText = cleanNote
-
-                        saveExerciseNote(
-                            prefs = notePrefs,
-                            text = cleanNote,
-                            primaryKey = noteKey,
-                            legacyExamNoteKey
-                        )
-
-                        showNoteEditor = false
+                        KmiTtsManager.stop()
+                        onBack()
                     }
                 )
             }
         }
     }
+
+    pickedSearchKey?.let { key ->
+
+        val (b, topic, item) =
+            parseSearchKey(key)
+
+        val explanation =
+            remember(
+                b,
+                item,
+                topic,
+                isEnglish
+            ) {
+                findExplanationForExam(
+                    belt = b,
+                    rawItem = item,
+                    isEnglish = isEnglish,
+                    topic = topic
+                )
+            }
+
+        val favId = remember(item) { normalizeFavoriteId(item) }
+        val isFav = favorites.contains(favId)
+
+        val noteId = remember(item) { exerciseNoteIdFor(item) }
+
+        val noteKey = remember(b, noteId) {
+            "note_${b.id}_${noteId}"
+        }
+
+        val legacyTopicNoteKey = remember(b, topic, favId) {
+            "note_${b.id}_${topic.trim()}_${favId}"
+        }
+
+        var noteText by remember(noteKey, legacyTopicNoteKey) {
+            mutableStateOf(
+                readExerciseNote(
+                    prefs = notePrefs,
+                    primaryKey = noteKey,
+                    legacyTopicNoteKey
+                )
+            )
+        }
+
+        var showNoteEditor by remember { mutableStateOf(false) }
+
+        fun toggleFav() {
+            if (item.isBlank()) return
+            FavoritesStore.toggle(favId)
+        }
+
+        ExerciseExplanationDialog(
+            title = toDisplayItem(item),
+            beltLabel =
+                if (isEnglish) {
+                    "$topic • ${b.en}"
+                } else {
+                    "$topic • ${b.heb}"
+                },
+            explanation = explanation,
+            noteText = noteText,
+            isFavorite = isFav,
+            accentColor = b.color,
+            isEnglish = isEnglish,
+            onDismiss = { pickedSearchKey = null },
+            onEditNote = { showNoteEditor = true },
+            onDeleteNote = {
+                noteText = ""
+
+                saveExerciseNote(
+                    prefs = notePrefs,
+                    text = "",
+                    primaryKey = noteKey,
+                    legacyTopicNoteKey
+                )
+            },
+            onToggleFavorite = { toggleFav() }
+        )
+
+        if (showNoteEditor) {
+            ExerciseNoteEditorDialog(
+                exerciseTitle = toDisplayItem(item),
+                noteText = noteText,
+                isEnglish = isEnglish,
+                accentColor = b.color,
+                onNoteChange = { noteText = it },
+                onDismiss = { showNoteEditor = false },
+                onSave = {
+                    val cleanNote = noteText.trim()
+                    noteText = cleanNote
+
+                    saveExerciseNote(
+                        prefs = notePrefs,
+                        text = cleanNote,
+                        primaryKey = noteKey,
+                        legacyTopicNoteKey
+                    )
+
+                    showNoteEditor = false
+                }
+            )
+        }
+    }
+
+    if (showHelp && currentIndex in items.indices) {
+        val rawItem = items[currentIndex]
+        val displayItem = displayItems[currentIndex]
+
+        val explanation =
+            remember(
+                belt,
+                rawItem,
+                isEnglish
+            ) {
+                findExplanationForExam(
+                    belt = belt,
+                    rawItem = rawItem,
+                    isEnglish = isEnglish,
+                    topic = ""
+                )
+            }
+
+        val favId = remember(rawItem) { normalizeFavoriteId(rawItem) }
+        val isFav = favorites.contains(favId)
+
+        val noteId = remember(rawItem) { exerciseNoteIdFor(rawItem) }
+
+        val noteKey = remember(belt, noteId) {
+            "note_${belt.id}_${noteId}"
+        }
+
+        val legacyExamNoteKey = remember(belt, favId) {
+            "note_${belt.id}_exam_${favId}"
+        }
+
+        var noteText by remember(noteKey, legacyExamNoteKey) {
+            mutableStateOf(
+                readExerciseNote(
+                    prefs = notePrefs,
+                    primaryKey = noteKey,
+                    legacyExamNoteKey
+                )
+            )
+        }
+
+        var showNoteEditor by remember { mutableStateOf(false) }
+
+        fun toggleFav() {
+            if (rawItem.isBlank()) return
+            FavoritesStore.toggle(favId)
+        }
+
+        ExerciseExplanationDialog(
+            title = displayItem,
+            beltLabel =
+                tr(
+                    "מבחן מסכם • ${belt.heb}",
+                    "Final Exam • ${belt.en}"
+                ),
+            explanation = explanation,
+            noteText = noteText,
+            isFavorite = isFav,
+            accentColor = belt.color,
+            isEnglish = isEnglish,
+            onDismiss = { showHelp = false },
+            onEditNote = { showNoteEditor = true },
+            onDeleteNote = {
+                noteText = ""
+
+                saveExerciseNote(
+                    prefs = notePrefs,
+                    text = "",
+                    primaryKey = noteKey,
+                    legacyExamNoteKey
+                )
+            },
+            onToggleFavorite = { toggleFav() }
+        )
+
+        if (showNoteEditor) {
+            ExerciseNoteEditorDialog(
+                exerciseTitle = displayItem,
+                noteText = noteText,
+                isEnglish = isEnglish,
+                accentColor = belt.color,
+                onNoteChange = { noteText = it },
+                onDismiss = { showNoteEditor = false },
+                onSave = {
+                    val cleanNote = noteText.trim()
+                    noteText = cleanNote
+
+                    saveExerciseNote(
+                        prefs = notePrefs,
+                        text = cleanNote,
+                        primaryKey = noteKey,
+                        legacyExamNoteKey
+                    )
+
+                    showNoteEditor = false
+                }
+            )
+        }
+    }
 }
+
