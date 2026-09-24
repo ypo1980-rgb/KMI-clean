@@ -69,6 +69,7 @@ import il.kmi.app.analytics.KmiUsageTracker
 import il.kmi.app.onboarding.OnboardingPreferences
 import il.kmi.app.onboarding.onboardingNavGraph
 import il.kmi.app.onboarding.OnboardingRoute
+import il.kmi.app.stretching.ui.navigation.stretchingNavGraph
 import il.kmi.app.privacy.DemoPrivacy
 import il.kmi.app.ui.OnboardingBridge
 import il.kmi.app.ui.VoiceExerciseExplanationBridge
@@ -2012,6 +2013,11 @@ fun MainNavHost(
                 kmiPrefs = kmiPrefs,
                 summaryVm = trainingSummaryVm,
                 onOpenDrawer = onOpenDrawer
+            )
+
+            // --- Stretching exercises graph ---
+            stretchingNavGraph(
+                nav = nav
             )
 
             // --- NEW: Training graph ---

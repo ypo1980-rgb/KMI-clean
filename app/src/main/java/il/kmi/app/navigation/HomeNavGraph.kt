@@ -28,6 +28,7 @@ import il.kmi.app.KmiViewModel
 import il.kmi.app.Route
 import il.kmi.app.favorites.FavoritesStore
 import il.kmi.app.free_sessions.ui.navigation.FreeSessionsRoute
+import il.kmi.app.stretching.ui.navigation.StretchingRoute
 import il.kmi.app.screens.BeltQuestions.ByTopic.BeltQuestionsByTopicScreen
 import il.kmi.app.screens.ExercisesTabsScreen
 import il.kmi.app.screens.FavoritesScreen
@@ -273,6 +274,15 @@ fun NavGraphBuilder.homeNavGraph(
                 onOpenMessageCenter = {
                     nav.navigate(
                         Route.MessageCenter.route
+                    ) {
+                        launchSingleTop = true
+                        restoreState = true
+                    }
+                },
+
+                onOpenStretching = {
+                    nav.navigate(
+                        StretchingRoute.ROOT
                     ) {
                         launchSingleTop = true
                         restoreState = true

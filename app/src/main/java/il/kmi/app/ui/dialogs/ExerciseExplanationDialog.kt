@@ -39,6 +39,64 @@ import il.kmi.app.ui.KmiTypography
 import il.kmi.app.ui.LocalAppIconScale
 import il.kmi.app.ui.StyledExplanationText
 
+fun exerciseBeltAccentColor(
+    beltLabel: String,
+    fallback: Color
+): Color {
+    return when {
+        beltLabel.contains("לבנה") ||
+                beltLabel.contains(
+                    "White",
+                    ignoreCase = true
+                ) ->
+            Color(0xFFD1D5DB)
+
+        beltLabel.contains("צהובה") ||
+                beltLabel.contains(
+                    "Yellow",
+                    ignoreCase = true
+                ) ->
+            Color(0xFFFACC15)
+
+        beltLabel.contains("כתומה") ||
+                beltLabel.contains(
+                    "Orange",
+                    ignoreCase = true
+                ) ->
+            Color(0xFFF97316)
+
+        beltLabel.contains("ירוקה") ||
+                beltLabel.contains(
+                    "Green",
+                    ignoreCase = true
+                ) ->
+            Color(0xFF22C55E)
+
+        beltLabel.contains("כחולה") ||
+                beltLabel.contains(
+                    "Blue",
+                    ignoreCase = true
+                ) ->
+            Color(0xFF3B82F6)
+
+        beltLabel.contains("חומה") ||
+                beltLabel.contains(
+                    "Brown",
+                    ignoreCase = true
+                ) ->
+            Color(0xFF8B5A2B)
+
+        beltLabel.contains("שחורה") ||
+                beltLabel.contains(
+                    "Black",
+                    ignoreCase = true
+                ) ->
+            Color(0xFF111111)
+
+        else -> fallback
+    }
+}
+
 @Composable
 fun ExerciseExplanationDialog(
     title: String,
@@ -63,59 +121,10 @@ fun ExerciseExplanationDialog(
      */
     val resolvedAccentColor =
         remember(beltLabel, accentColor) {
-            when {
-                beltLabel.contains("לבנה") ||
-                        beltLabel.contains(
-                            "White",
-                            ignoreCase = true
-                        ) ->
-                    Color(0xFFD1D5DB)
-
-                beltLabel.contains("צהובה") ||
-                        beltLabel.contains(
-                            "Yellow",
-                            ignoreCase = true
-                        ) ->
-                    Color(0xFFFACC15)
-
-                beltLabel.contains("כתומה") ||
-                        beltLabel.contains(
-                            "Orange",
-                            ignoreCase = true
-                        ) ->
-                    Color(0xFFF97316)
-
-                beltLabel.contains("ירוקה") ||
-                        beltLabel.contains(
-                            "Green",
-                            ignoreCase = true
-                        ) ->
-                    Color(0xFF22C55E)
-
-                beltLabel.contains("כחולה") ||
-                        beltLabel.contains(
-                            "Blue",
-                            ignoreCase = true
-                        ) ->
-                    Color(0xFF3B82F6)
-
-                beltLabel.contains("חומה") ||
-                        beltLabel.contains(
-                            "Brown",
-                            ignoreCase = true
-                        ) ->
-                    Color(0xFF8B5A2B)
-
-                beltLabel.contains("שחורה") ||
-                        beltLabel.contains(
-                            "Black",
-                            ignoreCase = true
-                        ) ->
-                    Color(0xFF111111)
-
-                else ->
-                    accentColor
-            }
+            exerciseBeltAccentColor(
+                beltLabel = beltLabel,
+                fallback = accentColor
+            )
         }
 
     val resolvedBackgroundBrush =

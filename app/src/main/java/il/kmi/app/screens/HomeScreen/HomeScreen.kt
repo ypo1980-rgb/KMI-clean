@@ -24,6 +24,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.shape.AbsoluteRoundedCornerShape
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AccessibilityNew
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Menu
@@ -399,7 +400,8 @@ fun HomeScreen(
     onOpenTrainingSummary: () -> Unit,
     onOpenTrainingArchive: () -> Unit,
     onOpenTrainingManagement: () -> Unit,
-    onOpenMessageCenter: () -> Unit
+    onOpenMessageCenter: () -> Unit,
+    onOpenStretching: () -> Unit = {}
 ) {
     val haptic = rememberHapticsGlobal()
     val clickSound = rememberClickSound()
@@ -2383,6 +2385,19 @@ fun HomeScreen(
                             isLocked = !hasFullAccess,
                             iconTint = Color(0xFF00897B),
                             iconBackground = Color(0xFFE0F2F1)
+                        ),
+                        FloatingQuickMenuAction(
+                            titleHe = "תרגילי\nמתיחות",
+                            titleEn = "Stretching\nExercises",
+                            icon = Icons.Filled.AccessibilityNew,
+                            action = {
+                                clickSound()
+                                haptic(true)
+                                onOpenStretching()
+                            },
+                            isLocked = false,
+                            iconTint = Color(0xFF1976D2),
+                            iconBackground = Color(0xFFE3F2FD)
                         )
                     )
 

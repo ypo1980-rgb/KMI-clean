@@ -60,6 +60,7 @@ import androidx.compose.ui.platform.LocalLayoutDirection
 import il.kmi.app.ui.KmiIconSize
 import il.kmi.app.ui.KmiTypography
 import il.kmi.app.ui.StyledExplanationText
+import il.kmi.app.ui.dialogs.exerciseBeltAccentColor
 import il.yuval.ui.theme.kmiScreenBackgroundBrush
 
 private fun reminderTr(
@@ -224,6 +225,10 @@ private fun ReminderCardUI(
     val uiTopic = reminderTitleForUi(topic, isEnglish)
     val uiItem = reminderTitleForUi(item, isEnglish)
     val uiTextAlign = reminderTextAlign(isEnglish)
+    val beltAccentColor = exerciseBeltAccentColor(
+        beltLabel = uiBeltName,
+        fallback = MaterialTheme.colorScheme.primary
+    )
     val uiLayoutDirection = if (isEnglish) {
         LayoutDirection.Ltr
     } else {
@@ -439,7 +444,7 @@ private fun ReminderCardUI(
                             shadowElevation = 0.dp,
                             border = BorderStroke(
                                 1.dp,
-                                MaterialTheme.colorScheme.primary.copy(alpha = 0.18f)
+                                beltAccentColor.copy(alpha = 0.34f)
                             ),
                             modifier = Modifier.fillMaxWidth()
                         ) {
@@ -449,9 +454,9 @@ private fun ReminderCardUI(
                                     .background(
                                         Brush.verticalGradient(
                                             colors = listOf(
-                                                MaterialTheme.colorScheme.primary.copy(alpha = 0.10f),
+                                                beltAccentColor.copy(alpha = 0.16f),
                                                 MaterialTheme.colorScheme.surface,
-                                                MaterialTheme.colorScheme.secondary.copy(alpha = 0.06f)
+                                                beltAccentColor.copy(alpha = 0.07f)
                                             )
                                         )
                                     ),
@@ -461,29 +466,22 @@ private fun ReminderCardUI(
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .height(4.dp)
-                                        .background(
-                                            Brush.horizontalGradient(
-                                                colors = listOf(
-                                                    MaterialTheme.colorScheme.primary,
-                                                    MaterialTheme.colorScheme.secondary
-                                                )
-                                            )
-                                        )
+                                        .background(beltAccentColor)
                                 )
 
                                 Column(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .padding(horizontal = 14.dp, vertical = 12.dp),
+                                        .padding(horizontal = 14.dp, vertical = 10.dp),
                                     horizontalAlignment = Alignment.CenterHorizontally,
-                                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                                    verticalArrangement = Arrangement.spacedBy(6.dp)
                                 ) {
                                     Surface(
                                         shape = RoundedCornerShape(50.dp),
-                                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.10f),
+                                        color = beltAccentColor.copy(alpha = 0.13f),
                                         border = BorderStroke(
                                             1.dp,
-                                            MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+                                            beltAccentColor.copy(alpha = 0.24f)
                                         )
                                     ) {
                                         Text(
@@ -491,13 +489,17 @@ private fun ReminderCardUI(
                                             style = KmiTypography.caption.copy(
                                                 fontWeight = FontWeight.SemiBold
                                             ),
-                                            color = MaterialTheme.colorScheme.primary,
+                                            color = if (belt == Belt.BLACK.id) {
+                                                MaterialTheme.colorScheme.onSurface
+                                            } else {
+                                                beltAccentColor
+                                            },
                                             textAlign = TextAlign.Center,
                                             maxLines = 1,
                                             overflow = TextOverflow.Ellipsis,
                                             modifier = Modifier.padding(
                                                 horizontal = 12.dp,
-                                                vertical = 4.dp
+                                                vertical = 3.dp
                                             )
                                         )
                                     }
@@ -520,7 +522,7 @@ private fun ReminderCardUI(
                                             .height(3.dp)
                                             .clip(RoundedCornerShape(100.dp))
                                             .background(
-                                                MaterialTheme.colorScheme.primary.copy(alpha = 0.72f)
+                                                beltAccentColor.copy(alpha = 0.82f)
                                             )
                                     )
                                 }
@@ -550,36 +552,41 @@ private fun ReminderCardUI(
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .padding(horizontal = 16.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                    horizontalArrangement = Arrangement.Start
                                 ) {
-                                    Text(
-                                        text = reminderTr(
-                                            isEnglish,
-                                            "הסבר",
-                                            "Explanation"
-                                        ),
-                                        style = KmiTypography.cardTitle.copy(
-                                            fontWeight = FontWeight.Bold
-                                        ),
-                                        color = MaterialTheme.colorScheme.onSurface,
-                                        textAlign = uiTextAlign
-                                    )
+                                    Column(
+                                        horizontalAlignment = Alignment.CenterHorizontally
+                                    ) {
+                                        Text(
+                                            text = reminderTr(
+                                                isEnglish,
+                                                "הסבר",
+                                                "Explanation"
+                                            ),
+                                            style = KmiTypography.cardTitle.copy(
+                                                fontWeight = FontWeight.Bold
+                                            ),
+                                            color = MaterialTheme.colorScheme.onSurface,
+                                            textAlign = uiTextAlign
+                                        )
 
-                                    Box(
-                                        modifier = Modifier
-                                            .width(34.dp)
-                                            .height(3.dp)
-                                            .clip(RoundedCornerShape(100.dp))
-                                            .background(
-                                                Brush.horizontalGradient(
-                                                    colors = listOf(
-                                                        MaterialTheme.colorScheme.primary,
-                                                        MaterialTheme.colorScheme.secondary
+                                        Spacer(modifier = Modifier.height(3.dp))
+
+                                        Box(
+                                            modifier = Modifier
+                                                .width(34.dp)
+                                                .height(3.dp)
+                                                .clip(RoundedCornerShape(100.dp))
+                                                .background(
+                                                    Brush.horizontalGradient(
+                                                        colors = listOf(
+                                                            MaterialTheme.colorScheme.primary,
+                                                            MaterialTheme.colorScheme.secondary
+                                                        )
                                                     )
                                                 )
-                                            )
-                                    )
+                                        )
+                                    }
                                 }
 
                                 Spacer(modifier = Modifier.height(6.dp))
@@ -722,37 +729,21 @@ private fun ReminderCardUI(
                                 )
                             }
 
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(4.dp)
-                            ) {
-                                PremiumOutlinedActionButton(
-                                    text = reminderTr(
-                                        isEnglish,
-                                        "סגור",
-                                        "Close"
-                                    ),
-                                    onClick = onClose,
-                                    modifier = Modifier.weight(0.82f)
-                                )
-
-                                GradientActionButton(
-                                    text = reminderTr(
-                                        isEnglish,
-                                        "פתח באפליקציה",
-                                        "Open in app"
-                                    ),
-                                    icon = Icons.Filled.OpenInNew,
-                                    brush = Brush.horizontalGradient(
-                                        colors = listOf(
-                                            MaterialTheme.colorScheme.primary,
-                                            MaterialTheme.colorScheme.secondary
-                                        )
-                                    ),
-                                    onClick = onOpenApp,
-                                    modifier = Modifier.weight(1.18f)
-                                )
-                            }
+                            GradientActionButton(
+                                text = reminderTr(
+                                    isEnglish,
+                                    "פתח באפליקציה",
+                                    "Open in app"
+                                ),
+                                icon = Icons.Filled.OpenInNew,
+                                brush = Brush.horizontalGradient(
+                                    colors = listOf(
+                                        MaterialTheme.colorScheme.primary,
+                                        MaterialTheme.colorScheme.secondary
+                                    )
+                                ),
+                                onClick = onOpenApp
+                            )
                         }
                     }
                 }
