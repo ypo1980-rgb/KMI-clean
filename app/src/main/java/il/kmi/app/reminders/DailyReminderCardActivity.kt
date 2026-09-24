@@ -42,8 +42,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
@@ -53,7 +51,6 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -62,6 +59,8 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.platform.LocalLayoutDirection
 import il.kmi.app.ui.KmiIconSize
 import il.kmi.app.ui.KmiTypography
+import il.kmi.app.ui.StyledExplanationText
+import il.yuval.ui.theme.kmiScreenBackgroundBrush
 
 private fun reminderTr(
     isEnglish: Boolean, he: String, en: String
@@ -235,71 +234,70 @@ private fun ReminderCardUI(
         LocalLayoutDirection provides uiLayoutDirection
     ) {
 
-        val backgroundBrush = Brush.verticalGradient(
-            colors = listOf(
-                MaterialTheme.colorScheme.background,
-                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
-                MaterialTheme.colorScheme.background
-            )
-        )
-
         val glowBrush = Brush.radialGradient(
             colors = listOf(
-                MaterialTheme.colorScheme.primary.copy(alpha = 0.18f),
-                MaterialTheme.colorScheme.secondary.copy(alpha = 0.10f),
+                MaterialTheme.colorScheme.primary.copy(alpha = 0.22f),
+                MaterialTheme.colorScheme.secondary.copy(alpha = 0.08f),
                 Color.Transparent
             )
         )
 
         val primaryButtonBrush = Brush.horizontalGradient(
             colors = listOf(
-                Color(0xFF7B61FF), Color(0xFF5A49E8), Color(0xFF6E57D2)
+                MaterialTheme.colorScheme.primary,
+                MaterialTheme.colorScheme.primary.copy(alpha = 0.88f),
+                MaterialTheme.colorScheme.secondary
             )
         )
 
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(backgroundBrush)
+                .background(kmiScreenBackgroundBrush())
                 .navigationBarsPadding()
-                .padding(
-                    horizontal = 20.dp, vertical = 28.dp
-                ), contentAlignment = Alignment.Center
+                .padding(horizontal = 8.dp, vertical = 12.dp),
+            contentAlignment = Alignment.Center
         ) {
             Box(
                 modifier = Modifier
-                    .fillMaxWidth(0.90f)
+                    .fillMaxWidth(0.94f)
                     .aspectRatio(1f)
                     .background(
-                        glowBrush, shape = CircleShape
+                        glowBrush,
+                        shape = CircleShape
                     )
             )
 
             AnimatedVisibility(
-                visible = visible, enter = fadeIn(animationSpec = tween(260)) + slideInVertically(
-                    initialOffsetY = { it / 3 }, animationSpec = tween(360)
-                ) + scaleIn(
-                    initialScale = 0.96f, animationSpec = tween(360)
-                )
+                visible = visible,
+                enter = fadeIn(animationSpec = tween(260)) +
+                        slideInVertically(
+                            initialOffsetY = { it / 4 },
+                            animationSpec = tween(360)
+                        ) +
+                        scaleIn(
+                            initialScale = 0.97f,
+                            animationSpec = tween(360)
+                        )
             ) {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .fillMaxHeight(0.88f)
-                        .clip(RoundedCornerShape(32.dp))
+                        .fillMaxHeight(0.94f)
+                        .clip(RoundedCornerShape(26.dp))
                         .background(
                             Brush.verticalGradient(
-                                listOf(
+                                colors = listOf(
                                     MaterialTheme.colorScheme.surface,
-                                    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.72f),
+                                    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.44f),
                                     MaterialTheme.colorScheme.surface
                                 )
                             )
                         )
                         .border(
                             width = 1.dp,
-                            color = MaterialTheme.colorScheme.outline.copy(alpha = 0.28f),
-                            shape = RoundedCornerShape(32.dp)
+                            color = MaterialTheme.colorScheme.outline.copy(alpha = 0.20f),
+                            shape = RoundedCornerShape(26.dp)
                         )
                 ) {
                     Box(
@@ -318,191 +316,291 @@ private fun ReminderCardUI(
                     Column(
                         modifier = Modifier
                             .fillMaxSize()
-                            .verticalScroll(rememberScrollState())
-                            .padding(horizontal = 14.dp, vertical = 12.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                            .padding(horizontal = 10.dp, vertical = 8.dp),
+                        verticalArrangement = Arrangement.spacedBy(5.dp)
                     ) {
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .heightIn(min = 44.dp),
-                            verticalAlignment = Alignment.CenterVertically
+                                .heightIn(min = 38.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(5.dp)
                         ) {
                             Surface(
-                                shape = RoundedCornerShape(16.dp),
-                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.72f),
-                                tonalElevation = 0.dp,
-                                shadowElevation = 0.dp,
+                                shape = CircleShape,
+                                color = if (localFavorite) {
+                                    Color(0xFFFFC42D).copy(alpha = 0.18f)
+                                } else {
+                                    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.42f)
+                                },
                                 border = BorderStroke(
-                                    1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.28f)
+                                    width = 1.dp,
+                                    color = if (localFavorite) {
+                                        Color(0xFFFFB300).copy(alpha = 0.46f)
+                                    } else {
+                                        MaterialTheme.colorScheme.outline.copy(alpha = 0.18f)
+                                    }
                                 ),
-                                modifier = Modifier.wrapContentWidth()
+                                shadowElevation = 0.dp
                             ) {
-                                Row(
-                                    modifier = Modifier
-                                        .clickable(
-                                            interactionSource = remember {
-                                                MutableInteractionSource()
-                                            }, indication = null
-                                        ) {
-                                            localFavorite = !localFavorite
-                                            onToggleFavorite()
-                                        }
-                                        .padding(
-                                            horizontal = 10.dp, vertical = 8.dp
-                                        ),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                IconButton(
+                                    onClick = {
+                                        localFavorite = !localFavorite
+                                        onToggleFavorite()
+                                    },
+                                    modifier = Modifier.size(34.dp)
+                                ) {
                                     Icon(
                                         imageVector = if (localFavorite) {
                                             Icons.Filled.Star
                                         } else {
                                             Icons.Outlined.StarBorder
-                                        }, contentDescription = reminderTr(
-                                            isEnglish, "מועדף", "Favorite"
-                                        ), tint = if (localFavorite) {
-                                            Color(0xFFFFC42D)
+                                        },
+                                        contentDescription = reminderTr(
+                                            isEnglish,
+                                            "הוספה למועדפים",
+                                            "Add to favorites"
+                                        ),
+                                        tint = if (localFavorite) {
+                                            Color(0xFFFFB300)
                                         } else {
                                             MaterialTheme.colorScheme.onSurfaceVariant
-                                        }, modifier = Modifier.size(
-                                            KmiIconSize.small
-                                        )
-                                    )
-
-                                    Text(
-                                        text = reminderTr(
-                                            isEnglish, "מועדף", "Favorite"
-                                        ),
-                                        style = KmiTypography.caption.copy(
-                                            fontWeight = FontWeight.SemiBold
-                                        ),
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        maxLines = 1
+                                        },
+                                        modifier = Modifier.size(KmiIconSize.small)
                                     )
                                 }
                             }
 
-                            Text(
-                                text = reminderTr(
-                                    isEnglish, "התרגיל היומי שלך", "Your daily exercise"
-                                ),
-                                maxLines = 2,
-                                overflow = TextOverflow.Ellipsis,
-                                style = KmiTypography.cardTitle.copy(
-                                    fontWeight = FontWeight.Bold
-                                ),
-                                color = MaterialTheme.colorScheme.onSurface,
-                                textAlign = TextAlign.Center,
-                                modifier = Modifier.weight(1f)
-                            )
+                            Column(
+                                modifier = Modifier.weight(1f),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(0.dp)
+                            ) {
+                                Text(
+                                    text = reminderTr(
+                                        isEnglish,
+                                        "התרגיל היומי שלך",
+                                        "Your daily exercise"
+                                    ),
+                                    style = KmiTypography.cardTitle.copy(
+                                        fontWeight = FontWeight.Bold
+                                    ),
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    textAlign = TextAlign.Center,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+
+                                Text(
+                                    text = reminderTr(
+                                        isEnglish,
+                                        "צעד קטן. התקדמות גדולה.",
+                                        "One step. Real progress."
+                                    ),
+                                    style = KmiTypography.caption,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    textAlign = TextAlign.Center,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
 
                             Surface(
                                 shape = CircleShape,
-                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.72f),
+                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.42f),
                                 border = BorderStroke(
-                                    1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.30f)
-                                )
+                                    1.dp,
+                                    MaterialTheme.colorScheme.outline.copy(alpha = 0.18f)
+                                ),
+                                shadowElevation = 0.dp
                             ) {
                                 IconButton(
-                                    onClick = onClose, modifier = Modifier.size(
-                                        KmiIconSize.medium
-                                    )
+                                    onClick = onClose,
+                                    modifier = Modifier.size(34.dp)
                                 ) {
                                     Icon(
                                         imageVector = Icons.Filled.Close,
                                         contentDescription = reminderTr(
-                                            isEnglish, "סגור", "Close"
+                                            isEnglish,
+                                            "סגור",
+                                            "Close"
                                         ),
-                                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.size(KmiIconSize.small)
                                     )
                                 }
                             }
                         }
 
                         Surface(
-                            shape = RoundedCornerShape(18.dp),
+                            shape = RoundedCornerShape(20.dp),
                             color = MaterialTheme.colorScheme.surface,
                             tonalElevation = 0.dp,
                             shadowElevation = 0.dp,
                             border = BorderStroke(
-                                1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.28f)
+                                1.dp,
+                                MaterialTheme.colorScheme.primary.copy(alpha = 0.18f)
                             ),
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Column(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(horizontal = 14.dp, vertical = 12.dp),
-                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                                    .background(
+                                        Brush.verticalGradient(
+                                            colors = listOf(
+                                                MaterialTheme.colorScheme.primary.copy(alpha = 0.10f),
+                                                MaterialTheme.colorScheme.surface,
+                                                MaterialTheme.colorScheme.secondary.copy(alpha = 0.06f)
+                                            )
+                                        )
+                                    ),
+                                horizontalAlignment = Alignment.CenterHorizontally
                             ) {
-                                Text(
-                                    text = "$uiTopic • $uiBeltName",
-                                    style = KmiTypography.caption,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    textAlign = uiTextAlign,
-                                    maxLines = 2,
-                                    overflow = TextOverflow.Ellipsis,
-                                    modifier = Modifier.fillMaxWidth()
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(4.dp)
+                                        .background(
+                                            Brush.horizontalGradient(
+                                                colors = listOf(
+                                                    MaterialTheme.colorScheme.primary,
+                                                    MaterialTheme.colorScheme.secondary
+                                                )
+                                            )
+                                        )
                                 )
 
-                                Text(
-                                    text = uiItem,
-                                    style = KmiTypography.sectionTitle.copy(
-                                        fontWeight = FontWeight.Bold
-                                    ),
-                                    color = MaterialTheme.colorScheme.onSurface,
-                                    textAlign = uiTextAlign,
-                                    maxLines = 3,
-                                    overflow = TextOverflow.Ellipsis,
-                                    modifier = Modifier.fillMaxWidth()
-                                )
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 14.dp, vertical = 12.dp),
+                                    horizontalAlignment = Alignment.CenterHorizontally,
+                                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Surface(
+                                        shape = RoundedCornerShape(50.dp),
+                                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.10f),
+                                        border = BorderStroke(
+                                            1.dp,
+                                            MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+                                        )
+                                    ) {
+                                        Text(
+                                            text = "$uiTopic  •  $uiBeltName",
+                                            style = KmiTypography.caption.copy(
+                                                fontWeight = FontWeight.SemiBold
+                                            ),
+                                            color = MaterialTheme.colorScheme.primary,
+                                            textAlign = TextAlign.Center,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                            modifier = Modifier.padding(
+                                                horizontal = 12.dp,
+                                                vertical = 4.dp
+                                            )
+                                        )
+                                    }
+
+                                    Text(
+                                        text = uiItem,
+                                        style = KmiTypography.sectionTitle.copy(
+                                            fontWeight = FontWeight.Bold
+                                        ),
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                        textAlign = TextAlign.Center,
+                                        maxLines = 3,
+                                        overflow = TextOverflow.Ellipsis,
+                                        modifier = Modifier.fillMaxWidth()
+                                    )
+
+                                    Box(
+                                        modifier = Modifier
+                                            .width(38.dp)
+                                            .height(3.dp)
+                                            .clip(RoundedCornerShape(100.dp))
+                                            .background(
+                                                MaterialTheme.colorScheme.primary.copy(alpha = 0.72f)
+                                            )
+                                    )
+                                }
                             }
                         }
 
-                        Box(
+                        Surface(
+                            shape = RoundedCornerShape(24.dp),
+                            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.88f),
+                            border = BorderStroke(
+                                width = 1.dp,
+                                color = MaterialTheme.colorScheme.outline.copy(alpha = 0.18f)
+                            ),
+                            tonalElevation = 0.dp,
+                            shadowElevation = 0.dp,
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .heightIn(min = 170.dp, max = 220.dp)
-                                .clip(RoundedCornerShape(24.dp))
-                                .background(
-                                    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.72f)
-                                )
-                                .border(
-                                    width = 1.dp,
-                                    color = MaterialTheme.colorScheme.outline.copy(alpha = 0.28f),
-                                    shape = RoundedCornerShape(24.dp)
-                                )
+                                .weight(1f)
+                                .heightIn(min = 110.dp)
                         ) {
                             Column(
                                 modifier = Modifier
                                     .fillMaxSize()
-                                    .padding(horizontal = 12.dp, vertical = 8.dp)
+                                    .padding(top = 10.dp)
                             ) {
-                                Text(
-                                    text = reminderTr(
-                                        isEnglish, "הסבר", "Explanation"
-                                    ),
-                                    style = KmiTypography.cardTitle.copy(
-                                        fontWeight = FontWeight.Bold
-                                    ),
-                                    color = MaterialTheme.colorScheme.onSurface,
-                                    textAlign = uiTextAlign,
-                                    modifier = Modifier.fillMaxWidth()
-                                )
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 16.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                ) {
+                                    Text(
+                                        text = reminderTr(
+                                            isEnglish,
+                                            "הסבר",
+                                            "Explanation"
+                                        ),
+                                        style = KmiTypography.cardTitle.copy(
+                                            fontWeight = FontWeight.Bold
+                                        ),
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                        textAlign = uiTextAlign
+                                    )
+
+                                    Box(
+                                        modifier = Modifier
+                                            .width(34.dp)
+                                            .height(3.dp)
+                                            .clip(RoundedCornerShape(100.dp))
+                                            .background(
+                                                Brush.horizontalGradient(
+                                                    colors = listOf(
+                                                        MaterialTheme.colorScheme.primary,
+                                                        MaterialTheme.colorScheme.secondary
+                                                    )
+                                                )
+                                            )
+                                    )
+                                }
 
                                 Spacer(modifier = Modifier.height(6.dp))
 
                                 Box(
-                                    modifier = Modifier.fillMaxSize()
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .weight(1f)
                                 ) {
                                     Column(
                                         modifier = Modifier
                                             .fillMaxSize()
                                             .verticalScroll(scrollState)
-                                            .padding(bottom = 20.dp)
+                                            .padding(
+                                                start = 14.dp,
+                                                end = 22.dp,
+                                                bottom = 26.dp
+                                            )
                                     ) {
-                                        Text(
-                                            text = explanation.ifBlank {
+                                        StyledExplanationText(
+                                            raw = explanation.ifBlank {
                                                 reminderTr(
                                                     isEnglish,
                                                     "אין הסבר זמין כרגע.",
@@ -520,57 +618,61 @@ private fun ReminderCardUI(
                                         modifier = Modifier
                                             .align(Alignment.BottomCenter)
                                             .fillMaxWidth()
-                                            .height(40.dp)
+                                            .height(46.dp)
                                             .background(
                                                 Brush.verticalGradient(
                                                     colors = listOf(
                                                         Color.Transparent,
-                                                        MaterialTheme.colorScheme.surfaceVariant.copy(
+                                                        MaterialTheme.colorScheme.surface.copy(
                                                             alpha = 0.96f
                                                         )
                                                     )
-                                                ), shape = RectangleShape
+                                                )
                                             )
                                     )
 
-                                    if (scrollState.canScrollForward) {
-                                        Row(
+                                    if (scrollState.maxValue > 0) {
+                                        val scrollProgress =
+                                            scrollState.value.toFloat() /
+                                                    scrollState.maxValue.toFloat()
+
+                                        Column(
                                             modifier = Modifier
-                                                .align(Alignment.BottomCenter)
-                                                .padding(bottom = 8.dp),
-                                            horizontalArrangement = Arrangement.Center,
-                                            verticalAlignment = Alignment.CenterVertically
+                                                .align(Alignment.CenterEnd)
+                                                .padding(end = 7.dp)
+                                                .width(4.dp)
+                                                .fillMaxHeight(0.72f)
+                                                .clip(RoundedCornerShape(100.dp))
+                                                .background(
+                                                    MaterialTheme.colorScheme.outline.copy(
+                                                        alpha = 0.12f
+                                                    )
+                                                )
+                                                .padding(vertical = 2.dp),
+                                            horizontalAlignment = Alignment.CenterHorizontally
                                         ) {
+                                            Spacer(
+                                                modifier = Modifier.weight(
+                                                    scrollProgress.coerceAtLeast(0.01f)
+                                                )
+                                            )
+
                                             Box(
                                                 modifier = Modifier
-                                                    .width(46.dp)
-                                                    .height(4.dp)
-                                                    .clip(
-                                                        RoundedCornerShape(
-                                                            100.dp
-                                                        )
-                                                    )
+                                                    .width(4.dp)
+                                                    .height(34.dp)
+                                                    .clip(RoundedCornerShape(100.dp))
                                                     .background(
-                                                        MaterialTheme.colorScheme.primary
+                                                        MaterialTheme.colorScheme.primary.copy(
+                                                            alpha = 0.72f
+                                                        )
                                                     )
                                             )
 
                                             Spacer(
-                                                modifier = Modifier.width(8.dp)
-                                            )
-
-                                            Box(
-                                                modifier = Modifier
-                                                    .width(26.dp)
-                                                    .height(4.dp)
-                                                    .clip(
-                                                        RoundedCornerShape(
-                                                            100.dp
-                                                        )
-                                                    )
-                                                    .background(
-                                                        MaterialTheme.colorScheme.outline.copy(alpha = 0.38f)
-                                                    )
+                                                modifier = Modifier.weight(
+                                                    (1f - scrollProgress).coerceAtLeast(0.01f)
+                                                )
                                             )
                                         }
                                     }
@@ -578,53 +680,79 @@ private fun ReminderCardUI(
                             }
                         }
 
-                        Spacer(modifier = Modifier.height(4.dp))
-
-                        if (extraCount < 3) {
-                            GradientActionButton(
-                                text = reminderTr(
-                                    isEnglish, "תרגיל נוסף להיום", "Another exercise today"
-                                ), brush = primaryButtonBrush, onClick = onAnotherExercise
-                            )
-                        }
-
-                        PremiumOutlinedActionButton(
-                            text = reminderTr(
-                                isEnglish, "אפשר תזמון מדויק", "Allow exact scheduling"
-                            ), onClick = onOpenExactAlarmSettings
-                        )
-
-                        PremiumOutlinedActionButton(
-                            text = reminderTr(
-                                isEnglish, "הגדרות חיסכון סוללה", "Battery optimization settings"
-                            ),
-                            icon = Icons.Filled.Settings,
-                            onClick = onOpenBatteryOptimizationSettings
-                        )
-
-                        Spacer(modifier = Modifier.height(4.dp))
-
-                        Row(
+                        Column(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            verticalArrangement = Arrangement.spacedBy(2.dp)
                         ) {
-                            PremiumOutlinedActionButton(
-                                text = reminderTr(isEnglish, "סגור", "Close"),
-                                onClick = onClose,
-                                modifier = Modifier.weight(1f)
-                            )
+                            if (extraCount < 3) {
+                                GradientActionButton(
+                                    text = reminderTr(
+                                        isEnglish,
+                                        "תרגיל נוסף להיום",
+                                        "Another exercise today"
+                                    ),
+                                    brush = primaryButtonBrush,
+                                    onClick = onAnotherExercise
+                                )
+                            }
 
-                            GradientActionButton(
-                                text = reminderTr(isEnglish, "פתח באפליקציה", "Open in app"),
-                                icon = Icons.Filled.OpenInNew,
-                                brush = Brush.horizontalGradient(
-                                    colors = listOf(
-                                        Color(0xFF8A6BFF), Color(0xFF6B54F6)
-                                    )
-                                ),
-                                onClick = onOpenApp,
-                                modifier = Modifier.weight(1f)
-                            )
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(3.dp)
+                            ) {
+                                PremiumOutlinedActionButton(
+                                    text = reminderTr(
+                                        isEnglish,
+                                        "תזמון מדויק",
+                                        "Exact scheduling"
+                                    ),
+                                    onClick = onOpenExactAlarmSettings,
+                                    modifier = Modifier.weight(1f)
+                                )
+
+                                PremiumOutlinedActionButton(
+                                    text = reminderTr(
+                                        isEnglish,
+                                        "חיסכון בסוללה",
+                                        "Battery settings"
+                                    ),
+                                    icon = Icons.Filled.Settings,
+                                    onClick = onOpenBatteryOptimizationSettings,
+                                    modifier = Modifier.weight(1f)
+                                )
+                            }
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                PremiumOutlinedActionButton(
+                                    text = reminderTr(
+                                        isEnglish,
+                                        "סגור",
+                                        "Close"
+                                    ),
+                                    onClick = onClose,
+                                    modifier = Modifier.weight(0.82f)
+                                )
+
+                                GradientActionButton(
+                                    text = reminderTr(
+                                        isEnglish,
+                                        "פתח באפליקציה",
+                                        "Open in app"
+                                    ),
+                                    icon = Icons.Filled.OpenInNew,
+                                    brush = Brush.horizontalGradient(
+                                        colors = listOf(
+                                            MaterialTheme.colorScheme.primary,
+                                            MaterialTheme.colorScheme.secondary
+                                        )
+                                    ),
+                                    onClick = onOpenApp,
+                                    modifier = Modifier.weight(1.18f)
+                                )
+                            }
                         }
                     }
                 }
@@ -642,41 +770,55 @@ private fun GradientActionButton(
     modifier: Modifier = Modifier,
     icon: androidx.compose.ui.graphics.vector.ImageVector? = null
 ) {
+    val buttonShape = RoundedCornerShape(12.dp)
+
     Surface(
         onClick = onClick,
-        shape = RoundedCornerShape(20.dp),
+        shape = buttonShape,
         shadowElevation = 0.dp,
         tonalElevation = 0.dp,
         color = Color.Transparent,
         modifier = modifier
             .fillMaxWidth()
-            .heightIn(min = 46.dp)
+            .heightIn(min = 34.dp)
     ) {
         Box(
             modifier = Modifier
                 .background(brush)
                 .border(
                     width = 1.dp,
-                    color = Color.White.copy(alpha = 0.18f),
-                    shape = RoundedCornerShape(20.dp)
-                )
-                .padding(horizontal = 14.dp), contentAlignment = Alignment.Center
+                    color = Color.White.copy(alpha = 0.24f),
+                    shape = buttonShape
+                ),
+            contentAlignment = Alignment.Center
         ) {
             Box(
                 modifier = Modifier
                     .matchParentSize()
                     .background(
-                        Brush.horizontalGradient(
+                        Brush.verticalGradient(
                             colors = listOf(
-                                Color.White.copy(alpha = 0.16f),
+                                Color.White.copy(alpha = 0.22f),
                                 Color.Transparent,
-                                Color.White.copy(alpha = 0.06f)
+                                Color.Black.copy(alpha = 0.10f)
                             )
                         )
                     )
             )
 
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .fillMaxWidth()
+                    .height(1.dp)
+                    .background(Color.White.copy(alpha = 0.32f))
+            )
+
             Row(
+                modifier = Modifier.padding(
+                    horizontal = 9.dp,
+                    vertical = 4.dp
+                ),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.Center
             ) {
@@ -684,12 +826,11 @@ private fun GradientActionButton(
                     Icon(
                         imageVector = icon,
                         contentDescription = null,
-                        tint = Color.White.copy(alpha = 0.95f),
-                        modifier = Modifier.size(
-                            KmiIconSize.small
-                        )
+                        tint = Color.White,
+                        modifier = Modifier.size(KmiIconSize.small)
                     )
-                    Spacer(modifier = Modifier.width(6.dp))
+
+                    Spacer(modifier = Modifier.width(4.dp))
                 }
 
                 Text(
@@ -699,7 +840,7 @@ private fun GradientActionButton(
                     ),
                     color = Color.White,
                     textAlign = TextAlign.Center,
-                    maxLines = 2,
+                    maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
             }
@@ -715,16 +856,25 @@ private fun PremiumOutlinedActionButton(
     icon: androidx.compose.ui.graphics.vector.ImageVector? = null
 ) {
     OutlinedButton(
-        onClick = onClick, shape = RoundedCornerShape(20.dp), border = BorderStroke(
-            1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.38f)
-        ), colors = ButtonDefaults.outlinedButtonColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.72f),
+        onClick = onClick,
+        shape = RoundedCornerShape(11.dp),
+        border = BorderStroke(
+            1.dp,
+            MaterialTheme.colorScheme.outline.copy(alpha = 0.24f)
+        ),
+        colors = ButtonDefaults.outlinedButtonColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(
+                alpha = 0.52f
+            ),
             contentColor = MaterialTheme.colorScheme.onSurface
-        ), contentPadding = PaddingValues(
-            horizontal = 12.dp, vertical = 0.dp
-        ), modifier = modifier
+        ),
+        contentPadding = PaddingValues(
+            horizontal = 7.dp,
+            vertical = 1.dp
+        ),
+        modifier = modifier
             .fillMaxWidth()
-            .heightIn(min = 44.dp)
+            .heightIn(min = 30.dp)
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
@@ -734,19 +884,22 @@ private fun PremiumOutlinedActionButton(
                 Icon(
                     imageVector = icon,
                     contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(
-                        KmiIconSize.small
-                    )
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(KmiIconSize.small)
                 )
 
-                Spacer(modifier = Modifier.width(6.dp))
+                Spacer(modifier = Modifier.width(4.dp))
             }
 
             Text(
-                text = text, style = KmiTypography.action.copy(
+                text = text,
+                style = KmiTypography.action.copy(
                     fontWeight = FontWeight.SemiBold
-                ), textAlign = TextAlign.Center, maxLines = 2, overflow = TextOverflow.Ellipsis
+                ),
+                color = MaterialTheme.colorScheme.onSurface,
+                textAlign = TextAlign.Center,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
         }
     }
