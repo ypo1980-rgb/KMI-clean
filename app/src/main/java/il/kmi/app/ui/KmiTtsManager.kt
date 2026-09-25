@@ -28,7 +28,12 @@ object KmiTtsManager {
 
     // ✅ PREF שממנו מגיעה בחירת הקול (מהמסך הגדרות שלך)
     private const val PREF_CLOUD_FILE = "app_prefs"
-    private const val PREF_CLOUD_VOICE = "kmi_tts_voice" // "male" | "female" | "human"
+    private const val PREF_CLOUD_VOICE =
+        "kmi_tts_voice"
+
+    private const val PREF_TTS_MUTED =
+        "kmi_tts_muted"
+
     private const val VOICE_MALE = "male"
     private const val VOICE_FEMALE = "female"
     private const val VOICE_HUMAN = "human"
@@ -52,6 +57,7 @@ object KmiTtsManager {
     // חשוב: לא למתוח את הקול שוב מקומית אם כבר קיבלנו אודיו משרת TTS
     private var defaultSpeed = 1.05f
     private var defaultSpeakingRate = 1.01
+
     // ✅ פיצול תשובות ארוכות למקטעים טבעיים
     private const val MAX_TTS_CHARS_PER_CHUNK = 220
 
@@ -64,10 +70,17 @@ object KmiTtsManager {
     private var lastSpeakAtMs: Long = 0L
 
     // ✅ state פנימי
-    @Volatile private var appCtx: Context? = null
+    @Volatile
+    private var appCtx: Context? = null
+
+    @Volatile
+    private var speechMuted: Boolean = false
 
     private val scope =
-        CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
+        CoroutineScope(
+            SupervisorJob() +
+                    Dispatchers.Main.immediate
+        )
 
     private var inFlightJob: kotlinx.coroutines.Job? = null
 
@@ -87,7 +100,21 @@ object KmiTtsManager {
     // ------------------------------------------------------------
 
     fun init(context: Context) {
-        appCtx = context.applicationContext
+        val applicationContext =
+            context.applicationContext
+
+        appCtx = applicationContext
+
+        speechMuted =
+            applicationContext
+                .getSharedPreferences(
+                    PREF_CLOUD_FILE,
+                    Context.MODE_PRIVATE
+                )
+                .getBoolean(
+                    PREF_TTS_MUTED,
+                    false
+                )
 
         if (FORCE_FRESH_TTS) {
             clearCloudTtsCache()
@@ -104,7 +131,47 @@ object KmiTtsManager {
     }
 
     fun setCloudSpeakingRate(rate: Double) {
-        defaultSpeakingRate = rate.coerceIn(0.25, 2.0)
+        defaultSpeakingRate =
+            rate.coerceIn(0.25, 2.0)
+    }
+
+    fun isMuted(): Boolean {
+        return speechMuted
+    }
+
+    fun setMuted(muted: Boolean) {
+        speechMuted = muted
+
+        appCtx
+            ?.getSharedPreferences(
+                PREF_CLOUD_FILE,
+                Context.MODE_PRIVATE
+            )
+            ?.edit()
+            ?.putBoolean(
+                PREF_TTS_MUTED,
+                muted
+            )
+            ?.apply()
+
+        scope.launch {
+            exo?.volume =
+                if (muted) {
+                    0f
+                } else {
+                    1f
+                }
+        }
+    }
+
+    fun toggleMuted(): Boolean {
+        val muted = !speechMuted
+
+        setMuted(
+            muted = muted
+        )
+
+        return muted
     }
 
     // מוחק את קבצי הקאש של Cloud TTS: kmi_cloud_tts_*.mp3
@@ -166,13 +233,26 @@ object KmiTtsManager {
             return
         }
 
-        val clean = normalizeForTts(text).trim()
+        val clean =
+            normalizeForTts(text).trim()
+
         if (clean.isBlank()) {
             completionCallback?.invoke()
             return
         }
 
-        val now = android.os.SystemClock.elapsedRealtime()
+        /*
+         * כאשר השמע מושתק לא שולחים בקשה לשרת,
+         * אך מודיעים למסך שההנחיה הסתיימה כדי
+         * שהתרגיל והטיימר ימשיכו כרגיל.
+         */
+        if (speechMuted) {
+            completionCallback?.invoke()
+            return
+        }
+
+        val now =
+            android.os.SystemClock.elapsedRealtime()
         val hash = clean.hashCode()
 
         if (
@@ -334,8 +414,22 @@ object KmiTtsManager {
             return@suspendCancellableCoroutine
         }
 
-        val speed = defaultSpeed.coerceIn(SPEED_MIN, SPEED_MAX)
-        val p = ExoPlayer.Builder(ctx).build()
+        val speed =
+            defaultSpeed.coerceIn(
+                SPEED_MIN,
+                SPEED_MAX
+            )
+
+        val p =
+            ExoPlayer.Builder(ctx).build()
+
+        p.volume =
+            if (speechMuted) {
+                0f
+            } else {
+                1f
+            }
+
         exo = p
 
         cont.invokeOnCancellation {

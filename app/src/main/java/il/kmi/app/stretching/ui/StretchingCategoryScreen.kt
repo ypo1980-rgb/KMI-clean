@@ -573,7 +573,19 @@ internal fun stretchingImageResource(
 ): Int? =
     when (imageKey) {
         "neck_chin_tuck" ->
-            R.drawable.stretching_neck_chin_tuck
+            R.drawable.stretching_neck_chin_tuck_start
+
+        "neck_chin_tuck_start" ->
+            R.drawable.stretching_neck_chin_tuck_start
+
+        "neck_chin_tuck_move" ->
+            R.drawable.stretching_neck_chin_tuck_move
+
+        "neck_chin_tuck_hold" ->
+            R.drawable.stretching_neck_chin_tuck_hold
+
+        "neck_forward_flexion_start" ->
+            R.drawable.stretching_neck_forward_flexion_start
 
         "neck_forward_flexion" ->
             R.drawable.stretching_neck_forward_flexion

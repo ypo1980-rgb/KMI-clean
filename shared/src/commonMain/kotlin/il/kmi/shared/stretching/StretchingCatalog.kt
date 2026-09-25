@@ -27,7 +27,37 @@ object StretchingCatalog {
                     "התנועה צריכה להיות קטנה ועדינה. אין לדחוף את הסנטר בכוח.",
                 safetyNoteEn =
                     "Keep the movement small and gentle. Do not force the chin backward.",
-                sortOrder = 0
+                sortOrder = 0,
+                visualSteps =
+                    listOf(
+                        StretchingVisualStep(
+                            imageKey = "neck_chin_tuck_start",
+                            instructionHe =
+                                "שב או עמוד זקוף, הרפה את הכתפיים והבט ישר קדימה.",
+                            instructionEn =
+                                "Sit or stand upright, relax your shoulders, and look straight ahead.",
+                            durationSeconds = 3,
+                            type = StretchingStepType.PREPARE
+                        ),
+                        StretchingVisualStep(
+                            imageKey = "neck_chin_tuck_move",
+                            instructionHe =
+                                "הזז את הסנטר בעדינות לאחור מבלי להטות את הראש מטה.",
+                            instructionEn =
+                                "Gently move your chin backward without tilting your head down.",
+                            durationSeconds = 2,
+                            type = StretchingStepType.MOVE
+                        ),
+                        StretchingVisualStep(
+                            imageKey = "neck_chin_tuck_hold",
+                            instructionHe =
+                                "החזק את התנוחה בעדינות והמשך לנשום כרגיל.",
+                            instructionEn =
+                                "Hold the position gently and continue breathing normally.",
+                            durationSeconds = 5,
+                            type = StretchingStepType.HOLD
+                        )
+                    )
             ),
 
             StretchingExercise(
@@ -51,7 +81,32 @@ object StretchingCatalog {
                     "אין ללחוץ על הראש בעזרת הידיים ואין לבצע תנועה קופצנית.",
                 safetyNoteEn =
                     "Do not press on your head with your hands and do not bounce.",
-                sortOrder = 1
+                sortOrder = 1,
+                visualSteps =
+                    listOf(
+                        StretchingVisualStep(
+                            imageKey =
+                                "neck_forward_flexion_start",
+                            instructionHe =
+                                "שבו זקוף, הרפו את הכתפיים והביטו קדימה.",
+                            instructionEn =
+                                "Sit upright, relax your shoulders, and look straight ahead.",
+                            durationSeconds = 3,
+                            type =
+                                StretchingStepType.PREPARE
+                        ),
+                        StretchingVisualStep(
+                            imageKey =
+                                "neck_forward_flexion",
+                            instructionHe =
+                                "הורידו את הסנטר בעדינות לכיוון החזה. החזיקו ונשמו רגיל.",
+                            instructionEn =
+                                "Gently lower your chin toward your chest. Hold and breathe normally.",
+                            durationSeconds = 5,
+                            type =
+                                StretchingStepType.MOVE
+                        )
+                    )
             ),
 
             StretchingExercise(

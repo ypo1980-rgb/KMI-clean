@@ -1,5 +1,53 @@
 package il.kmi.shared.stretching
 
+enum class StretchingStepType {
+    PREPARE,
+    MOVE,
+    HOLD,
+    RELEASE
+}
+
+data class StretchingVisualStep(
+    val imageKey: String,
+    val instructionHe: String,
+    val instructionEn: String,
+    val durationSeconds: Int,
+    val type: StretchingStepType
+) {
+
+    init {
+        require(imageKey.isNotBlank()) {
+            "Stretching step image key must not be blank"
+        }
+
+        require(instructionHe.isNotBlank()) {
+            "Stretching step Hebrew instruction must not be blank"
+        }
+
+        require(instructionEn.isNotBlank()) {
+            "Stretching step English instruction must not be blank"
+        }
+
+        require(durationSeconds > 0) {
+            "Stretching step duration must be greater than zero"
+        }
+    }
+
+    fun displayInstruction(
+        isEnglish: Boolean
+    ): String {
+        return if (isEnglish) {
+            instructionEn
+        } else {
+            instructionHe
+        }
+    }
+
+    fun imageFileName(): String {
+        return "stretching_$imageKey.webp"
+    }
+}
+
 data class StretchingExercise(
     val id: String,
     val category: StretchingCategory,
@@ -13,7 +61,8 @@ data class StretchingExercise(
     val imageKey: String,
     val safetyNoteHe: String = "",
     val safetyNoteEn: String = "",
-    val sortOrder: Int
+    val sortOrder: Int,
+    val visualSteps: List<StretchingVisualStep> = emptyList()
 ) {
 
     init {
@@ -51,6 +100,17 @@ data class StretchingExercise(
 
         require(sortOrder >= 0) {
             "Sort order must not be negative"
+        }
+
+        require(
+            visualSteps
+                .map {
+                    it.imageKey
+                }
+                .distinct()
+                .size == visualSteps.size
+        ) {
+            "Stretching step image keys must be unique"
         }
     }
 

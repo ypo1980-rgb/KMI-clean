@@ -2101,41 +2101,55 @@ function buildExpressiveSsml(text) {
 
 async function synthesizeHumanVoice({ text, lang, preferredHumanVoice }) {
   try {
-    console.log("Trying human voice path:", {
-      engine: "genClient.synthesizeSpeech",
+    const normalizedText = String(text || "")
+      .trim()
+      .replace(/\r\n/g, "\n")
+      .replace(/[•●▪◦]/g, ". ")
+      .replace(/\n+/g, ". ")
+      .replace(/\s+[-–—]\s+/g, ". ")
+      .replace(/\s*\.\s*\.+/g, ". ")
+      .replace(/\s+/g, " ")
+      .trim();
+
+    console.log("Trying Chirp 3 HD voice:", {
+      engine: "chirp3-hd",
       lang,
       preferredHumanVoice,
     });
 
- const ssml = buildExpressiveSsml(text);
-
- const request = {
-   input: { ssml },
-         voice: {
+    /*
+     * Chirp 3 HD אינו תומך ב־SSML,
+     * speakingRate או pitch.
+     */
+    const request = {
+      input: {
+        text: normalizedText,
+      },
+      voice: {
         languageCode: lang,
         name: preferredHumanVoice,
       },
       audioConfig: {
         audioEncoding: "MP3",
-        speakingRate: 1.10,
-        pitch: 0.0,
-      }
+      },
     };
 
-    const [response] = await genClient.synthesizeSpeech(request);
+    const [response] =
+      await ttsClient.synthesizeSpeech(request);
 
     if (!response || !response.audioContent) {
-      throw new Error("Human voice path returned empty audio");
+      throw new Error(
+        "Chirp 3 HD returned empty audio"
+      );
     }
 
     return {
       audioContent: response.audioContent,
       usedVoiceName: preferredHumanVoice,
-      usedEngine: "human-path",
+      usedEngine: "chirp3-hd",
     };
-
   } catch (err) {
-    console.log("Human voice path failed, fallback to classic:", {
+    console.error("Chirp 3 HD failed:", {
       preferredHumanVoice,
       message: String(err),
     });
@@ -2184,36 +2198,69 @@ async function synthesizeWithVoiceFallback({
       ? Math.min(2.0, Math.max(-2.0, pitch))
       : 0.0;
 
-  const plainText = buildExpressiveSsml(text);
+   const normalizedText = String(text || "")
+     .trim()
+     .replace(/\r\n/g, "\n")
+     .replace(/[•●▪◦]/g, ". ")
+     .replace(/\n+/g, ". ")
+     .replace(/\s+[-–—]\s+/g, ". ")
+     .replace(/\s*\.\s*\.+/g, ". ")
+     .replace(/\s+/g, " ")
+     .trim();
 
-  let lastError = null;
+   const legacySsml =
+     buildExpressiveSsml(normalizedText);
 
-  for (const voiceName of preferredVoices) {
-    try {
-console.log("kmiTts trying voice:", {
-  lang,
-  voiceKey,
-  voiceName,
-  rate,
-  style,
-  resolvedPitch,
-  engine: "classic"
-});
+   let lastError = null;
 
-    const request = {
-      input: { ssml: plainText },
-              voice: voiceName
-          ? { languageCode: lang, name: voiceName }
-          : {
-              languageCode: lang,
-              ssmlGender: wantFemale ? "FEMALE" : "MALE",
-            },
-        audioConfig: {
-          audioEncoding: "MP3",
-          speakingRate: rate,
-          pitch: resolvedPitch,
-        },
-      };
+   for (const voiceName of preferredVoices) {
+     try {
+       const isChirp3 =
+         voiceName?.includes("-Chirp3-HD-") === true;
+
+       console.log("kmiTts trying voice:", {
+         lang,
+         voiceKey,
+         voiceName,
+         rate,
+         style,
+         resolvedPitch,
+         isChirp3,
+         engine: isChirp3
+           ? "chirp3-hd"
+           : "classic",
+       });
+
+       const request = {
+         input: isChirp3
+           ? {
+               text: normalizedText,
+             }
+           : {
+               ssml: legacySsml,
+             },
+
+         voice: voiceName
+           ? {
+               languageCode: lang,
+               name: voiceName,
+             }
+           : {
+               languageCode: lang,
+               ssmlGender:
+                 wantFemale ? "FEMALE" : "MALE",
+             },
+
+         audioConfig: isChirp3
+           ? {
+               audioEncoding: "MP3",
+             }
+           : {
+               audioEncoding: "MP3",
+               speakingRate: rate,
+               pitch: resolvedPitch,
+             },
+       };
 
       const [response] = await ttsClient.synthesizeSpeech(request);
 
