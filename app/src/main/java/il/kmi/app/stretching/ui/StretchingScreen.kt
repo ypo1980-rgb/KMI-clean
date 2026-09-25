@@ -1,6 +1,7 @@
 package il.kmi.app.stretching.ui
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -29,12 +30,15 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import il.kmi.app.R
 import il.kmi.app.ui.KmiTopBar
 import il.kmi.app.ui.KmiTypography
 import il.kmi.shared.stretching.StretchingCatalog
@@ -100,7 +104,7 @@ fun StretchingScreen(
                 )
             }
         ) { innerPadding ->
-            Box(
+            Column(
                 modifier =
                     Modifier
                         .fillMaxSize()
@@ -110,6 +114,10 @@ fun StretchingScreen(
                         )
                         .padding(innerPadding)
             ) {
+                StretchingIntroductionCard(
+                    isEnglish = isEnglish
+                )
+
                 LazyVerticalGrid(
                     columns =
                         GridCells.Adaptive(
@@ -119,7 +127,7 @@ fun StretchingScreen(
                     contentPadding =
                         PaddingValues(
                             start = 14.dp,
-                            top = 14.dp,
+                            top = 12.dp,
                             end = 14.dp,
                             bottom = 28.dp
                         ),
@@ -128,17 +136,6 @@ fun StretchingScreen(
                     verticalArrangement =
                         Arrangement.spacedBy(10.dp)
                 ) {
-                    item(
-                        span = {
-                            androidx.compose.foundation.lazy.grid
-                                .GridItemSpan(maxLineSpan)
-                        }
-                    ) {
-                        StretchingIntroductionCard(
-                            isEnglish = isEnglish
-                        )
-                    }
-
                     items(
                         items = categories,
                         key = { category ->
@@ -181,108 +178,31 @@ fun StretchingScreen(
 private fun StretchingIntroductionCard(
     isEnglish: Boolean
 ) {
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(22.dp),
-        color =
-            MaterialTheme
-                .colorScheme
-                .surface
-                .copy(alpha = 0.94f),
-        border =
-            BorderStroke(
-                width = 1.dp,
-                color =
-                    MaterialTheme
-                        .colorScheme
-                        .outlineVariant
-                        .copy(alpha = 0.82f)
-            ),
-        shadowElevation = 0.dp,
-        tonalElevation = 1.dp
+    Box(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .kmiSectionHeaderBackground()
+                .padding(
+                    horizontal = 14.dp,
+                    vertical = 9.dp
+                ),
+        contentAlignment = Alignment.Center
     ) {
-        Column(
-            modifier =
-                Modifier
-                    .fillMaxWidth()
-                    .padding(
-                        horizontal = 16.dp,
-                        vertical = 14.dp
-                    ),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Surface(
-                shape = CircleShape,
-                color =
-                    MaterialTheme
-                        .colorScheme
-                        .primaryContainer
-                        .copy(alpha = 0.82f),
-                border =
-                    BorderStroke(
-                        width = 1.dp,
-                        color =
-                            MaterialTheme
-                                .colorScheme
-                                .primary
-                                .copy(alpha = 0.28f)
-                    ),
-                shadowElevation = 0.dp
-            ) {
-                Text(
-                    text = "KMI",
-                    modifier =
-                        Modifier.padding(
-                            horizontal = 16.dp,
-                            vertical = 6.dp
-                        ),
-                    style = KmiTypography.caption,
-                    color =
-                        MaterialTheme
-                            .colorScheme
-                            .onPrimaryContainer,
-                    fontWeight = FontWeight.ExtraBold
-                )
-            }
-
-            Spacer(
-                modifier = Modifier.height(8.dp)
-            )
-
-            Text(
-                text =
-                    if (isEnglish) {
-                        "Choose a body area"
-                    } else {
-                        "בחרו אזור בגוף"
-                    },
-                modifier = Modifier.fillMaxWidth(),
-                style = KmiTypography.sectionTitle,
-                color = MaterialTheme.colorScheme.onSurface,
-                fontWeight = FontWeight.Bold,
-                textAlign = TextAlign.Center
-            )
-
-            Spacer(
-                modifier = Modifier.height(3.dp)
-            )
-
-            Text(
-                text =
-                    if (isEnglish) {
-                        "Short, clear routines for flexibility and comfortable movement"
-                    } else {
-                        "סדרות קצרות וברורות לשיפור הגמישות והתנועה הנוחה"
-                    },
-                modifier = Modifier.fillMaxWidth(),
-                style = KmiTypography.body,
-                color =
-                    MaterialTheme
-                        .colorScheme
-                        .onSurfaceVariant,
-                textAlign = TextAlign.Center
-            )
-        }
+        Text(
+            text =
+                if (isEnglish) {
+                    "Choose a body area · Perform gently and at your own pace"
+                } else {
+                    "בחרו אזור בגוף · מבצעים בעדינות ובקצב אישי"
+                },
+            modifier = Modifier.fillMaxWidth(),
+            style = KmiTypography.action,
+            color = Color.White,
+            fontWeight = FontWeight.Bold,
+            textAlign = TextAlign.Center,
+            maxLines = 2
+        )
     }
 }
 
@@ -294,6 +214,11 @@ private fun StretchingCategoryCard(
     onClick: () -> Unit
 ) {
     val isAvailable = exerciseCount > 0
+
+    val imageResource =
+        stretchingCategoryImageResource(
+            category = category
+        )
 
     val accentColor =
         when (category) {
@@ -382,11 +307,14 @@ private fun StretchingCategoryCard(
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             Surface(
-                modifier = Modifier.size(48.dp),
-                shape = CircleShape,
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .height(118.dp),
+                shape = RoundedCornerShape(16.dp),
                 color =
                     if (isAvailable) {
-                        accentColor.copy(alpha = 0.14f)
+                        accentColor.copy(alpha = 0.1f)
                     } else {
                         MaterialTheme
                             .colorScheme
@@ -397,7 +325,7 @@ private fun StretchingCategoryCard(
                         width = 1.dp,
                         color =
                             if (isAvailable) {
-                                accentColor.copy(alpha = 0.38f)
+                                accentColor.copy(alpha = 0.3f)
                             } else {
                                 MaterialTheme
                                     .colorScheme
@@ -410,26 +338,39 @@ private fun StretchingCategoryCard(
                     modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center
                 ) {
-                    Text(
-                        text =
-                            categoryShortLabel(
-                                category = category,
-                                isEnglish = isEnglish
-                            ),
-                        style = KmiTypography.action,
-                        color =
-                            if (isAvailable) {
-                                accentColor
-                            } else {
+                    if (imageResource != null) {
+                        Image(
+                            painter =
+                                painterResource(
+                                    id = imageResource
+                                ),
+                            contentDescription =
+                                category.displayTitle(
+                                    isEnglish = isEnglish
+                                ),
+                            modifier =
+                                Modifier
+                                    .fillMaxSize()
+                                    .padding(3.dp),
+                            contentScale = ContentScale.Fit
+                        )
+                    } else {
+                        Text(
+                            text =
+                                categoryShortLabel(
+                                    category = category,
+                                    isEnglish = isEnglish
+                                ),
+                            style = KmiTypography.sectionTitle,
+                            color =
                                 MaterialTheme
                                     .colorScheme
                                     .onSurfaceVariant
-                                    .copy(alpha = 0.58f)
-                            },
-                        fontWeight = FontWeight.ExtraBold,
-                        textAlign = TextAlign.Center,
-                        maxLines = 1
-                    )
+                                    .copy(alpha = 0.58f),
+                            fontWeight = FontWeight.ExtraBold,
+                            textAlign = TextAlign.Center
+                        )
+                    }
                 }
             }
 
@@ -645,4 +586,27 @@ private fun categoryShortLabel(
 
         StretchingCategory.FULL_BODY ->
             if (isEnglish) "FB" else "ג"
+    }
+
+private fun stretchingCategoryImageResource(
+    category: StretchingCategory
+): Int? =
+    when (category) {
+        StretchingCategory.NECK_AND_HEAD ->
+            R.drawable.stretching_category_neck_head
+
+        StretchingCategory.SHOULDERS_AND_ARMS ->
+            R.drawable.stretching_category_shoulders_arms
+
+        StretchingCategory.UPPER_BACK ->
+            R.drawable.stretching_category_upper_back
+
+        StretchingCategory.LOWER_BACK ->
+            R.drawable.stretching_category_lower_back
+
+        StretchingCategory.HIPS_AND_GROIN,
+        StretchingCategory.LEGS,
+        StretchingCategory.KNEES_AND_ANKLES,
+        StretchingCategory.FULL_BODY ->
+            null
     }

@@ -602,6 +602,36 @@ internal fun stretchingImageResource(
         "seated_upper_body_rotation" ->
             R.drawable.stretching_upper_body_seated_rotation
 
+        "stretch_shoulders_cross_body" ->
+            R.drawable.stretch_shoulders_cross_body
+
+        "stretch_shoulders_overhead_triceps" ->
+            R.drawable.stretch_shoulders_overhead_triceps
+
+        "stretch_shoulders_doorway_chest" ->
+            R.drawable.stretch_shoulders_doorway_chest
+
+        "stretch_shoulders_pendulum" ->
+            R.drawable.stretch_shoulders_pendulum
+
+        "stretch_shoulders_wall_walk" ->
+            R.drawable.stretch_shoulders_wall_walk
+
+        "stretch_shoulders_arm_circles" ->
+            R.drawable.stretch_shoulders_arm_circles
+
+        "stretch_arms_biceps_wall" ->
+            R.drawable.stretch_arms_biceps_wall
+
+        "stretch_arms_wrist_flexor" ->
+            R.drawable.stretch_arms_wrist_flexor
+
+        "stretch_arms_wrist_extensor" ->
+            R.drawable.stretch_arms_wrist_extensor
+
+        "stretch_arms_forearm_rotation" ->
+            R.drawable.stretch_arms_forearm_rotation
+
         else ->
             null
     }
