@@ -544,7 +544,10 @@ enum class KmiQuickActionType {
     STATISTICS,
     ASSISTANT,
     GUIDE,
-    SHARE
+    SHARE,
+    TRAINING_ARCHIVE,
+    FREE_TRAININGS,
+    STRETCHING
 }
 
 data class KmiQuickActionColors(
@@ -608,6 +611,24 @@ fun kmiQuickActionColors(
                     background = Color(0xFF500724),
                     content = Color(0xFFF9A8D4)
                 )
+
+            KmiQuickActionType.TRAINING_ARCHIVE ->
+                KmiQuickActionColors(
+                    background = Color(0xFF312E81),
+                    content = Color(0xFFC4B5FD)
+                )
+
+            KmiQuickActionType.FREE_TRAININGS ->
+                KmiQuickActionColors(
+                    background = Color(0xFF042F2E),
+                    content = Color(0xFF5EEAD4)
+                )
+
+            KmiQuickActionType.STRETCHING ->
+                KmiQuickActionColors(
+                    background = Color(0xFF172554),
+                    content = Color(0xFF93C5FD)
+                )
         }
     } else {
         when (type) {
@@ -651,6 +672,24 @@ fun kmiQuickActionColors(
                 KmiQuickActionColors(
                     background = Color(0xFFFCE7F3),
                     content = Color(0xFFBE185D)
+                )
+
+            KmiQuickActionType.TRAINING_ARCHIVE ->
+                KmiQuickActionColors(
+                    background = Color(0xFFF0ECFF),
+                    content = Color(0xFF6D4CFF)
+                )
+
+            KmiQuickActionType.FREE_TRAININGS ->
+                KmiQuickActionColors(
+                    background = Color(0xFFE0F2F1),
+                    content = Color(0xFF00897B)
+                )
+
+            KmiQuickActionType.STRETCHING ->
+                KmiQuickActionColors(
+                    background = Color(0xFFE3F2FD),
+                    content = Color(0xFF1976D2)
                 )
         }
     }

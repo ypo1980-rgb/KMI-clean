@@ -34,6 +34,7 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseAuthUserCollisionException
 import com.google.firebase.firestore.FirebaseFirestore
 import il.kmi.app.auth.GoogleAuthManager
+import il.kmi.app.screens.admin.AdminAccess
 import com.google.firebase.firestore.SetOptions
 import il.kmi.app.training.TrainingCatalog
 import il.kmi.app.database.KmiDatabaseProvider
@@ -266,39 +267,14 @@ fun RegistrationFormScreen(
     var profileAdminAuthorized by remember {
         mutableStateOf(false)
     }
+    val profileRoleScope = rememberCoroutineScope()
 
     LaunchedEffect(
         startAtProfile,
         FirebaseAuth.getInstance().currentUser?.uid
     ) {
-        if (!startAtProfile) {
-            profileAdminAuthorized = false
-            return@LaunchedEffect
-        }
-
-        val uid =
-            FirebaseAuth.getInstance()
-                .currentUser
-                ?.uid
-                .orEmpty()
-
-        if (uid.isBlank()) {
-            profileAdminAuthorized = false
-            return@LaunchedEffect
-        }
-
-        val adminDoc =
-            runCatching {
-                FirebaseFirestore.getInstance()
-                    .collection("admins")
-                    .document(uid)
-                    .get()
-                    .await()
-            }.getOrNull()
-
         profileAdminAuthorized =
-            adminDoc?.exists() == true &&
-                    adminDoc.getBoolean("enabled") == true
+            startAtProfile && AdminAccess.isCurrentUserAdmin()
     }
 
     val profileAllowsCoach =
@@ -391,6 +367,18 @@ fun RegistrationFormScreen(
             sp.getString("birth_year", "2000")
                 ?.toIntOrNull()
                 ?: 2000
+        )
+    }
+
+    // ביט לכל חלק שהוזן: יום=1, חודש=2, שנה=4.
+    var birthDateInputMask by rememberSaveable {
+        mutableIntStateOf(
+            if (
+                sp.contains("birth_day") &&
+                sp.contains("birth_month") &&
+                sp.contains("birth_year") &&
+                !(birthDay == 1 && birthMonth == 1 && birthYear == 2000)
+            ) 7 else 0
         )
     }
 
@@ -579,6 +567,7 @@ fun RegistrationFormScreen(
     var groupError by remember { mutableStateOf(false) }
     var termsError by remember { mutableStateOf(false) }
     var genderError by remember { mutableStateOf(false) }
+    var birthDateError by remember { mutableStateOf(false) }
 
     var scrollToMissingField by remember {
         mutableStateOf<String?>(null)
@@ -865,6 +854,20 @@ fun RegistrationFormScreen(
                 Toast.LENGTH_SHORT
             ).show()
         }
+        // בכל לחיצה בודקים מחדש את הערכים הנוכחיים.
+        // כך שדה שכבר הושלם לא נשאר מסומן כשגיאה.
+        fullNameError = false
+        phoneError = false
+        emailError = false
+        genderError = false
+        birthDateError = false
+        usernameError = false
+        passwordError = false
+        regionError = false
+        branchError = false
+        groupError = false
+        termsError = false
+
         var valid = true
 
         // ברישום חדש לא ניתן לבחור תפקיד מאמן.
@@ -944,18 +947,25 @@ fun RegistrationFormScreen(
             valid = false
         }
 
-        // מין חובה
+        // מין ותאריך לידה הם שדות חובה.
         if (gender.isBlank()) {
             genderError = true; valid = false
+        }
+        val birthDateMissing = birthDateInputMask != 7
+        if (birthDateMissing) {
+            birthDateError = true
+            valid = false
         }
 
         // ✅ דרגת חגורה חובה גם למתאמן וגם למאמן
         if (currentBeltId.isBlank()) {
-            Toast.makeText(
-                ctx,
-                if (isEnglish) "You must select a belt rank" else "חובה לבחור דרגת חגורה",
-                Toast.LENGTH_LONG
-            ).show()
+            if (valid) {
+                Toast.makeText(
+                    ctx,
+                    if (isEnglish) "You must select a belt rank" else "חובה לבחור דרגת חגורה",
+                    Toast.LENGTH_LONG
+                ).show()
+            }
             valid = false
         }
 
@@ -970,6 +980,7 @@ fun RegistrationFormScreen(
                     phoneError -> "phone"
                     emailError -> "email"
                     genderError -> "gender"
+                    birthDateMissing -> "birthDate"
 
                     !startAtProfile &&
                             !isGoogleAuth &&
@@ -983,7 +994,12 @@ fun RegistrationFormScreen(
 
                     regionError -> "region"
                     branchError -> "branch"
-                    groupError -> "group"
+                    groupError -> {
+                        val missingBranch = selectedBranches.firstOrNull { branch ->
+                            selectedGroupsByBranch[branch].isNullOrEmpty()
+                        }
+                        if (missingBranch == null) "group" else "group:$missingBranch"
+                    }
                     currentBeltId.isBlank() -> "belt"
                     termsError -> "terms"
                     else -> null
@@ -1886,34 +1902,40 @@ fun RegistrationFormScreen(
                 onTabSelected = { newTab ->
 
                     if (startAtProfile) {
-                        if (
-                            newTab == 1 &&
-                            !profileAllowsCoach
-                        ) {
-                            Toast.makeText(
-                                ctx,
-                                if (isEnglish) {
-                                    "Coach mode is allowed only after server authorization"
-                                } else {
-                                    "מצב מאמן זמין רק לאחר הרשאה מהשרת"
-                                },
-                                Toast.LENGTH_SHORT
-                            ).show()
-
+                        if (newTab == 0) {
                             selectedTab = 0
                             return@RegistrationTabsBilingual
                         }
 
-                        selectedTab =
-                            if (
-                                newTab == 1 &&
-                                profileAllowsCoach
-                            ) {
-                                1
-                            } else {
-                                0
-                            }
+                        if (profileAllowsCoach) {
+                            selectedTab = 1
+                            return@RegistrationTabsBilingual
+                        }
 
+                        profileRoleScope.launch {
+                            val adminAuthorized =
+                                AdminAccess.isCurrentUserAdmin()
+
+                            profileAdminAuthorized =
+                                adminAuthorized
+
+                            if (
+                                adminAuthorized ||
+                                profileCoachAuthorized
+                            ) {
+                                selectedTab = 1
+                            } else {
+                                Toast.makeText(
+                                    ctx,
+                                    if (isEnglish) {
+                                        "Coach mode is allowed only after server authorization"
+                                    } else {
+                                        "מצב מאמן זמין רק לאחר הרשאה מהשרת"
+                                    },
+                                    Toast.LENGTH_SHORT
+                                ).show()
+                            }
+                        }
                         return@RegistrationTabsBilingual
                     }
 
@@ -1967,15 +1989,40 @@ fun RegistrationFormScreen(
                 onGenderChange = {
                     gender = it
                     genderError = false
+
+                    if (
+                        fullName.isNotBlank() &&
+                        phone.filter { digit -> digit.isDigit() }.length in 9..12 &&
+                        email.isNotBlank() &&
+                        Patterns.EMAIL_ADDRESS.matcher(email.trim()).matches() &&
+                        birthDateInputMask != 7
+                    ) {
+                        birthDateError = true
+                        scrollToMissingField = "birthDate"
+                    }
                 },
                 genderError = genderError,
+                birthDateError = birthDateError,
+
 
                 birthDay = birthDay,
                 birthMonth = birthMonth,
                 birthYear = birthYear,
-                onBirthDayChange = { birthDay = it },
-                onBirthMonthChange = { birthMonth = it },
-                onBirthYearChange = { birthYear = it },
+                onBirthDayChange = {
+                    birthDay = it
+                    birthDateInputMask = birthDateInputMask or 1
+                    if (birthDateInputMask == 7) birthDateError = false
+                },
+                onBirthMonthChange = {
+                    birthMonth = it
+                    birthDateInputMask = birthDateInputMask or 2
+                    if (birthDateInputMask == 7) birthDateError = false
+                },
+                onBirthYearChange = {
+                    birthYear = it
+                    birthDateInputMask = birthDateInputMask or 4
+                    if (birthDateInputMask == 7) birthDateError = false
+                },
                 username = username,
                 onUsernameChange = {
                     username = it
@@ -2019,6 +2066,9 @@ fun RegistrationFormScreen(
                     activeGroup = ""
 
                     regionError = clean.isEmpty()
+                    if (clean.isNotEmpty()) {
+                        scrollToMissingField = "branch"
+                    }
                 },
                 selectedBranches = selectedBranches,
                 onBranchesChange = { list ->
@@ -2038,6 +2088,16 @@ fun RegistrationFormScreen(
                     }
 
                     branchError = clean.isEmpty()
+
+                    if (clean.isNotEmpty() && branchType != "abroad") {
+                        val missingBranch = clean.firstOrNull { branch ->
+                            selectedGroupsByBranch[branch].isNullOrEmpty()
+                        }
+                        if (missingBranch != null) {
+                            groupError = true
+                            scrollToMissingField = "group:$missingBranch"
+                        }
+                    }
                 },
                 selectedGroups = selectedGroups,
                 onGroupsChange = { list ->

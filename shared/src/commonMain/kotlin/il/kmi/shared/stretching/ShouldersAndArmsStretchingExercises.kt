@@ -11,18 +11,48 @@ internal object ShouldersAndArmsStretchingExercises {
                 titleHe = "מתיחת כתף לרוחב הגוף",
                 titleEn = "Cross-body shoulder stretch",
                 instructionsHe =
-                    "עמדו או שבו בגב זקוף. העבירו יד אחת לרוחב החזה. תמכו בזרוע בעזרת היד השנייה ומשכו אותה בעדינות לכיוון הגוף, בלי לסובב את פלג הגוף העליון. החזיקו וחזרו בצד השני.",
+                    "עמדו בגב זקוף והכתפיים משוחררות. " +
+                            "העבירו יד אחת ישרה לרוחב החזה. " +
+                            "תמכו בזרוע מעל המרפק בעזרת היד השנייה ומשכו בעדינות לכיוון הגוף. " +
+                            "שמרו את פלג הגוף העליון פונה קדימה וחזרו בצד השני.",
                 instructionsEn =
-                    "Stand or sit upright. Bring one arm across your chest. Support the upper arm with the opposite hand and gently draw it toward your body without rotating your torso. Hold, then repeat on the other side.",
+                    "Stand upright with your shoulders relaxed. " +
+                            "Bring one straight arm across your chest. " +
+                            "Support the upper arm above the elbow with the opposite hand and gently draw it toward your body. " +
+                            "Keep your torso facing forward and repeat on the other side.",
                 durationSeconds = 30,
                 repetitions = 2,
                 performBothSides = true,
-                imageKey = "stretch_shoulders_cross_body",
+                imageKey = "shoulders_cross_body_start",
                 safetyNoteHe =
-                    "אין למשוך דרך המרפק ואין להפעיל לחץ חד על מפרק הכתף.",
+                    "אין למשוך דרך המרפק או להפעיל לחץ חד על מפרק הכתף.",
                 safetyNoteEn =
                     "Do not pull directly on the elbow or force the shoulder joint.",
-                sortOrder = 1
+                sortOrder = 1,
+                visualSteps =
+                    listOf(
+                        StretchingVisualStep(
+                            imageKey = "shoulders_cross_body_start",
+                            instructionHe = "מוכנים.",
+                            instructionEn = "Get ready.",
+                            durationSeconds = 3,
+                            type = StretchingStepType.PREPARE
+                        ),
+                        StretchingVisualStep(
+                            imageKey = "shoulders_cross_body_right",
+                            instructionHe = "מתחו את כתף ימין.",
+                            instructionEn = "Stretch the right shoulder.",
+                            durationSeconds = 6,
+                            type = StretchingStepType.HOLD
+                        ),
+                        StretchingVisualStep(
+                            imageKey = "shoulders_cross_body_left",
+                            instructionHe = "מתחו את כתף שמאל.",
+                            instructionEn = "Stretch the left shoulder.",
+                            durationSeconds = 6,
+                            type = StretchingStepType.HOLD
+                        )
+                    )
             ),
             StretchingExercise(
                 id = "shoulders_overhead_triceps",
@@ -31,18 +61,48 @@ internal object ShouldersAndArmsStretchingExercises {
                 titleHe = "מתיחת זרוע מעל הראש",
                 titleEn = "Overhead triceps stretch",
                 instructionsHe =
-                    "הרימו יד אחת מעל הראש וכופפו את המרפק כך שכף היד תרד לכיוון הגב העליון. הניחו את היד השנייה על הזרוע העליונה והפעילו לחץ עדין כלפי מטה. שמרו על הראש זקוף והכתפיים משוחררות.",
+                    "עמדו בגב זקוף והכתפיים משוחררות. " +
+                            "הרימו יד אחת מעל הראש וכופפו את המרפק כך שכף היד תרד לכיוון הגב העליון. " +
+                            "הניחו את היד השנייה על המרפק והפעילו לחץ עדין כלפי מטה. " +
+                            "שמרו את הראש זקוף ואת הגב ישר וחזרו בצד השני.",
                 instructionsEn =
-                    "Raise one arm overhead and bend the elbow so the hand moves toward the upper back. Place the opposite hand on the upper arm and apply gentle downward pressure. Keep your head upright and shoulders relaxed.",
+                    "Stand upright with your shoulders relaxed. " +
+                            "Raise one arm overhead and bend the elbow so the hand moves toward the upper back. " +
+                            "Place the opposite hand on the elbow and apply gentle downward pressure. " +
+                            "Keep your head upright and your back straight, then repeat on the other side.",
                 durationSeconds = 30,
                 repetitions = 2,
                 performBothSides = true,
-                imageKey = "stretch_shoulders_overhead_triceps",
+                imageKey = "shoulders_cross_body_start",
                 safetyNoteHe =
                     "אין לדחוף את המרפק בכוח או לקשת את הגב.",
                 safetyNoteEn =
                     "Do not force the elbow downward or arch your back.",
-                sortOrder = 2
+                sortOrder = 2,
+                visualSteps =
+                    listOf(
+                        StretchingVisualStep(
+                            imageKey = "shoulders_cross_body_start",
+                            instructionHe = "מוכנים.",
+                            instructionEn = "Get ready.",
+                            durationSeconds = 3,
+                            type = StretchingStepType.PREPARE
+                        ),
+                        StretchingVisualStep(
+                            imageKey = "shoulders_overhead_triceps_right",
+                            instructionHe = "מתחו את זרוע ימין.",
+                            instructionEn = "Stretch the right arm.",
+                            durationSeconds = 6,
+                            type = StretchingStepType.HOLD
+                        ),
+                        StretchingVisualStep(
+                            imageKey = "shoulders_overhead_triceps_left",
+                            instructionHe = "מתחו את זרוע שמאל.",
+                            instructionEn = "Stretch the left arm.",
+                            durationSeconds = 6,
+                            type = StretchingStepType.HOLD
+                        )
+                    )
             ),
             StretchingExercise(
                 id = "shoulders_doorway_chest",
@@ -51,18 +111,41 @@ internal object ShouldersAndArmsStretchingExercises {
                 titleHe = "מתיחת חזה וכתפיים במשקוף",
                 titleEn = "Doorway chest and shoulder stretch",
                 instructionsHe =
-                    "עמדו ליד משקוף והניחו עליו את האמה כאשר המרפק מעט מתחת לגובה הכתף. צעדו או סובבו את הגוף בעדינות הרחק מהיד עד שמורגשת מתיחה בחזה ובקדמת הכתף. חזרו בצד השני.",
+                    "עמדו במרכז המשקוף והניחו את שתי האמות על צדי המשקוף, " +
+                            "כאשר המרפקים כפופים ובגובה הכתפיים. " +
+                            "צעדו מעט קדימה והעבירו את בית החזה בעדינות דרך המשקוף. " +
+                            "שמרו את הכתפיים נמוכות ואת הגב במנח ניטרלי.",
                 instructionsEn =
-                    "Stand beside a doorway and place your forearm against the frame with the elbow slightly below shoulder height. Gently step or turn away until you feel a stretch across the chest and front of the shoulder. Repeat on the other side.",
+                    "Stand in the center of the doorway and place both forearms against the frame, " +
+                            "with your elbows bent at shoulder height. " +
+                            "Take a small step forward and gently move your chest through the doorway. " +
+                            "Keep your shoulders lowered and your spine neutral.",
                 durationSeconds = 30,
                 repetitions = 2,
-                performBothSides = true,
-                imageKey = "stretch_shoulders_doorway_chest",
+                performBothSides = false,
+                imageKey = "shoulders_doorway_chest_start",
                 safetyNoteHe =
-                    "שמרו את הכתף נמוכה והפסיקו אם מופיע כאב בחלק הקדמי של הכתף.",
+                    "התקדמו מעט בלבד. אין להקשית את הגב או לדחוף את הכתפיים מעבר לטווח הנוח.",
                 safetyNoteEn =
-                    "Keep the shoulder lowered and stop if pain develops at the front of the shoulder.",
-                sortOrder = 3
+                    "Move forward only slightly. Do not arch your back or force your shoulders beyond a comfortable range.",
+                sortOrder = 3,
+                visualSteps =
+                    listOf(
+                        StretchingVisualStep(
+                            imageKey = "shoulders_doorway_chest_start",
+                            instructionHe = "היכונו.",
+                            instructionEn = "Get ready.",
+                            durationSeconds = 3,
+                            type = StretchingStepType.PREPARE
+                        ),
+                        StretchingVisualStep(
+                            imageKey = "shoulders_doorway_chest_stretch",
+                            instructionHe = "התקדמו בעדינות.",
+                            instructionEn = "Move forward gently.",
+                            durationSeconds = 12,
+                            type = StretchingStepType.HOLD
+                        )
+                    )
             ),
             StretchingExercise(
                 id = "shoulders_pendulum",

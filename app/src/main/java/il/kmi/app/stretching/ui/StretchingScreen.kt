@@ -93,8 +93,8 @@ fun StretchingScreen(
                     showMenu = true,
                     showTopSearch = false,
                     showTopShare = false,
-                    showBottomHelp = false,
-                    showBottomShare = false,
+                    showBottomHelp = true,
+                    showBottomShare = true,
                     showRoleStatus = false,
                     showRoleBadge = false,
                     showModePill = false,
@@ -192,9 +192,9 @@ private fun StretchingIntroductionCard(
         Text(
             text =
                 if (isEnglish) {
-                    "Choose a body area · Perform gently and at your own pace"
+                    "Choose a body area\nPerform gently and at your own pace"
                 } else {
-                    "בחרו אזור בגוף · מבצעים בעדינות ובקצב אישי"
+                    "בחרו אזור בגוף\nמבצעים בעדינות ובקצב אישי"
                 },
             modifier = Modifier.fillMaxWidth(),
             style = KmiTypography.action,

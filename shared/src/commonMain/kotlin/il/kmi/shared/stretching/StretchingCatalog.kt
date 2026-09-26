@@ -127,12 +127,48 @@ object StretchingCatalog {
                 durationSeconds = 5,
                 repetitions = 5,
                 performBothSides = true,
-                imageKey = "neck_rotation",
+                imageKey = "neck_rotation_start",
                 safetyNoteHe =
                     "יש להסתובב רק עד הטווח הנוח, ללא כאב וללא תנועה חדה.",
                 safetyNoteEn =
                     "Turn only within a comfortable range, without pain or sudden movement.",
-                sortOrder = 2
+                sortOrder = 2,
+                visualSteps =
+                    listOf(
+                        StretchingVisualStep(
+                            imageKey =
+                                "neck_rotation_start",
+                            instructionHe =
+                                "שבו זקוף, הרפו את הכתפיים והביטו קדימה.",
+                            instructionEn =
+                                "Sit upright, relax your shoulders, and look straight ahead.",
+                            durationSeconds = 3,
+                            type =
+                                StretchingStepType.PREPARE
+                        ),
+                        StretchingVisualStep(
+                            imageKey =
+                                "neck_rotation_right",
+                            instructionHe =
+                                "סובבו את הראש באיטיות ימינה, עד לטווח הנוח.",
+                            instructionEn =
+                                "Slowly turn your head to the right, within a comfortable range.",
+                            durationSeconds = 5,
+                            type =
+                                StretchingStepType.MOVE
+                        ),
+                        StretchingVisualStep(
+                            imageKey =
+                                "neck_rotation_left",
+                            instructionHe =
+                                "חזרו למרכז וסובבו את הראש באיטיות שמאלה.",
+                            instructionEn =
+                                "Return to the center and slowly turn your head to the left.",
+                            durationSeconds = 5,
+                            type =
+                                StretchingStepType.MOVE
+                        )
+                    )
             ),
 
             StretchingExercise(
@@ -153,12 +189,48 @@ object StretchingCatalog {
                 durationSeconds = 10,
                 repetitions = 3,
                 performBothSides = true,
-                imageKey = "neck_side_flexion",
+                imageKey = "neck_side_flexion_start",
                 safetyNoteHe =
                     "אין למשוך את הראש באמצעות היד ואין לקרב את הכתף לאוזן.",
                 safetyNoteEn =
                     "Do not pull your head with your hand and do not lift the shoulder toward the ear.",
-                sortOrder = 3
+                sortOrder = 3,
+                visualSteps =
+                    listOf(
+                        StretchingVisualStep(
+                            imageKey =
+                                "neck_side_flexion_start",
+                            instructionHe =
+                                "שבו זקוף, הרפו את הכתפיים והביטו קדימה.",
+                            instructionEn =
+                                "Sit upright, relax your shoulders, and look straight ahead.",
+                            durationSeconds = 3,
+                            type =
+                                StretchingStepType.PREPARE
+                        ),
+                        StretchingVisualStep(
+                            imageKey =
+                                "neck_side_flexion_left",
+                            instructionHe =
+                                "הטו את הראש בעדינות שמאלה, מבלי להרים את הכתף.",
+                            instructionEn =
+                                "Gently tilt your head to the left without lifting your shoulder.",
+                            durationSeconds = 10,
+                            type =
+                                StretchingStepType.MOVE
+                        ),
+                        StretchingVisualStep(
+                            imageKey =
+                                "neck_side_flexion_right",
+                            instructionHe =
+                                "חזרו למרכז והטו את הראש בעדינות ימינה.",
+                            instructionEn =
+                                "Return to the center and gently tilt your head to the right.",
+                            durationSeconds = 10,
+                            type =
+                                StretchingStepType.MOVE
+                        )
+                    )
             ),
 
             StretchingExercise(
@@ -190,27 +262,75 @@ object StretchingCatalog {
             StretchingExercise(
                 id = "levator_scapulae_stretch",
                 category = StretchingCategory.NECK_AND_HEAD,
-                titleHe = "מתיחת מרים השכמה",
-                titleEn = "Levator scapulae stretch",
+                titleHe = "מתיחת צוואר באלכסון",
+                titleEn = "Diagonal neck stretch",
                 instructionsHe =
-                    "שב זקוף והחזק את הכיסא ביד אחת. " +
-                            "סובב את הראש מעט לצד הנגדי והפנה את המבט באלכסון לכיוון בית השחי. " +
-                            "הורד את הסנטר בעדינות עד שמורגשת מתיחה בחלק האחורי־צדי של הצוואר. " +
-                            "חזור ובצע בצד השני.",
+                    "שב זקוף ואחוז בצד הכיסא ביד אחת כדי להשאיר את הכתף נמוכה. " +
+                            "סובב מעט את הראש לצד הנגדי והפנה את המבט באלכסון לכיוון בית השחי. " +
+                            "הנח את היד השנייה בעדינות על הראש והורד את הסנטר ללא משיכה. " +
+                            "חזור למרכז והחלף צד.",
                 instructionsEn =
-                    "Sit upright and hold the chair with one hand. " +
+                    "Sit upright and hold the side of the chair with one hand to keep the shoulder down. " +
                             "Turn your head slightly toward the opposite side and look diagonally toward your armpit. " +
-                            "Gently lower your chin until you feel a stretch at the back and side of your neck. " +
-                            "Repeat on the other side.",
+                            "Rest your other hand gently on your head and lower your chin without pulling. " +
+                            "Return to the center and switch sides.",
                 durationSeconds = 15,
                 repetitions = 2,
                 performBothSides = true,
-                imageKey = "levator_scapulae_stretch",
+                imageKey =
+                    "neck_levator_scapulae_start_left",
                 safetyNoteHe =
-                    "אין למשוך את הראש. השתמש רק במשקל הראש ובטווח תנועה נוח.",
+                    "אין למשוך את הראש. השתמש רק במשקל היד ובטווח תנועה נוח.",
                 safetyNoteEn =
-                    "Do not pull your head. Use only the weight of your head and a comfortable range.",
-                sortOrder = 5
+                    "Do not pull your head. Use only the weight of your hand and a comfortable range.",
+                sortOrder = 5,
+                visualSteps =
+                    listOf(
+                        StretchingVisualStep(
+                            imageKey =
+                                "neck_levator_scapulae_start_left",
+                            instructionHe =
+                                "אחזו בצד הכיסא ביד ימין והשאירו את הכתף נמוכה.",
+                            instructionEn =
+                                "Hold the side of the chair with your right hand and keep the shoulder down.",
+                            durationSeconds = 3,
+                            type =
+                                StretchingStepType.PREPARE
+                        ),
+                        StretchingVisualStep(
+                            imageKey =
+                                "neck_levator_scapulae_left",
+                            instructionHe =
+                                "הביטו באלכסון שמאלה והורידו את הראש בעדינות לכיוון בית השחי.",
+                            instructionEn =
+                                "Look diagonally left and gently lower your head toward your armpit.",
+                            durationSeconds = 15,
+                            type =
+                                StretchingStepType.MOVE
+                        ),
+                        StretchingVisualStep(
+                            imageKey =
+                                "neck_levator_scapulae_start_right",
+                            instructionHe =
+                                "חזרו למרכז, החליפו ידיים ואחזו בכיסא ביד שמאל.",
+                            instructionEn =
+                                "Return to the center, switch hands, and hold the chair with your left hand.",
+                            durationSeconds = 3,
+                            type =
+                                StretchingStepType.PREPARE
+                        ),
+                        StretchingVisualStep(
+                            imageKey =
+                                "neck_levator_scapulae_right",
+                            instructionHe =
+                                "הביטו באלכסון ימינה והורידו את הראש בעדינות לכיוון בית השחי.",
+                            instructionEn =
+                                "Look diagonally right and gently lower your head toward your armpit.",
+                            durationSeconds = 15,
+                            type =
+                                StretchingStepType.MOVE
+                        )
+                    )
             ),
 
             StretchingExercise(
@@ -219,22 +339,46 @@ object StretchingCatalog {
                 titleHe = "סיבובי כתפיים",
                 titleEn = "Shoulder rolls",
                 instructionsHe =
-                    "שב או עמוד בגב זקוף והידיים רפויות לצד הגוף. " +
+                    "שב או עמוד בגב זקוף והידיים רפויות. " +
                             "הרם את הכתפיים בעדינות, גלגל אותן לאחור והורד אותן בתנועה מעגלית. " +
-                            "בצע את התנועה לאט ובשליטה ולאחר מכן החלף כיוון.",
+                            "בצע את התנועה לאט ובשליטה.",
                 instructionsEn =
-                    "Sit or stand upright with your arms relaxed by your sides. " +
+                    "Sit or stand upright with your arms relaxed. " +
                             "Gently lift your shoulders, roll them backward, and lower them in a circle. " +
-                            "Move slowly and with control, then change direction.",
+                            "Move slowly and with control.",
                 durationSeconds = 20,
                 repetitions = 8,
                 performBothSides = false,
-                imageKey = "shoulder_rolls",
+                imageKey = "shoulder_rolls_start",
                 safetyNoteHe =
-                    "שמור את הצוואר רפוי והימנע מתנועות מהירות או גדולות מדי.",
+                    "שמור על צוואר רפוי והימנע מתנועה מהירה או גדולה מדי.",
                 safetyNoteEn =
                     "Keep your neck relaxed and avoid movements that are too fast or too large.",
-                sortOrder = 6
+                sortOrder = 6,
+                visualSteps =
+                    listOf(
+                        StretchingVisualStep(
+                            imageKey = "shoulder_rolls_start",
+                            instructionHe = "מוכנים.",
+                            instructionEn = "Get ready.",
+                            durationSeconds = 2,
+                            type = StretchingStepType.PREPARE
+                        ),
+                        StretchingVisualStep(
+                            imageKey = "shoulder_rolls_up",
+                            instructionHe = "כתפיים למעלה.",
+                            instructionEn = "Shoulders up.",
+                            durationSeconds = 2,
+                            type = StretchingStepType.MOVE
+                        ),
+                        StretchingVisualStep(
+                            imageKey = "shoulder_rolls_back",
+                            instructionHe = "סובבו לאחור והורידו.",
+                            instructionEn = "Roll back and lower.",
+                            durationSeconds = 2,
+                            type = StretchingStepType.RELEASE
+                        )
+                    )
             ),
 
             StretchingExercise(
@@ -243,24 +387,41 @@ object StretchingCatalog {
                 titleHe = "קירוב שכמות",
                 titleEn = "Scapular retraction",
                 instructionsHe =
-                    "שב או עמוד בגב זקוף והזרועות לצד הגוף. " +
-                            "משוך בעדינות את השכמות לאחור ואחת לכיוון השנייה. " +
+                    "שב בגב זקוף כשהמרפקים כפופים לצד הגוף. " +
+                            "משוך בעדינות את המרפקים לאחור וקרב את השכמות זו לזו. " +
                             "שמור את הכתפיים נמוכות ואל תקשת את הגב. " +
-                            "החזק ושחרר באיטיות.",
+                            "שחרר באיטיות וחזור על התנועה.",
                 instructionsEn =
-                    "Sit or stand upright with your arms by your sides. " +
-                            "Gently draw your shoulder blades backward and toward each other. " +
+                    "Sit upright with your elbows bent beside your body. " +
+                            "Gently draw your elbows backward and bring your shoulder blades together. " +
                             "Keep your shoulders down and avoid arching your back. " +
-                            "Hold, then release slowly.",
-                durationSeconds = 5,
+                            "Release slowly and repeat.",
+                durationSeconds = 24,
                 repetitions = 8,
                 performBothSides = false,
-                imageKey = "scapular_retraction",
+                imageKey = "scapular_retraction_start",
                 safetyNoteHe =
-                    "התנועה צריכה להגיע מהשכמות ולא ממשיכת הראש או הצוואר לאחור.",
+                    "התנועה מגיעה מהשכמות. אין למשוך את הראש או הצוואר לאחור.",
                 safetyNoteEn =
-                    "The movement should come from the shoulder blades, not from pulling the head or neck backward.",
-                sortOrder = 7
+                    "The movement comes from the shoulder blades. Do not pull the head or neck backward.",
+                sortOrder = 7,
+                visualSteps =
+                    listOf(
+                        StretchingVisualStep(
+                            imageKey = "scapular_retraction_start",
+                            instructionHe = "שחררו.",
+                            instructionEn = "Release.",
+                            durationSeconds = 1,
+                            type = StretchingStepType.RELEASE
+                        ),
+                        StretchingVisualStep(
+                            imageKey = "scapular_retraction_squeeze",
+                            instructionHe = "קרבו שכמות.",
+                            instructionEn = "Squeeze the shoulder blades.",
+                            durationSeconds = 2,
+                            type = StretchingStepType.HOLD
+                        )
+                    )
             ),
 
             StretchingExercise(
@@ -269,24 +430,41 @@ object StretchingCatalog {
                 titleHe = "חתירה בישיבה ללא ציוד",
                 titleEn = "Seated row without equipment",
                 instructionsHe =
-                    "שב זקוף ושלח את שתי הידיים לפנים בגובה הכתפיים. " +
-                            "משוך את המרפקים לאחור תוך קירוב עדין של השכמות. " +
+                    "שב זקוף על כיסא או שרפרף ושלח את שתי הידיים לפנים בגובה הכתפיים. " +
+                            "משוך את המרפקים לאחור וקרב בעדינות את השכמות. " +
                             "שמור את הראש בקו ישר ואת הכתפיים רחוקות מהאוזניים. " +
-                            "יישר שוב את הידיים לפנים.",
+                            "יישר שוב את הידיים לפנים וחזור על התנועה.",
                 instructionsEn =
-                    "Sit upright and extend both arms forward at shoulder height. " +
-                            "Pull your elbows backward while gently bringing your shoulder blades together. " +
+                    "Sit upright on a chair or stool and extend both arms forward at shoulder height. " +
+                            "Pull your elbows backward and gently bring your shoulder blades together. " +
                             "Keep your head aligned and your shoulders away from your ears. " +
-                            "Extend your arms forward again.",
-                durationSeconds = 20,
+                            "Extend your arms forward and repeat.",
+                durationSeconds = 32,
                 repetitions = 8,
                 performBothSides = false,
-                imageKey = "seated_row_without_equipment",
+                imageKey = "upper_back_seated_row_start",
                 safetyNoteHe =
-                    "אין להרים את הכתפיים ואין להקשית את הגב בזמן המשיכה.",
+                    "אין להרים את הכתפיים או להקשית את הגב בזמן המשיכה.",
                 safetyNoteEn =
                     "Do not lift your shoulders or arch your back while pulling.",
-                sortOrder = 8
+                sortOrder = 8,
+                visualSteps =
+                    listOf(
+                        StretchingVisualStep(
+                            imageKey = "upper_back_seated_row_start",
+                            instructionHe = "ידיים קדימה.",
+                            instructionEn = "Arms forward.",
+                            durationSeconds = 2,
+                            type = StretchingStepType.RELEASE
+                        ),
+                        StretchingVisualStep(
+                            imageKey = "upper_back_seated_row_pull",
+                            instructionHe = "משכו לאחור.",
+                            instructionEn = "Pull back.",
+                            durationSeconds = 2,
+                            type = StretchingStepType.MOVE
+                        )
+                    )
             ),
 
             StretchingExercise(
@@ -295,24 +473,48 @@ object StretchingCatalog {
                 titleHe = "סיבוב עדין של פלג הגוף העליון",
                 titleEn = "Gentle seated upper-body rotation",
                 instructionsHe =
-                    "שב זקוף כאשר כפות הרגליים מונחות על הרצפה. " +
-                            "הנח יד אחת על הירך הנגדית וסובב באיטיות את בית החזה לצד. " +
-                            "אפשר לראש לנוע יחד עם הגוף מבלי להכריח את הצוואר. " +
-                            "חזור למרכז ובצע לצד השני.",
+                    "שב זקוף על כיסא כאשר שתי כפות הרגליים מונחות על הרצפה. " +
+                            "שלב את הידיים על בית החזה וסובב באיטיות את פלג הגוף העליון לצד. " +
+                            "שמור את האגן, הברכיים וכפות הרגליים פונים קדימה. " +
+                            "חזור למרכז ובצע את התנועה לצד השני.",
                 instructionsEn =
-                    "Sit upright with both feet on the floor. " +
-                            "Place one hand on the opposite thigh and slowly rotate your chest to the side. " +
-                            "Allow your head to move with your body without forcing your neck. " +
+                    "Sit upright on a chair with both feet flat on the floor. " +
+                            "Cross your arms over your chest and slowly rotate your upper body to one side. " +
+                            "Keep your hips, knees, and feet facing forward. " +
                             "Return to the center and repeat on the other side.",
-                durationSeconds = 10,
+                durationSeconds = 30,
                 repetitions = 3,
                 performBothSides = true,
-                imageKey = "seated_upper_body_rotation",
+                imageKey = "upper_body_seated_rotation_start",
                 safetyNoteHe =
                     "בצע סיבוב קטן ונוח. אין לבצע תנועה קופצנית או להכריח את הצוואר.",
                 safetyNoteEn =
                     "Use a small, comfortable rotation. Do not bounce or force your neck.",
-                sortOrder = 9
+                sortOrder = 9,
+                visualSteps =
+                    listOf(
+                        StretchingVisualStep(
+                            imageKey = "upper_body_seated_rotation_start",
+                            instructionHe = "חזרו למרכז.",
+                            instructionEn = "Return to center.",
+                            durationSeconds = 2,
+                            type = StretchingStepType.PREPARE
+                        ),
+                        StretchingVisualStep(
+                            imageKey = "upper_body_seated_rotation_left",
+                            instructionHe = "סובבו שמאלה.",
+                            instructionEn = "Turn left.",
+                            durationSeconds = 4,
+                            type = StretchingStepType.HOLD
+                        ),
+                        StretchingVisualStep(
+                            imageKey = "upper_body_seated_rotation_right",
+                            instructionHe = "סובבו ימינה.",
+                            instructionEn = "Turn right.",
+                            durationSeconds = 4,
+                            type = StretchingStepType.HOLD
+                        )
+                    )
             )
         )
 

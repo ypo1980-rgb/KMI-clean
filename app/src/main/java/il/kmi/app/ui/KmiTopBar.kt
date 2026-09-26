@@ -21,6 +21,8 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.basicMarquee
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -52,6 +54,7 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
@@ -1566,9 +1569,15 @@ fun KmiTopBar(
                         )
 
                     Surface(
-                        modifier = Modifier.width(
-                            quickActionsWidth
-                        ),
+                        modifier = Modifier
+                            .width(quickActionsWidth)
+                            .heightIn(
+                                max = (
+                                        LocalConfiguration.current.screenHeightDp.dp -
+                                                topBarHeight -
+                                                48.dp
+                                        ).coerceAtLeast(200.dp)
+                            ),
                         shape = quickActionsShape,
                         color =
                             effectiveQuickActionsAccentColor.copy(
@@ -1599,7 +1608,9 @@ fun KmiTopBar(
                                 )
                         ) {
                             Column(
-                                modifier = Modifier.fillMaxWidth(),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .verticalScroll(rememberScrollState()),
                                 verticalArrangement =
                                     Arrangement.spacedBy(3.dp),
                                 horizontalAlignment = Alignment.CenterHorizontally

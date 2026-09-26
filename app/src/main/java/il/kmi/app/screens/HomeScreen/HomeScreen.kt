@@ -103,6 +103,8 @@ import il.kmi.app.ui.scaledIconSize
 import il.kmi.app.ui.pdf.KmiPdfFooter
 import il.kmi.app.ui.pdf.KmiPdfHeader
 import il.kmi.shared.domain.content.ExerciseTitlesEn
+import il.yuval.ui.theme.KmiQuickActionType
+import il.yuval.ui.theme.kmiQuickActionColors
 import il.yuval.ui.theme.kmiGraniteActionBrush
 import il.yuval.ui.theme.kmiGraniteActionHighlightColor
 import il.yuval.ui.theme.kmiScreenBackgroundBrush
@@ -2164,34 +2166,15 @@ fun HomeScreen(
                         }
 
                         item {
-                            Spacer(Modifier.height(4.dp))
-                            Box(
+                            Spacer(Modifier.height(8.dp))
+                            HorizontalDivider(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .height(4.dp)
-                                    .background(
-                                        brush =
-                                            Brush.verticalGradient(
-                                                colors =
-                                                    listOf(
-                                                        MaterialTheme
-                                                            .colorScheme
-                                                            .outlineVariant
-                                                            .copy(
-                                                                alpha = 0.86f
-                                                            ),
-                                                        MaterialTheme
-                                                            .colorScheme
-                                                            .outlineVariant
-                                                            .copy(
-                                                                alpha = 0.38f
-                                                            ),
-                                                        Color.Transparent
-                                                    )
-                                            )
-                                    )
+                                    .padding(horizontal = 16.dp),
+                                thickness = 2.dp,
+                                color = MaterialTheme.colorScheme.outline
                             )
-                            Spacer(Modifier.height(6.dp))
+                            Spacer(Modifier.height(10.dp))
                         }
 
                         // ===== כרטיס הודעות ואירועים =====
@@ -2352,6 +2335,19 @@ fun HomeScreen(
                     Spacer(Modifier.height(2.dp))
                 }
 
+                val archiveColors =
+                    kmiQuickActionColors(
+                        KmiQuickActionType.TRAINING_ARCHIVE
+                    )
+                val freeTrainingsColors =
+                    kmiQuickActionColors(
+                        KmiQuickActionType.FREE_TRAININGS
+                    )
+                val stretchingColors =
+                    kmiQuickActionColors(
+                        KmiQuickActionType.STRETCHING
+                    )
+
                 val homeQuickMenuActions =
                     listOf(
                         FloatingQuickMenuAction(
@@ -2364,8 +2360,8 @@ fun HomeScreen(
                                 onOpenTrainingArchive()
                             },
                             isLocked = !hasFullAccess,
-                            iconTint = Color(0xFF6D4CFF),
-                            iconBackground = Color(0xFFF0ECFF)
+                            iconTint = archiveColors.content,
+                            iconBackground = archiveColors.background
                         ),
                         FloatingQuickMenuAction(
                             titleHe = "אימונים\nחופשיים",
@@ -2383,8 +2379,8 @@ fun HomeScreen(
                                 )
                             },
                             isLocked = !hasFullAccess,
-                            iconTint = Color(0xFF00897B),
-                            iconBackground = Color(0xFFE0F2F1)
+                            iconTint = freeTrainingsColors.content,
+                            iconBackground = freeTrainingsColors.background
                         ),
                         FloatingQuickMenuAction(
                             titleHe = "תרגילי\nמתיחות",
@@ -2396,8 +2392,8 @@ fun HomeScreen(
                                 onOpenStretching()
                             },
                             isLocked = false,
-                            iconTint = Color(0xFF1976D2),
-                            iconBackground = Color(0xFFE3F2FD)
+                            iconTint = stretchingColors.content,
+                            iconBackground = stretchingColors.background
                         )
                     )
 
@@ -3456,7 +3452,7 @@ private fun TrainingCardCompact(
     val trainingCardBorderColor =
         when {
             isTrainingCancelled ->
-                Color(0xFFEF5350)
+                MaterialTheme.colorScheme.error
 
             isTrainingOngoing ->
                 kmiSuccessColor()
@@ -3476,7 +3472,7 @@ private fun TrainingCardCompact(
     val trainingCardBackgroundColor =
         when {
             isTrainingCancelled ->
-                Color(0xFFFFCDD2)
+                MaterialTheme.colorScheme.errorContainer
 
             isTrainingOngoing ->
                 kmiSuccessContainerColor()
@@ -3581,6 +3577,20 @@ private fun TrainingCardCompact(
                         }
                     }
 
+                val trainingCardTextColor =
+                    if (isTrainingCancelled) {
+                        MaterialTheme.colorScheme.onErrorContainer
+                    } else {
+                        MaterialTheme.colorScheme.onSurface
+                    }
+
+                val trainingCardSecondaryTextColor =
+                    if (isTrainingCancelled) {
+                        MaterialTheme.colorScheme.onErrorContainer
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    }
+
                 Column(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalAlignment =
@@ -3589,8 +3599,7 @@ private fun TrainingCardCompact(
                     Text(
                         text = branchLine,
                         style = KmiTypography.cardTitle,
-                        color =
-                            MaterialTheme.colorScheme.onSurface,
+                        color = trainingCardTextColor,
                         textAlign = TextAlign.Center,
                         modifier = Modifier.fillMaxWidth(),
                         maxLines = 1,
@@ -3601,8 +3610,7 @@ private fun TrainingCardCompact(
                         Text(
                             text = groupLine,
                             style = KmiTypography.secondary,
-                            color =
-                                MaterialTheme.colorScheme.onSurfaceVariant,
+                            color = trainingCardSecondaryTextColor,
                             textAlign = TextAlign.Center,
                             modifier = Modifier.fillMaxWidth(),
                             maxLines = 1,
@@ -3615,8 +3623,7 @@ private fun TrainingCardCompact(
                         style = KmiTypography.secondary.copy(
                             fontWeight = FontWeight.Bold
                         ),
-                        color =
-                            MaterialTheme.colorScheme.onSurface,
+                        color = trainingCardTextColor,
                         textAlign = TextAlign.Center,
                         maxLines = 1,
                         softWrap = false,
@@ -3692,9 +3699,16 @@ private fun TrainingCardCompact(
                         1f
                     }
 
+                val isCancelledInDarkMode =
+                    isTrainingCancelled &&
+                            MaterialTheme.colorScheme.background
+                                .luminance() < 0.5f
+
                 if (statusMessage.isNotBlank()) {
                     val statusContentColor =
-                        if (countdownMinutes != null) {
+                        if (isCancelledInDarkMode) {
+                            MaterialTheme.colorScheme.onBackground
+                        } else if (countdownMinutes != null) {
                             kmiOnWarningContainerColor()
                         } else {
                             when (visualStatusState) {
@@ -3724,7 +3738,9 @@ private fun TrainingCardCompact(
                         }
 
                     val statusBackgroundColor =
-                        if (countdownMinutes != null) {
+                        if (isCancelledInDarkMode) {
+                            MaterialTheme.colorScheme.background
+                        } else if (countdownMinutes != null) {
                             kmiWarningContainerColor()
                         } else {
                             when (visualStatusState) {
@@ -3808,6 +3824,7 @@ private fun TrainingCardCompact(
                             isEnglish
                         ),
                     isEnglish = isEnglish,
+                    darkCancelledCard = isCancelledInDarkMode,
                     modifier = Modifier.fillMaxWidth()
                 )
 
@@ -4066,6 +4083,7 @@ private enum class NavChoice { GOOGLE_MAPS, WAZE }
 private fun NavigationChip(
     address: String?,
     isEnglish: Boolean,
+    darkCancelledCard: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     val ctx = LocalContext.current
@@ -4094,9 +4112,25 @@ private fun NavigationChip(
      * רקע גלובלי לכרטיס הניווט.
      */
     val graniteCardColor =
-        MaterialTheme
-            .colorScheme
-            .surfaceVariant
+        if (darkCancelledCard) {
+            MaterialTheme.colorScheme.background
+        } else {
+            MaterialTheme.colorScheme.surfaceVariant
+        }
+
+    val navigationTextColor =
+        if (darkCancelledCard) {
+            MaterialTheme.colorScheme.onBackground
+        } else {
+            MaterialTheme.colorScheme.onSurface
+        }
+
+    val navigationSecondaryTextColor =
+        if (darkCancelledCard) {
+            MaterialTheme.colorScheme.onBackground
+        } else {
+            MaterialTheme.colorScheme.onSurfaceVariant
+        }
 
     fun open(choice: NavChoice) {
         if (safeAddress.isBlank()) return
@@ -4214,7 +4248,7 @@ private fun NavigationChip(
                 Text(
                     text = if (isEnglish) "Navigate" else "ניווט",
                     style = KmiTypography.action,
-                    color = MaterialTheme.colorScheme.onSurface,
+                    color = navigationTextColor,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -4224,7 +4258,7 @@ private fun NavigationChip(
                         if (isEnglish) "No address" else "אין כתובת"
                     },
                     style = KmiTypography.secondary,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = navigationSecondaryTextColor,
                     maxLines = 2,
                     softWrap = true,
                     overflow = TextOverflow.Ellipsis

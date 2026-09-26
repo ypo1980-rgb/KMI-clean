@@ -591,34 +591,109 @@ internal fun stretchingImageResource(
             R.drawable.stretching_neck_forward_flexion
 
         "neck_rotation" ->
-            R.drawable.stretching_neck_rotation
+            R.drawable.stretching_neck_rotation_start
+
+        "neck_rotation_start" ->
+            R.drawable.stretching_neck_rotation_start
+
+        "neck_rotation_right" ->
+            R.drawable.stretching_neck_rotation_right
+
+        "neck_rotation_left" ->
+            R.drawable.stretching_neck_rotation_left
 
         "neck_side_flexion" ->
-            R.drawable.stretching_neck_side_flexion
+            R.drawable.stretching_neck_side_flexion_start
+
+        "neck_side_flexion_start" ->
+            R.drawable.stretching_neck_side_flexion_start
+
+        "neck_side_flexion_left" ->
+            R.drawable.stretching_neck_side_flexion_left
+
+        "neck_side_flexion_right" ->
+            R.drawable.stretching_neck_side_flexion_right
 
         "upper_trapezius_stretch" ->
             R.drawable.stretching_neck_upper_trapezius
 
         "levator_scapulae_stretch" ->
-            R.drawable.stretching_neck_levator_scapulae
+            R.drawable.stretching_neck_levator_scapulae_start_left
+
+        "neck_levator_scapulae_start_left" ->
+            R.drawable.stretching_neck_levator_scapulae_start_left
+
+        "neck_levator_scapulae_left" ->
+            R.drawable.stretching_neck_levator_scapulae_left
+
+        "neck_levator_scapulae_start_right" ->
+            R.drawable.stretching_neck_levator_scapulae_start_left
+
+        "neck_levator_scapulae_right" ->
+            R.drawable.stretching_neck_levator_scapulae_right
 
         "shoulder_rolls" ->
-            R.drawable.stretching_shoulders_rolls
+            R.drawable.stretching_shoulders_rolls_start
+
+        "shoulder_rolls_start" ->
+            R.drawable.stretching_shoulders_rolls_start
+
+        "shoulder_rolls_up" ->
+            R.drawable.stretching_shoulders_rolls_up
+
+        "shoulder_rolls_back" ->
+            R.drawable.stretching_shoulders_rolls_back
 
         "scapular_retraction" ->
-            R.drawable.stretching_shoulders_scapular_retraction
+            R.drawable.stretching_shoulders_scapular_retraction_start
+
+        "scapular_retraction_start" ->
+            R.drawable.stretching_shoulders_scapular_retraction_start
+
+        "scapular_retraction_squeeze" ->
+            R.drawable.stretching_shoulders_scapular_retraction_squeeze
 
         "seated_row_without_equipment" ->
-            R.drawable.stretching_upper_back_seated_row
+            R.drawable.stretching_upper_back_seated_row_start
+
+        "upper_back_seated_row_start" ->
+            R.drawable.stretching_upper_back_seated_row_start
+
+        "upper_back_seated_row_pull" ->
+            R.drawable.stretching_upper_back_seated_row_pull
 
         "seated_upper_body_rotation" ->
-            R.drawable.stretching_upper_body_seated_rotation
+            R.drawable.stretching_upper_body_seated_rotation_start
+
+        "upper_body_seated_rotation_start" ->
+            R.drawable.stretching_upper_body_seated_rotation_start
+
+        "upper_body_seated_rotation_left" ->
+            R.drawable.stretching_upper_body_seated_rotation_left
+
+        "upper_body_seated_rotation_right" ->
+            R.drawable.stretching_upper_body_seated_rotation_right
 
         "stretch_shoulders_cross_body" ->
-            R.drawable.stretch_shoulders_cross_body
+            R.drawable.stretching_shoulders_cross_body_start
+
+        "shoulders_cross_body_start" ->
+            R.drawable.stretching_shoulders_cross_body_start
+
+        "shoulders_cross_body_right" ->
+            R.drawable.stretching_shoulders_cross_body_right
+
+        "shoulders_cross_body_left" ->
+            R.drawable.stretching_shoulders_cross_body_left
 
         "stretch_shoulders_overhead_triceps" ->
-            R.drawable.stretch_shoulders_overhead_triceps
+            R.drawable.stretching_shoulders_cross_body_start
+
+        "shoulders_overhead_triceps_right" ->
+            R.drawable.stretching_shoulders_overhead_triceps_right
+
+        "shoulders_overhead_triceps_left" ->
+            R.drawable.stretching_shoulders_overhead_triceps_left
 
         "stretch_shoulders_doorway_chest" ->
             R.drawable.stretch_shoulders_doorway_chest
@@ -633,7 +708,13 @@ internal fun stretchingImageResource(
             R.drawable.stretch_shoulders_arm_circles
 
         "stretch_arms_biceps_wall" ->
-            R.drawable.stretch_arms_biceps_wall
+            R.drawable.stretching_shoulders_doorway_chest_start
+
+        "shoulders_doorway_chest_start" ->
+            R.drawable.stretching_shoulders_doorway_chest_start
+
+        "shoulders_doorway_chest_stretch" ->
+            R.drawable.stretching_shoulders_doorway_chest_stretch
 
         "stretch_arms_wrist_flexor" ->
             R.drawable.stretch_arms_wrist_flexor

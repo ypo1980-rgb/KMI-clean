@@ -318,24 +318,51 @@ private fun StretchingExerciseContent(
 
         isVoiceCueCompleted = false
 
-        val stepVoiceCue =
-            activeStep.displayInstruction(
-                isEnglish = isEnglish
-            )
-
         val voiceCue =
-            if (
-                activeStep.type ==
-                StretchingStepType.PREPARE &&
-                currentRepetition > 1
-            ) {
-                if (isEnglish) {
-                    "Starting again. $stepVoiceCue"
+            if (currentStepIndex == 0) {
+                if (currentRepetition == 1) {
+                    if (isEnglish) {
+                        "Start"
+                    } else {
+                        "מתחילים"
+                    }
                 } else {
-                    "מתחילים שוב. $stepVoiceCue"
+                    if (isEnglish) {
+                        "Next round"
+                    } else {
+                        "נעבור לסבב הבא"
+                    }
                 }
             } else {
-                stepVoiceCue
+                when (activeStep.type) {
+                    StretchingStepType.PREPARE ->
+                        if (isEnglish) {
+                            "Get ready"
+                        } else {
+                            "להתכונן"
+                        }
+
+                    StretchingStepType.MOVE ->
+                        if (isEnglish) {
+                            "Move"
+                        } else {
+                            "לבצע"
+                        }
+
+                    StretchingStepType.HOLD ->
+                        if (isEnglish) {
+                            "Hold"
+                        } else {
+                            "להחזיק"
+                        }
+
+                    StretchingStepType.RELEASE ->
+                        if (isEnglish) {
+                            "Release"
+                        } else {
+                            "לשחרר"
+                        }
+                }
             }
 
         KmiTtsManager.setOnSpeechCompletedListener {

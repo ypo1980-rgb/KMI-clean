@@ -55,8 +55,9 @@ import androidx.compose.ui.unit.dp
 import il.kmi.app.R
 import il.kmi.app.ui.KmiTopBar
 import il.kmi.app.ui.KmiTypography
+import il.yuval.ui.theme.kmiScreenBackgroundBrush
 import il.yuval.ui.theme.kmiSectionHeaderBackground
-import il.yuval.ui.theme.kmiSectionHeaderBrush
+import il.yuval.ui.theme.kmiSectionHeaderContentColor
 
 @Composable
 fun OnboardingScreen(
@@ -80,25 +81,7 @@ fun OnboardingScreen(
     val isFirstStep = currentStepIndex == 0
     val isLastStep = currentStepIndex == steps.lastIndex
 
-    val colorScheme = MaterialTheme.colorScheme
-    val isDarkMode =
-        colorScheme.background.luminance() < 0.5f
-
-    val screenGradient =
-        if (isDarkMode) {
-            listOf(
-                Color(0xFF030B14),
-                Color(0xFF071827),
-                currentStep.accentColor.copy(alpha = 0.20f),
-                Color(0xFF061522)
-            )
-        } else {
-            listOf(
-                Color(0xFFF8FAFF),
-                currentStep.accentColor.copy(alpha = 0.12f),
-                Color(0xFFF4F0FF)
-            )
-        }
+    val screenBackgroundBrush = kmiScreenBackgroundBrush()
 
     val layoutDirection = if (isEnglish) {
         LayoutDirection.Ltr
@@ -153,18 +136,16 @@ fun OnboardingScreen(
                         } else {
                             currentStepIndex++
                         }
-                    }
+                    },
+                    allowSkip = allowSkip,
+                    onSkip = onSkip
                 )
             }
         ) { padding ->
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(
-                        brush = Brush.verticalGradient(
-                            colors = screenGradient
-                        )
-                    )
+                    .background(screenBackgroundBrush)
                     .padding(padding)
             ) {
 
@@ -182,9 +163,7 @@ fun OnboardingScreen(
                         currentStepIndex = currentStepIndex,
                         stepsCount = steps.size,
                         accentColor = currentStep.accentColor,
-                        isEnglish = isEnglish,
-                        allowSkip = allowSkip,
-                        onSkip = onSkip
+                        isEnglish = isEnglish
                     )
                 }
 
@@ -247,9 +226,7 @@ private fun OnboardingFixedProgressHeader(
     currentStepIndex: Int,
     stepsCount: Int,
     accentColor: Color,
-    isEnglish: Boolean,
-    allowSkip: Boolean,
-    onSkip: () -> Unit
+    isEnglish: Boolean
 ) {
     Box(
         modifier = Modifier
@@ -259,45 +236,6 @@ private fun OnboardingFixedProgressHeader(
                 vertical = 4.dp
             )
     ) {
-
-        // =====================================================
-        // דלג
-        // =====================================================
-
-        if (allowSkip) {
-            TextButton(
-                onClick = onSkip,
-                modifier = Modifier
-                    .align(
-                        if (isEnglish) {
-                            Alignment.CenterEnd
-                        } else {
-                            Alignment.CenterStart
-                        }
-                    )
-                    .heightIn(min = 36.dp),
-                contentPadding =
-                    androidx.compose.foundation.layout.PaddingValues(
-                        horizontal = 8.dp,
-                        vertical = 0.dp
-                    )
-            ) {
-                Text(
-                    text =
-                        if (isEnglish) {
-                            "Skip"
-                        } else {
-                            "דלג"
-                        },
-                    color = Color.White,
-                    style =
-                        KmiTypography.action.copy(
-                            fontWeight = FontWeight.ExtraBold
-                        ),
-                    maxLines = 1
-                )
-            }
-        }
 
         // =====================================================
         // התקדמות בשלבים
@@ -339,12 +277,12 @@ private fun OnboardingFixedProgressHeader(
                                         accentColor
 
                                     isCompleted ->
-                                        Color.White.copy(
+                                        kmiSectionHeaderContentColor().copy(
                                             alpha = 0.75f
                                         )
 
                                     else ->
-                                        Color.White.copy(
+                                        kmiSectionHeaderContentColor().copy(
                                             alpha = 0.45f
                                         )
                                 }
@@ -360,7 +298,7 @@ private fun OnboardingFixedProgressHeader(
                     } else {
                         "שלב ${currentStepIndex + 1} מתוך $stepsCount"
                     },
-                color = Color.White.copy(
+                color = kmiSectionHeaderContentColor().copy(
                     alpha = 0.90f
                 ),
                 style =
@@ -412,7 +350,7 @@ private fun OnboardingNavigationHeader(
                     } else {
                         "דלג"
                     },
-                    color = Color(0xFF6D4ED8),
+                    color = MaterialTheme.colorScheme.primary,
                     style =
                         KmiTypography.action.copy(
                             fontWeight = FontWeight.Bold
@@ -442,8 +380,6 @@ private fun OnboardingProgressIndicator(
     modifier: Modifier = Modifier
 ) {
     val colorScheme = MaterialTheme.colorScheme
-    val isDarkMode =
-        colorScheme.background.luminance() < 0.5f
 
     Column(
         modifier = modifier,
@@ -478,11 +414,7 @@ private fun OnboardingProgressIndicator(
                                     accentColor.copy(alpha = 0.55f)
 
                                 else ->
-                                    if (isDarkMode) {
-                                        colorScheme.outlineVariant
-                                    } else {
-                                        Color(0xFFD8DEE9)
-                                    }
+                                    colorScheme.outlineVariant
                             }
                         )
                 )
@@ -495,12 +427,7 @@ private fun OnboardingProgressIndicator(
             } else {
                 "שלב ${currentStepIndex + 1} מתוך $stepsCount"
             },
-            color =
-                if (isDarkMode) {
-                    colorScheme.onSurfaceVariant
-                } else {
-                    Color(0xFF64748B)
-                },
+            color = colorScheme.onSurfaceVariant,
             style =
                 KmiTypography.caption.copy(
                     fontWeight = FontWeight.Bold
@@ -566,12 +493,7 @@ private fun OnboardingStepCard(
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(30.dp),
-        color =
-            if (isDarkMode) {
-                colorScheme.surface.copy(alpha = 0.96f)
-            } else {
-                Color.White.copy(alpha = 0.97f)
-            },
+        color = colorScheme.surface,
         shadowElevation = 0.dp,
         tonalElevation = 0.dp,
         border = androidx.compose.foundation.BorderStroke(
@@ -631,7 +553,6 @@ private fun OnboardingStepCard(
                     Spacer(Modifier.height(6.dp))
 
                     PremiumScrollHint(
-                        step = step,
                         isEnglish = isEnglish
                     )
 
@@ -661,9 +582,11 @@ private fun OnboardingStepCard(
 
 @Composable
 private fun PremiumScrollHint(
-    step: OnboardingStep,
     isEnglish: Boolean
 ) {
+    val colorScheme = MaterialTheme.colorScheme
+    val contentColor = colorScheme.onPrimary
+
     Surface(
         modifier = Modifier
             .fillMaxWidth()
@@ -674,7 +597,7 @@ private fun PremiumScrollHint(
         shadowElevation = 0.dp,
         border = androidx.compose.foundation.BorderStroke(
             width = 1.dp,
-            color = Color.White.copy(alpha = 0.55f)
+            color = colorScheme.outlineVariant
         )
     ) {
         Box(
@@ -683,16 +606,15 @@ private fun PremiumScrollHint(
                 .background(
                     brush = Brush.horizontalGradient(
                         colors = listOf(
-                            step.accentColor.copy(alpha = 0.96f),
-                            Color(0xFF7C3AED),
-                            Color(0xFF4F46E5)
+                            colorScheme.primary,
+                            colorScheme.primaryContainer
                         )
                     ),
                     shape = RoundedCornerShape(22.dp)
                 )
                 .border(
                     width = 1.dp,
-                    color = Color.White.copy(alpha = 0.18f),
+                    color = colorScheme.outlineVariant,
                     shape = RoundedCornerShape(22.dp)
                 )
                 .padding(
@@ -709,7 +631,7 @@ private fun PremiumScrollHint(
                         brush = Brush.horizontalGradient(
                             colors = listOf(
                                 Color.Transparent,
-                                Color.White.copy(alpha = 0.65f),
+                                contentColor.copy(alpha = 0.65f),
                                 Color.Transparent
                             )
                         )
@@ -806,20 +728,15 @@ private fun OnboardingBottomBar(
     isFirstStep: Boolean,
     isLastStep: Boolean,
     onPrevious: () -> Unit,
-    onNext: () -> Unit
+    onNext: () -> Unit,
+    allowSkip: Boolean,
+    onSkip: () -> Unit
 ) {
     val colorScheme = MaterialTheme.colorScheme
-    val isDarkMode =
-        colorScheme.background.luminance() < 0.5f
 
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        color =
-            if (isDarkMode) {
-                colorScheme.surface
-            } else {
-                Color.White
-            },
+        color = colorScheme.surface,
         shadowElevation = 0.dp,
         tonalElevation = 0.dp
     ) {
@@ -843,21 +760,11 @@ private fun OnboardingBottomBar(
                     shape = RoundedCornerShape(14.dp),
                     border = androidx.compose.foundation.BorderStroke(
                         width = 1.dp,
-                        color = Color(0xFFD7DDEA)
+                        color = colorScheme.outlineVariant
                     ),
                     colors = ButtonDefaults.buttonColors(
-                        containerColor =
-                            if (isDarkMode) {
-                                colorScheme.surfaceVariant
-                            } else {
-                                Color.White
-                            },
-                        contentColor =
-                            if (isDarkMode) {
-                                colorScheme.onSurfaceVariant
-                            } else {
-                                Color(0xFF475569)
-                            }
+                        containerColor = colorScheme.surfaceVariant,
+                        contentColor = colorScheme.onSurfaceVariant
                     ),
                     contentPadding = androidx.compose.foundation.layout.PaddingValues(
                         horizontal = 12.dp,
@@ -877,10 +784,25 @@ private fun OnboardingBottomBar(
                         maxLines = 1
                     )
                 }
-            } else {
-                Spacer(
-                    modifier = Modifier.weight(1f)
-                )
+            }
+
+            if (allowSkip) {
+                TextButton(
+                    onClick = onSkip,
+                    modifier = Modifier
+                        .weight(0.8f)
+                        .heightIn(min = 44.dp)
+                ) {
+                    Text(
+                        text = if (isEnglish) "Skip" else "דלג",
+                        style = KmiTypography.action.copy(
+                            fontWeight = FontWeight.Bold
+                        ),
+                        maxLines = 1
+                    )
+                }
+            } else if (isFirstStep) {
+                Spacer(modifier = Modifier.weight(0.8f))
             }
 
             Button(
@@ -891,11 +813,11 @@ private fun OnboardingBottomBar(
                 shape = RoundedCornerShape(14.dp),
                 border = androidx.compose.foundation.BorderStroke(
                     width = 1.dp,
-                    color = Color.White.copy(alpha = 0.32f)
+                    color = colorScheme.outlineVariant
                 ),
                 colors = ButtonDefaults.buttonColors(
-                    containerColor = Color(0xFF6D4ED8),
-                    contentColor = Color.White
+                    containerColor = colorScheme.primary,
+                    contentColor = colorScheme.onPrimary
                 ),
                 contentPadding = androidx.compose.foundation.layout.PaddingValues(
                     horizontal = 14.dp,
