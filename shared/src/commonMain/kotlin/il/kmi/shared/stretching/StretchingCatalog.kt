@@ -531,7 +531,19 @@ object StretchingCatalog {
                     UpperBackStretchingExercises.exercises,
 
             StretchingCategory.LOWER_BACK to
-                    LowerBackStretchingExercises.exercises
+                    LowerBackStretchingExercises.exercises,
+
+            StretchingCategory.HIPS_AND_GROIN to
+                    HipsAndGroinStretchingExercises.exercises,
+
+            StretchingCategory.LEGS to
+                    LegsStretchingExercises.exercises,
+
+            StretchingCategory.KNEES_AND_ANKLES to
+                    KneesAndAnklesStretchingExercises.exercises,
+
+            StretchingCategory.FULL_BODY to
+                    FullBodyStretchingExercises.exercises
         )
 
     val allExercises: List<StretchingExercise> =

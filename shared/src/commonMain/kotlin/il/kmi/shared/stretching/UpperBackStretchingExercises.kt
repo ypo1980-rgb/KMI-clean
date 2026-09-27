@@ -7,59 +7,122 @@ internal object UpperBackStretchingExercises {
             StretchingExercise(
                 id = "upper_back_forward_reach",
                 category = StretchingCategory.UPPER_BACK,
-                titleHe = "מתיחת גב עליון בהושטת ידיים",
-                titleEn = "Forward reach upper-back stretch",
+                titleHe = "הושטת ידיים לפנים",
+                titleEn = "Forward upper-back reach",
                 instructionsHe =
-                    "שבו או עמדו בגב זקוף. שלבו את האצבעות והושיטו את הידיים לפנים בגובה החזה. הרחיקו בעדינות את השכמות זו מזו והורידו מעט את הסנטר.",
+                    "שבו או עמדו בגב זקוף. שלבו את האצבעות והושיטו את הידיים לפנים. " +
+                            "דחפו בעדינות את כפות הידיים קדימה ועגלו מעט את הגב העליון. " +
+                            "שמרו את הכתפיים נמוכות והחזיקו במתיחה.",
                 instructionsEn =
-                    "Sit or stand upright. Interlace your fingers and reach your arms forward at chest height. Gently spread the shoulder blades apart and lower your chin slightly.",
+                    "Sit or stand upright. Interlace your fingers and extend your arms forward. " +
+                            "Gently press your hands forward and slightly round your upper back. " +
+                            "Keep your shoulders lowered and hold the stretch.",
                 durationSeconds = 30,
                 repetitions = 2,
                 performBothSides = false,
-                imageKey = "stretch_upper_back_forward_reach",
+                imageKey = "upper_back_forward_reach_start",
                 safetyNoteHe =
-                    "אין למשוך את הראש בכוח או לעגל את הגב התחתון בצורה מוגזמת.",
+                    "אין למשוך בכוח או להרים את הכתפיים לכיוון האוזניים.",
                 safetyNoteEn =
-                    "Do not pull the head forward or excessively round the lower back.",
-                sortOrder = 1
+                    "Do not force the stretch or raise your shoulders toward your ears.",
+                sortOrder = 1,
+                visualSteps =
+                    listOf(
+                        StretchingVisualStep(
+                            imageKey = "upper_back_forward_reach_start",
+                            instructionHe = "היכונו.",
+                            instructionEn = "Get ready.",
+                            durationSeconds = 3,
+                            type = StretchingStepType.PREPARE
+                        ),
+                        StretchingVisualStep(
+                            imageKey = "upper_back_forward_reach_stretch",
+                            instructionHe = "הושיטו קדימה.",
+                            instructionEn = "Reach forward.",
+                            durationSeconds = 8,
+                            type = StretchingStepType.HOLD
+                        )
+                    )
             ),
             StretchingExercise(
                 id = "upper_back_self_hug",
                 category = StretchingCategory.UPPER_BACK,
                 titleHe = "חיבוק עצמי לגב העליון",
-                titleEn = "Self-hug upper-back stretch",
+                titleEn = "Upper-back self-hug",
                 instructionsHe =
-                    "עטפו את הידיים סביב הגוף כאילו אתם מחבקים את עצמכם. אחזו בעדינות בשכמות או בכתפיים והרחיקו את המרפקים מעט לפנים עד שמורגשת מתיחה בין השכמות.",
+                    "שבו או עמדו בגב זקוף. העבירו כל יד אל הכתף הנגדית כאילו אתם מחבקים את עצמכם. " +
+                            "משכו בעדינות את השכמות הרחק זו מזו ועגלו מעט את הגב העליון. " +
+                            "החזיקו במתיחה ונשמו כרגיל.",
                 instructionsEn =
-                    "Wrap your arms around your body as if giving yourself a hug. Gently hold the shoulder blades or shoulders and move the elbows slightly forward until you feel a stretch between the shoulder blades.",
+                    "Sit or stand upright. Place each hand on the opposite shoulder as if hugging yourself. " +
+                            "Gently separate your shoulder blades and slightly round your upper back. " +
+                            "Hold the stretch and breathe normally.",
                 durationSeconds = 30,
                 repetitions = 2,
                 performBothSides = false,
-                imageKey = "stretch_upper_back_self_hug",
+                imageKey = "upper_back_self_hug_start",
                 safetyNoteHe =
-                    "שמרו על נשימה חופשית ואל תפעילו לחץ ישיר על הצוואר.",
+                    "שמרו את הצוואר משוחרר ואל תלחצו את הידיים בכוח אל הגוף.",
                 safetyNoteEn =
-                    "Breathe normally and avoid placing direct pressure on the neck.",
-                sortOrder = 2
+                    "Keep your neck relaxed and do not force your arms against your body.",
+                sortOrder = 2,
+                visualSteps =
+                    listOf(
+                        StretchingVisualStep(
+                            imageKey = "upper_back_self_hug_start",
+                            instructionHe = "היכונו.",
+                            instructionEn = "Get ready.",
+                            durationSeconds = 3,
+                            type = StretchingStepType.PREPARE
+                        ),
+                        StretchingVisualStep(
+                            imageKey = "upper_back_self_hug_hold",
+                            instructionHe = "חבקו והחזיקו.",
+                            instructionEn = "Hug and hold.",
+                            durationSeconds = 8,
+                            type = StretchingStepType.HOLD
+                        )
+                    )
             ),
             StretchingExercise(
                 id = "upper_back_chair_extension",
                 category = StretchingCategory.UPPER_BACK,
-                titleHe = "פשיטת גב עליון על כיסא",
-                titleEn = "Seated thoracic extension",
+                titleHe = "פתיחת גב עליון מעל משענת",
+                titleEn = "Upper-back extension over a chair",
                 instructionsHe =
-                    "שבו על כיסא יציב בעל משענת נמוכה. הניחו את הידיים מאחורי הראש ותמכו בו בעדינות. הישענו לאחור מעל קצה המשענת ופתחו את בית החזה, בלי לקשת את הגב התחתון.",
+                    "שבו על כיסא יציב כאשר כפות הרגליים מונחות על הרצפה. " +
+                            "הניחו את הידיים מאחורי הראש והישענו בעדינות לאחור מעל המשענת. " +
+                            "פתחו את בית החזה וחזרו באיטיות לתנוחת ההתחלה.",
                 instructionsEn =
-                    "Sit on a stable chair with a low backrest. Place your hands behind your head for gentle support. Lean the upper back over the edge of the chair and open the chest without arching the lower back.",
+                    "Sit on a stable chair with both feet on the floor. " +
+                            "Place your hands behind your head and gently lean backward over the backrest. " +
+                            "Open your chest and slowly return to the starting position.",
                 durationSeconds = 25,
                 repetitions = 4,
                 performBothSides = false,
-                imageKey = "stretch_upper_back_chair_extension",
+                imageKey = "upper_back_chair_extension_start",
                 safetyNoteHe =
-                    "הכיסא חייב להיות יציב. אין למשוך את הראש או להישען לאחור במהירות.",
+                    "השתמשו בכיסא יציב ונמוך. אין להישען במהירות או להגיע לכאב בגב או בצוואר.",
                 safetyNoteEn =
-                    "Use a stable chair. Do not pull on your head or lean backward quickly.",
-                sortOrder = 3
+                    "Use a stable chair with a suitable backrest. Do not lean rapidly or move into back or neck pain.",
+                sortOrder = 3,
+                visualSteps =
+                    listOf(
+                        StretchingVisualStep(
+                            imageKey = "upper_back_chair_extension_start",
+                            instructionHe = "היכונו.",
+                            instructionEn = "Get ready.",
+                            durationSeconds = 3,
+                            type = StretchingStepType.PREPARE
+                        ),
+                        StretchingVisualStep(
+                            imageKey = "upper_back_chair_extension_stretch",
+                            instructionHe = "הישענו בעדינות.",
+                            instructionEn = "Lean back gently.",
+                            durationSeconds = 6,
+                            type = StretchingStepType.HOLD
+                        )
+                    )
             ),
             StretchingExercise(
                 id = "upper_back_seated_rotation",
@@ -67,18 +130,42 @@ internal object UpperBackStretchingExercises {
                 titleHe = "סיבוב גב עליון בישיבה",
                 titleEn = "Seated upper-back rotation",
                 instructionsHe =
-                    "שבו זקוף כשהרגליים מונחות על הרצפה. שלבו את הידיים על החזה וסובבו באיטיות את פלג הגוף העליון לצד אחד. חזרו למרכז ובצעו לצד השני.",
+                    "שבו זקוף כאשר כפות הרגליים מונחות על הרצפה. שלבו את הידיים על החזה וסובבו באיטיות את פלג הגוף העליון לצד אחד. חזרו למרכז ובצעו לצד השני.",
                 instructionsEn =
                     "Sit upright with both feet on the floor. Cross your arms over your chest and slowly rotate your upper body to one side. Return to the center and repeat in the other direction.",
                 durationSeconds = 30,
                 repetitions = 5,
                 performBothSides = true,
-                imageKey = "stretch_upper_back_seated_rotation",
+                imageKey = "upper_back_seated_rotation_start",
                 safetyNoteHe =
                     "האגן נשאר מול החזית. אין לבצע תנופה או לסובב דרך כאב.",
                 safetyNoteEn =
                     "Keep the pelvis facing forward. Do not use momentum or rotate through pain.",
-                sortOrder = 4
+                sortOrder = 4,
+                visualSteps =
+                    listOf(
+                        StretchingVisualStep(
+                            imageKey = "upper_back_seated_rotation_start",
+                            instructionHe = "היכונו.",
+                            instructionEn = "Get ready.",
+                            durationSeconds = 3,
+                            type = StretchingStepType.PREPARE
+                        ),
+                        StretchingVisualStep(
+                            imageKey = "upper_back_seated_rotation_left",
+                            instructionHe = "הסתובבו שמאלה.",
+                            instructionEn = "Rotate left.",
+                            durationSeconds = 5,
+                            type = StretchingStepType.MOVE
+                        ),
+                        StretchingVisualStep(
+                            imageKey = "upper_back_seated_rotation_right",
+                            instructionHe = "הסתובבו ימינה.",
+                            instructionEn = "Rotate right.",
+                            durationSeconds = 5,
+                            type = StretchingStepType.MOVE
+                        )
+                    )
             ),
             StretchingExercise(
                 id = "upper_back_cat_cow",
@@ -92,12 +179,36 @@ internal object UpperBackStretchingExercises {
                 durationSeconds = 40,
                 repetitions = 8,
                 performBothSides = false,
-                imageKey = "stretch_upper_back_cat_cow",
+                imageKey = "upper_back_cat_cow_start",
                 safetyNoteHe =
                     "בצעו תנועה קטנה ונוחה והימנעו מהשלכת הראש לאחור.",
                 safetyNoteEn =
                     "Keep the movement small and comfortable, and avoid dropping the head backward.",
-                sortOrder = 5
+                sortOrder = 5,
+                visualSteps =
+                    listOf(
+                        StretchingVisualStep(
+                            imageKey = "upper_back_cat_cow_start",
+                            instructionHe = "היכונו.",
+                            instructionEn = "Get ready.",
+                            durationSeconds = 3,
+                            type = StretchingStepType.PREPARE
+                        ),
+                        StretchingVisualStep(
+                            imageKey = "upper_back_cat_cow_round",
+                            instructionHe = "עגלו את הגב.",
+                            instructionEn = "Round your back.",
+                            durationSeconds = 4,
+                            type = StretchingStepType.MOVE
+                        ),
+                        StretchingVisualStep(
+                            imageKey = "upper_back_cat_cow_open",
+                            instructionHe = "פתחו בעדינות.",
+                            instructionEn = "Open gently.",
+                            durationSeconds = 4,
+                            type = StretchingStepType.RELEASE
+                        )
+                    )
             ),
             StretchingExercise(
                 id = "upper_back_thread_needle",
@@ -111,12 +222,36 @@ internal object UpperBackStretchingExercises {
                 durationSeconds = 30,
                 repetitions = 2,
                 performBothSides = true,
-                imageKey = "stretch_upper_back_thread_needle",
+                imageKey = "upper_back_thread_needle_start",
                 safetyNoteHe =
                     "אין להעמיס משקל על הראש או להמשיך אם מופיע כאב בכתף.",
                 safetyNoteEn =
                     "Do not place body weight on the head or continue if shoulder pain develops.",
-                sortOrder = 6
+                sortOrder = 6,
+                visualSteps =
+                    listOf(
+                        StretchingVisualStep(
+                            imageKey = "upper_back_thread_needle_start",
+                            instructionHe = "היכונו.",
+                            instructionEn = "Get ready.",
+                            durationSeconds = 3,
+                            type = StretchingStepType.PREPARE
+                        ),
+                        StretchingVisualStep(
+                            imageKey = "upper_back_thread_needle_left",
+                            instructionHe = "השחילו יד שמאל.",
+                            instructionEn = "Thread your left arm.",
+                            durationSeconds = 7,
+                            type = StretchingStepType.HOLD
+                        ),
+                        StretchingVisualStep(
+                            imageKey = "upper_back_thread_needle_right",
+                            instructionHe = "השחילו יד ימין.",
+                            instructionEn = "Thread your right arm.",
+                            durationSeconds = 7,
+                            type = StretchingStepType.HOLD
+                        )
+                    )
             ),
             StretchingExercise(
                 id = "upper_back_child_pose",
@@ -130,12 +265,29 @@ internal object UpperBackStretchingExercises {
                 durationSeconds = 30,
                 repetitions = 2,
                 performBothSides = false,
-                imageKey = "stretch_upper_back_child_pose",
+                imageKey = "upper_back_child_pose_start",
                 safetyNoteHe =
                     "אם קיימת אי־נוחות בברכיים, הניחו כרית או דלגו על התרגיל.",
                 safetyNoteEn =
                     "Use cushioning or skip this exercise if it causes knee discomfort.",
-                sortOrder = 7
+                sortOrder = 7,
+                visualSteps =
+                    listOf(
+                        StretchingVisualStep(
+                            imageKey = "upper_back_child_pose_start",
+                            instructionHe = "היכונו.",
+                            instructionEn = "Get ready.",
+                            durationSeconds = 3,
+                            type = StretchingStepType.PREPARE
+                        ),
+                        StretchingVisualStep(
+                            imageKey = "upper_back_child_pose_stretch",
+                            instructionHe = "הישענו לאחור.",
+                            instructionEn = "Move gently backward.",
+                            durationSeconds = 8,
+                            type = StretchingStepType.HOLD
+                        )
+                    )
             ),
             StretchingExercise(
                 id = "upper_back_wall_lat",
@@ -149,12 +301,29 @@ internal object UpperBackStretchingExercises {
                 durationSeconds = 30,
                 repetitions = 2,
                 performBothSides = false,
-                imageKey = "stretch_upper_back_wall_lat",
+                imageKey = "upper_back_wall_lat_start",
                 safetyNoteHe =
                     "שמרו על ברכיים מעט כפופות ואל תדחפו את הכתפיים מעבר לטווח נוח.",
                 safetyNoteEn =
                     "Keep the knees slightly bent and do not force the shoulders beyond a comfortable range.",
-                sortOrder = 8
+                sortOrder = 8,
+                visualSteps =
+                    listOf(
+                        StretchingVisualStep(
+                            imageKey = "upper_back_wall_lat_start",
+                            instructionHe = "היכונו.",
+                            instructionEn = "Get ready.",
+                            durationSeconds = 3,
+                            type = StretchingStepType.PREPARE
+                        ),
+                        StretchingVisualStep(
+                            imageKey = "upper_back_wall_lat_stretch",
+                            instructionHe = "הורידו את החזה.",
+                            instructionEn = "Lower your chest.",
+                            durationSeconds = 8,
+                            type = StretchingStepType.HOLD
+                        )
+                    )
             ),
             StretchingExercise(
                 id = "upper_back_side_reach",
@@ -168,12 +337,36 @@ internal object UpperBackStretchingExercises {
                 durationSeconds = 25,
                 repetitions = 2,
                 performBothSides = true,
-                imageKey = "stretch_upper_back_side_reach",
+                imageKey = "upper_back_side_reach_start",
                 safetyNoteHe =
                     "שתי עצמות הישיבה נשארות על הכיסא ואין להטות את הגוף בכוח.",
                 safetyNoteEn =
                     "Keep both sitting bones on the chair and avoid forcing the side bend.",
-                sortOrder = 9
+                sortOrder = 9,
+                visualSteps =
+                    listOf(
+                        StretchingVisualStep(
+                            imageKey = "upper_back_side_reach_start",
+                            instructionHe = "היכונו.",
+                            instructionEn = "Get ready.",
+                            durationSeconds = 3,
+                            type = StretchingStepType.PREPARE
+                        ),
+                        StretchingVisualStep(
+                            imageKey = "upper_back_side_reach_left",
+                            instructionHe = "הושיטו שמאלה.",
+                            instructionEn = "Reach to the left.",
+                            durationSeconds = 6,
+                            type = StretchingStepType.HOLD
+                        ),
+                        StretchingVisualStep(
+                            imageKey = "upper_back_side_reach_right",
+                            instructionHe = "הושיטו ימינה.",
+                            instructionEn = "Reach to the right.",
+                            durationSeconds = 6,
+                            type = StretchingStepType.HOLD
+                        )
+                    )
             ),
             StretchingExercise(
                 id = "upper_back_scapular_glide",
@@ -187,12 +380,36 @@ internal object UpperBackStretchingExercises {
                 durationSeconds = 35,
                 repetitions = 10,
                 performBothSides = false,
-                imageKey = "stretch_upper_back_scapular_glide",
+                imageKey = "upper_back_scapular_glide_start",
                 safetyNoteHe =
                     "שמרו על תנועה איטית ואל תכווצו את הכתפיים לכיוון האוזניים.",
                 safetyNoteEn =
                     "Move slowly and avoid shrugging the shoulders toward the ears.",
-                sortOrder = 10
+                sortOrder = 10,
+                visualSteps =
+                    listOf(
+                        StretchingVisualStep(
+                            imageKey = "upper_back_scapular_glide_start",
+                            instructionHe = "היכונו.",
+                            instructionEn = "Get ready.",
+                            durationSeconds = 3,
+                            type = StretchingStepType.PREPARE
+                        ),
+                        StretchingVisualStep(
+                            imageKey = "upper_back_scapular_glide_forward",
+                            instructionHe = "הרחיקו שכמות.",
+                            instructionEn = "Spread your shoulder blades.",
+                            durationSeconds = 4,
+                            type = StretchingStepType.MOVE
+                        ),
+                        StretchingVisualStep(
+                            imageKey = "upper_back_scapular_glide_back",
+                            instructionHe = "קרבו שכמות.",
+                            instructionEn = "Draw your shoulder blades together.",
+                            durationSeconds = 4,
+                            type = StretchingStepType.RELEASE
+                        )
+                    )
             )
         )
 }

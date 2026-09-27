@@ -698,17 +698,38 @@ internal fun stretchingImageResource(
         "stretch_shoulders_doorway_chest" ->
             R.drawable.stretch_shoulders_doorway_chest
 
-        "stretch_shoulders_pendulum" ->
-            R.drawable.stretch_shoulders_pendulum
+        "shoulders_pendulum_start" ->
+            R.drawable.stretching_shoulders_pendulum_start
 
-        "stretch_shoulders_wall_walk" ->
-            R.drawable.stretch_shoulders_wall_walk
+        "shoulders_pendulum_forward" ->
+            R.drawable.stretching_shoulders_pendulum_forward
 
-        "stretch_shoulders_arm_circles" ->
-            R.drawable.stretch_shoulders_arm_circles
+        "shoulders_pendulum_backward" ->
+            R.drawable.stretching_shoulders_pendulum_backward
 
-        "stretch_arms_biceps_wall" ->
-            R.drawable.stretching_shoulders_doorway_chest_start
+        "shoulders_wall_walk_start" ->
+            R.drawable.stretching_shoulders_wall_walk_start
+
+        "shoulders_wall_walk_middle" ->
+            R.drawable.stretching_shoulders_wall_walk_middle
+
+        "shoulders_wall_walk_top" ->
+            R.drawable.stretching_shoulders_wall_walk_top
+
+        "shoulders_arm_circles_center" ->
+            R.drawable.stretching_shoulders_arm_circles_center
+
+        "shoulders_arm_circles_up" ->
+            R.drawable.stretching_shoulders_arm_circles_up
+
+        "shoulders_arm_circles_down" ->
+            R.drawable.stretching_shoulders_arm_circles_down
+
+        "arms_biceps_wall_left" ->
+            R.drawable.stretching_arms_biceps_wall_left
+
+        "arms_biceps_wall_right" ->
+            R.drawable.stretching_arms_biceps_wall_right
 
         "shoulders_doorway_chest_start" ->
             R.drawable.stretching_shoulders_doorway_chest_start
@@ -716,15 +737,279 @@ internal fun stretchingImageResource(
         "shoulders_doorway_chest_stretch" ->
             R.drawable.stretching_shoulders_doorway_chest_stretch
 
-        "stretch_arms_wrist_flexor" ->
-            R.drawable.stretch_arms_wrist_flexor
+        "arms_wrist_flexor_right" ->
+            R.drawable.stretching_arms_wrist_flexor_right
 
-        "stretch_arms_wrist_extensor" ->
-            R.drawable.stretch_arms_wrist_extensor
+        "arms_wrist_flexor_left" ->
+            R.drawable.stretching_arms_wrist_flexor_left
 
-        "stretch_arms_forearm_rotation" ->
-            R.drawable.stretch_arms_forearm_rotation
+        "arms_wrist_extensor_right" ->
+            R.drawable.stretching_arms_wrist_extensor_right
 
-        else ->
-            null
+        "arms_wrist_extensor_left" ->
+            R.drawable.stretching_arms_wrist_extensor_left
+
+        "arms_forearm_rotation_up" ->
+            R.drawable.stretching_arms_forearm_rotation_up
+
+        "arms_forearm_rotation_neutral" ->
+            R.drawable.stretching_arms_forearm_rotation_neutral
+
+        "arms_forearm_rotation_down" ->
+            R.drawable.stretching_arms_forearm_rotation_down
+
+        "upper_back_forward_reach_start" ->
+            R.drawable.stretching_upper_back_forward_reach_start
+
+        "upper_back_forward_reach_stretch" ->
+            R.drawable.stretching_upper_back_forward_reach_stretch
+
+        "upper_back_self_hug_start" ->
+            R.drawable.stretching_upper_back_self_hug_start
+
+        "upper_back_self_hug_hold" ->
+            R.drawable.stretching_upper_back_self_hug_hold
+
+        "upper_back_chair_extension_start" ->
+            R.drawable.stretching_upper_back_chair_extension_start
+
+        "upper_back_chair_extension_stretch" ->
+            R.drawable.stretching_upper_back_chair_extension_stretch
+
+        // גב עליון — מתיחת גב עליון בהושטת ידיים
+        "upper_back_forward_reach_start" ->
+            R.drawable.stretching_upper_back_forward_reach_start
+
+        "upper_back_forward_reach_stretch" ->
+            R.drawable.stretching_upper_back_forward_reach_stretch
+
+        // גב עליון — חיבוק עצמי לגב העליון
+        "upper_back_self_hug_start" ->
+            R.drawable.stretching_upper_back_self_hug_start
+
+        "upper_back_self_hug_hold" ->
+            R.drawable.stretching_upper_back_self_hug_hold
+
+        // גב עליון — פשיטת גב עליון על כיסא
+        "upper_back_chair_extension_start" ->
+            R.drawable.stretching_upper_back_chair_extension_start
+
+        "upper_back_chair_extension_stretch" ->
+            R.drawable.stretching_upper_back_chair_extension_stretch
+
+        // גב עליון — סיבוב גב עליון בישיבה
+        "upper_back_seated_rotation_start" ->
+            R.drawable.stretching_upper_back_seated_rotation_start
+
+        "upper_back_seated_rotation_left" ->
+            R.drawable.stretching_upper_back_seated_rotation_left
+
+        "upper_back_seated_rotation_right" ->
+            R.drawable.stretching_upper_back_seated_rotation_right
+
+        // גב עליון — קימור ויישור הגב
+        "upper_back_cat_cow_start" ->
+            R.drawable.stretching_upper_back_cat_cow_start
+
+        "upper_back_cat_cow_round" ->
+            R.drawable.stretching_upper_back_cat_cow_round
+
+        "upper_back_cat_cow_open" ->
+            R.drawable.stretching_upper_back_cat_cow_open
+
+        // גב עליון — השחלת יד מתחת לגוף
+        "upper_back_thread_needle_start" ->
+            R.drawable.stretching_upper_back_thread_needle_start
+
+        "upper_back_thread_needle_left" ->
+            R.drawable.stretching_upper_back_thread_needle_left
+
+        "upper_back_thread_needle_right" ->
+            R.drawable.stretching_upper_back_thread_needle_right
+
+        // גב עליון — ישיבת עקבים עם ידיים לפנים
+        "upper_back_child_pose_start" ->
+            R.drawable.stretching_upper_back_child_pose_start
+
+        "upper_back_child_pose_stretch" ->
+            R.drawable.stretching_upper_back_child_pose_stretch
+
+        // גב עליון — מתיחת גב עליון מול קיר
+        "upper_back_wall_lat_start" ->
+            R.drawable.stretching_upper_back_wall_lat_start
+
+        "upper_back_wall_lat_stretch" ->
+            R.drawable.stretching_upper_back_wall_lat_stretch
+
+        // גב עליון — הושטת יד אלכסונית בישיבה
+        "upper_back_side_reach_start" ->
+            R.drawable.stretching_upper_back_side_reach_start
+
+        "upper_back_side_reach_left" ->
+            R.drawable.stretching_upper_back_side_reach_left
+
+        "upper_back_side_reach_right" ->
+            R.drawable.stretching_upper_back_side_reach_right
+
+        // גב עליון — החלקת שכמות לפנים ולאחור
+        "upper_back_scapular_glide_start" ->
+            R.drawable.stretching_upper_back_scapular_glide_start
+
+        "upper_back_scapular_glide_forward" ->
+            R.drawable.stretching_upper_back_scapular_glide_forward
+
+        "upper_back_scapular_glide_back" ->
+            R.drawable.stretching_upper_back_scapular_glide_back
+
+        "lower_back_pelvic_tilt_start" ->
+            R.drawable.stretching_lower_back_pelvic_tilt_start
+
+        "lower_back_pelvic_tilt_tilt" ->
+            R.drawable.stretching_lower_back_pelvic_tilt_tilt
+
+        "lower_back_single_knee_chest_start" ->
+            R.drawable.stretching_lower_back_single_knee_chest_start
+
+        "lower_back_single_knee_chest_left" ->
+            R.drawable.stretching_lower_back_single_knee_chest_left
+
+        "lower_back_single_knee_chest_right" ->
+            R.drawable.stretching_lower_back_single_knee_chest_right
+
+        "lower_back_double_knee_chest_start" ->
+            R.drawable.stretching_lower_back_double_knee_chest_start
+
+        "lower_back_double_knee_chest_hold" ->
+            R.drawable.stretching_lower_back_double_knee_chest_hold
+
+        "lower_back_knee_rolls_start" ->
+            R.drawable.stretching_lower_back_knee_rolls_start
+
+        "lower_back_knee_rolls_left" ->
+            R.drawable.stretching_lower_back_knee_rolls_left
+
+        "lower_back_knee_rolls_right" ->
+            R.drawable.stretching_lower_back_knee_rolls_right
+
+        "lower_back_cat_cow_start" ->
+            R.drawable.stretching_lower_back_cat_cow_start
+
+        "lower_back_cat_cow_round" ->
+            R.drawable.stretching_lower_back_cat_cow_round
+
+        "lower_back_cat_cow_open" ->
+            R.drawable.stretching_lower_back_cat_cow_open
+
+        "lower_back_child_pose_start" ->
+            R.drawable.stretching_lower_back_child_pose_start
+
+        "lower_back_child_pose_stretch" ->
+            R.drawable.stretching_lower_back_child_pose_stretch
+
+        "lower_back_sphinx_start" ->
+            R.drawable.stretching_lower_back_sphinx_start
+
+        "lower_back_sphinx_hold" ->
+            R.drawable.stretching_lower_back_sphinx_hold
+
+        "lower_back_seated_pelvic_rock_start" ->
+            R.drawable.stretching_lower_back_seated_pelvic_rock_start
+
+        "lower_back_seated_pelvic_rock_back" ->
+            R.drawable.stretching_lower_back_seated_pelvic_rock_back
+
+        "lower_back_seated_pelvic_rock_forward" ->
+            R.drawable.stretching_lower_back_seated_pelvic_rock_forward
+
+        "lower_back_supported_forward_start" ->
+            R.drawable.stretching_lower_back_supported_forward_start
+
+        "lower_back_supported_forward_stretch" ->
+            R.drawable.stretching_lower_back_supported_forward_stretch
+
+        "lower_back_standing_extension_start" ->
+            R.drawable.stretching_lower_back_standing_extension_start
+
+        "lower_back_standing_extension_back" ->
+            R.drawable.stretching_lower_back_standing_extension_back
+
+        "hips_groin_butterfly_start" ->
+            R.drawable.stretching_hips_groin_butterfly_start
+
+        "hips_groin_butterfly_stretch" ->
+            R.drawable.stretching_hips_groin_butterfly_stretch
+
+        "hips_groin_supine_figure_four_start" ->
+            R.drawable.stretching_hips_groin_supine_figure_four_start
+
+        "hips_groin_supine_figure_four_left" ->
+            R.drawable.stretching_hips_groin_supine_figure_four_left
+
+        "hips_groin_supine_figure_four_right" ->
+            R.drawable.stretching_hips_groin_supine_figure_four_right
+
+        "hips_groin_kneeling_hip_flexor_start" ->
+            R.drawable.stretching_hips_groin_kneeling_hip_flexor_start
+
+        "hips_groin_kneeling_hip_flexor_left" ->
+            R.drawable.stretching_hips_groin_kneeling_hip_flexor_left
+
+        "hips_groin_kneeling_hip_flexor_right" ->
+            R.drawable.stretching_hips_groin_kneeling_hip_flexor_right
+
+        "hips_groin_adductor_side_lunge_start" ->
+            R.drawable.stretching_hips_groin_adductor_side_lunge_start
+
+        "hips_groin_adductor_side_lunge_left" ->
+            R.drawable.stretching_hips_groin_adductor_side_lunge_left
+
+        "hips_groin_adductor_side_lunge_right" ->
+            R.drawable.stretching_hips_groin_adductor_side_lunge_right
+
+        "hips_groin_seated_wide_fold_start" ->
+            R.drawable.stretching_hips_groin_seated_wide_fold_start
+
+        "hips_groin_seated_wide_fold_stretch" ->
+            R.drawable.stretching_hips_groin_seated_wide_fold_stretch
+
+        "hips_groin_frog_rock_back_start" ->
+            R.drawable.stretching_hips_groin_frog_rock_back_start
+
+        "hips_groin_frog_rock_back_stretch" ->
+            R.drawable.stretching_hips_groin_frog_rock_back_stretch
+
+        "hips_groin_seated_figure_four_start" ->
+            R.drawable.stretching_hips_groin_seated_figure_four_start
+
+        "hips_groin_seated_figure_four_left" ->
+            R.drawable.stretching_hips_groin_seated_figure_four_left
+
+        "hips_groin_seated_figure_four_right" ->
+            R.drawable.stretching_hips_groin_seated_figure_four_right
+
+        "hips_groin_hip_rotations_start" ->
+            R.drawable.stretching_hips_groin_hip_rotations_start
+
+        "hips_groin_hip_rotations_left" ->
+            R.drawable.stretching_hips_groin_hip_rotations_left
+
+        "hips_groin_hip_rotations_right" ->
+            R.drawable.stretching_hips_groin_hip_rotations_right
+
+        "hips_groin_supine_adductor_start" ->
+            R.drawable.stretching_hips_groin_supine_adductor_start
+
+        "hips_groin_supine_adductor_stretch" ->
+            R.drawable.stretching_hips_groin_supine_adductor_stretch
+
+        "hips_groin_standing_hip_circles_start" ->
+            R.drawable.stretching_hips_groin_standing_hip_circles_start
+
+        "hips_groin_standing_hip_circles_left" ->
+            R.drawable.stretching_hips_groin_standing_hip_circles_left
+
+        "hips_groin_standing_hip_circles_right" ->
+            R.drawable.stretching_hips_groin_standing_hip_circles_right
+
+        else -> null
     }

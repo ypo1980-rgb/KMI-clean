@@ -154,18 +154,48 @@ internal object ShouldersAndArmsStretchingExercises {
                 titleHe = "תנועת מטוטלת לכתף",
                 titleEn = "Shoulder pendulum",
                 instructionsHe =
-                    "הישענו ביד אחת על משטח יציב והטו מעט את הגוף קדימה. הניחו ליד השנייה להשתחרר כלפי מטה. הניעו אותה בעדינות קדימה ואחורה, לצדדים ובמעגלים קטנים. החליפו צד.",
+                    "הישענו ביד אחת על משטח יציב והטו מעט את הגוף קדימה. " +
+                            "אפשרו ליד השנייה להשתחרר כלפי מטה. " +
+                            "הניעו את הגוף בעדינות כדי לאפשר ליד לנוע קדימה ואחורה כמו מטוטלת. " +
+                            "החליפו צד.",
                 instructionsEn =
-                    "Support yourself with one hand on a stable surface and lean slightly forward. Allow the other arm to hang loosely. Gently move it forward and backward, side to side, and in small circles. Change sides.",
+                    "Support yourself with one hand on a stable surface and lean slightly forward. " +
+                            "Allow the other arm to hang loosely. " +
+                            "Gently move your body so the relaxed arm swings forward and backward like a pendulum. " +
+                            "Change sides.",
                 durationSeconds = 40,
                 repetitions = null,
                 performBothSides = true,
-                imageKey = "stretch_shoulders_pendulum",
+                imageKey = "shoulders_pendulum_start",
                 safetyNoteHe =
-                    "התנועה צריכה להגיע מתנועת הגוף העדינה ולא ממשיכה חזקה של הזרוע.",
+                    "שמרו את הזרוע רפויה. התנועה צריכה להגיע מהנעה עדינה של הגוף ולא מהפעלת כוח בכתף.",
                 safetyNoteEn =
-                    "Let the gentle movement of your body guide the arm; do not swing it forcefully.",
-                sortOrder = 4
+                    "Keep the arm relaxed. The movement should come from gently shifting your body, not from forcing the shoulder.",
+                sortOrder = 4,
+                visualSteps =
+                    listOf(
+                        StretchingVisualStep(
+                            imageKey = "shoulders_pendulum_start",
+                            instructionHe = "היכונו.",
+                            instructionEn = "Get ready.",
+                            durationSeconds = 3,
+                            type = StretchingStepType.PREPARE
+                        ),
+                        StretchingVisualStep(
+                            imageKey = "shoulders_pendulum_forward",
+                            instructionHe = "קדימה.",
+                            instructionEn = "Forward.",
+                            durationSeconds = 2,
+                            type = StretchingStepType.MOVE
+                        ),
+                        StretchingVisualStep(
+                            imageKey = "shoulders_pendulum_backward",
+                            instructionHe = "אחורה.",
+                            instructionEn = "Backward.",
+                            durationSeconds = 2,
+                            type = StretchingStepType.MOVE
+                        )
+                    )
             ),
             StretchingExercise(
                 id = "shoulders_wall_walk",
@@ -174,18 +204,48 @@ internal object ShouldersAndArmsStretchingExercises {
                 titleHe = "טיפוס אצבעות על הקיר",
                 titleEn = "Finger walk up the wall",
                 instructionsHe =
-                    "עמדו מול קיר והניחו עליו את קצות האצבעות. טפסו בהדרגה עם האצבעות כלפי מעלה עד לטווח נוח. עצרו לזמן קצר והורידו את היד באיטיות. חזרו ביד השנייה.",
+                    "עמדו לצד הקיר והניחו עליו את קצות האצבעות של היד הקרובה. " +
+                            "טפסו בהדרגה עם האצבעות כלפי מעלה עד לגובה נוח. " +
+                            "עצרו לזמן קצר והורידו את היד באיטיות. " +
+                            "חזרו ביד השנייה.",
                 instructionsEn =
-                    "Stand facing a wall and place your fingertips against it. Slowly walk your fingers upward to a comfortable height. Pause briefly, then lower the arm slowly. Repeat with the other arm.",
+                    "Stand beside the wall and place the fingertips of the nearest hand against it. " +
+                            "Slowly walk your fingers upward to a comfortable height. " +
+                            "Pause briefly, then lower the arm slowly. " +
+                            "Repeat with the other arm.",
                 durationSeconds = 40,
                 repetitions = 5,
                 performBothSides = true,
-                imageKey = "stretch_shoulders_wall_walk",
+                imageKey = "shoulders_wall_walk_start",
                 safetyNoteHe =
-                    "אין להרים את היד מעבר לטווח נוח ואין למשוך את הכתף לכיוון האוזן.",
+                    "התקדמו רק עד לטווח נוח. שמרו את הכתף נמוכה ואל תטו את הגוף הצידה.",
                 safetyNoteEn =
-                    "Do not raise the arm beyond a comfortable range or shrug the shoulder toward the ear.",
-                sortOrder = 5
+                    "Move only within a comfortable range. Keep your shoulder lowered and do not lean sideways.",
+                sortOrder = 5,
+                visualSteps =
+                    listOf(
+                        StretchingVisualStep(
+                            imageKey = "shoulders_wall_walk_start",
+                            instructionHe = "היכונו.",
+                            instructionEn = "Get ready.",
+                            durationSeconds = 3,
+                            type = StretchingStepType.PREPARE
+                        ),
+                        StretchingVisualStep(
+                            imageKey = "shoulders_wall_walk_middle",
+                            instructionHe = "טפסו לאט.",
+                            instructionEn = "Climb slowly.",
+                            durationSeconds = 2,
+                            type = StretchingStepType.MOVE
+                        ),
+                        StretchingVisualStep(
+                            imageKey = "shoulders_wall_walk_top",
+                            instructionHe = "עצרו בגובה נוח.",
+                            instructionEn = "Pause at a comfortable height.",
+                            durationSeconds = 3,
+                            type = StretchingStepType.HOLD
+                        )
+                    )
             ),
             StretchingExercise(
                 id = "shoulders_arm_circles",
@@ -194,18 +254,48 @@ internal object ShouldersAndArmsStretchingExercises {
                 titleHe = "מעגלי ידיים מבוקרים",
                 titleEn = "Controlled arm circles",
                 instructionsHe =
-                    "עמדו זקוף כשהידיים לצדי הגוף. הרימו אותן לטווח נוח ובצעו מעגלים קטנים ואיטיים לפנים. לאחר מכן החליפו כיוון. שמרו על כתפיים משוחררות.",
+                    "עמדו זקוף והרימו את הידיים לצדדים עד לגובה נוח. " +
+                            "בצעו מעגלים קטנים ואיטיים לפנים. " +
+                            "לאחר מכן החליפו כיוון. " +
+                            "שמרו את הכתפיים נמוכות ומשוחררות.",
                 instructionsEn =
-                    "Stand upright with your arms by your sides. Raise them to a comfortable level and make small, slow circles forward. Then reverse direction. Keep your shoulders relaxed.",
+                    "Stand upright and raise your arms out to the sides to a comfortable height. " +
+                            "Make small, slow circles forward. " +
+                            "Then reverse direction. " +
+                            "Keep your shoulders lowered and relaxed.",
                 durationSeconds = 30,
                 repetitions = null,
                 performBothSides = false,
-                imageKey = "stretch_shoulders_arm_circles",
+                imageKey = "shoulders_arm_circles_center",
                 safetyNoteHe =
-                    "התחילו במעגלים קטנים. אין לבצע תנועות מהירות או להגיע לטווח שמכאיב.",
+                    "התחילו במעגלים קטנים. אין לבצע תנועות מהירות או להמשיך בטווח שגורם לכאב.",
                 safetyNoteEn =
                     "Begin with small circles. Avoid fast movements or any range that causes pain.",
-                sortOrder = 6
+                sortOrder = 6,
+                visualSteps =
+                    listOf(
+                        StretchingVisualStep(
+                            imageKey = "shoulders_arm_circles_center",
+                            instructionHe = "היכונו.",
+                            instructionEn = "Get ready.",
+                            durationSeconds = 3,
+                            type = StretchingStepType.PREPARE
+                        ),
+                        StretchingVisualStep(
+                            imageKey = "shoulders_arm_circles_up",
+                            instructionHe = "מעגלים קטנים.",
+                            instructionEn = "Small circles.",
+                            durationSeconds = 2,
+                            type = StretchingStepType.MOVE
+                        ),
+                        StretchingVisualStep(
+                            imageKey = "shoulders_arm_circles_down",
+                            instructionHe = "המשיכו לאט.",
+                            instructionEn = "Continue slowly.",
+                            durationSeconds = 2,
+                            type = StretchingStepType.MOVE
+                        )
+                    )
             ),
             StretchingExercise(
                 id = "arms_biceps_wall",
@@ -214,18 +304,39 @@ internal object ShouldersAndArmsStretchingExercises {
                 titleHe = "מתיחת קדמת הזרוע ליד קיר",
                 titleEn = "Wall biceps stretch",
                 instructionsHe =
-                    "עמדו לצד קיר והניחו עליו את כף היד כאשר הזרוע ישרה ובגובה נוח. סובבו את הגוף באיטיות הרחק מהקיר עד שמורגשת מתיחה עדינה בקדמת הזרוע והכתף. חזרו בצד השני.",
+                    "עמדו לצד הקיר והניחו עליו את כף היד כשהזרוע ישרה ובגובה נוח. " +
+                            "סובבו את הגוף באיטיות הרחק מהקיר עד שתרגישו מתיחה עדינה בקדמת הזרוע והכתף. " +
+                            "שמרו את הכתף נמוכה וחזרו בצד השני.",
                 instructionsEn =
-                    "Stand beside a wall and place your palm against it with the arm straight at a comfortable height. Slowly turn your body away until you feel a gentle stretch along the front of the arm and shoulder. Repeat on the other side.",
+                    "Stand beside a wall and place your palm against it with your arm straight at a comfortable height. " +
+                            "Slowly rotate your body away from the wall until you feel a gentle stretch along the front of your arm and shoulder. " +
+                            "Keep your shoulder lowered and repeat on the other side.",
                 durationSeconds = 25,
                 repetitions = 2,
                 performBothSides = true,
-                imageKey = "stretch_arms_biceps_wall",
+                imageKey = "arms_biceps_wall_left",
                 safetyNoteHe =
-                    "אל תנעלו את המרפק ואל תסובבו את הגוף מעבר לטווח נוח.",
+                    "שמרו על מרפק משוחרר מעט. אין לסובב את הגוף מעבר לטווח הנוח.",
                 safetyNoteEn =
-                    "Do not lock the elbow or rotate beyond a comfortable range.",
-                sortOrder = 7
+                    "Keep the elbow slightly relaxed. Do not rotate beyond a comfortable range.",
+                sortOrder = 7,
+                visualSteps =
+                    listOf(
+                        StretchingVisualStep(
+                            imageKey = "arms_biceps_wall_left",
+                            instructionHe = "מתחו בעדינות.",
+                            instructionEn = "Stretch gently.",
+                            durationSeconds = 6,
+                            type = StretchingStepType.HOLD
+                        ),
+                        StretchingVisualStep(
+                            imageKey = "arms_biceps_wall_right",
+                            instructionHe = "החליפו צד.",
+                            instructionEn = "Change sides.",
+                            durationSeconds = 6,
+                            type = StretchingStepType.MOVE
+                        )
+                    )
             ),
             StretchingExercise(
                 id = "arms_wrist_flexor",
@@ -234,18 +345,41 @@ internal object ShouldersAndArmsStretchingExercises {
                 titleHe = "מתיחת פנים האמה",
                 titleEn = "Wrist flexor stretch",
                 instructionsHe =
-                    "הושיטו יד לפנים כשהמרפק ישר וכף היד פונה כלפי מעלה. בעזרת היד השנייה משכו בעדינות את האצבעות כלפי מטה ולאחור עד שמורגשת מתיחה בפנים האמה. החליפו צד.",
+                    "הושיטו יד לפנים כשהמרפק ישר אך משוחרר מעט וכף היד פונה כלפי מעלה. " +
+                            "בעזרת היד השנייה משכו בעדינות את האצבעות כלפי מטה ולאחור, " +
+                            "עד שתרגישו מתיחה בפנים האמה. " +
+                            "החליפו צד.",
                 instructionsEn =
-                    "Extend one arm forward with the elbow straight and palm facing upward. With the opposite hand, gently draw the fingers downward and back until you feel a stretch along the inner forearm. Change sides.",
+                    "Extend one arm forward with the elbow straight but slightly relaxed and the palm facing upward. " +
+                            "With the opposite hand, gently draw the fingers downward and back " +
+                            "until you feel a stretch along the inner forearm. " +
+                            "Change sides.",
                 durationSeconds = 20,
                 repetitions = 2,
                 performBothSides = true,
-                imageKey = "stretch_arms_wrist_flexor",
+                imageKey = "arms_wrist_flexor_right",
                 safetyNoteHe =
-                    "המשיכה צריכה להיות עדינה ואין להפעיל לחץ על מפרקי האצבעות.",
+                    "הפעילו משיכה עדינה בלבד. אין להפעיל לחץ חזק על שורש כף היד או על מפרקי האצבעות.",
                 safetyNoteEn =
-                    "Use gentle pressure and avoid forcing the finger joints.",
-                sortOrder = 8
+                    "Use only gentle pressure. Do not force the wrist or finger joints.",
+                sortOrder = 8,
+                visualSteps =
+                    listOf(
+                        StretchingVisualStep(
+                            imageKey = "arms_wrist_flexor_right",
+                            instructionHe = "מתחו בעדינות.",
+                            instructionEn = "Stretch gently.",
+                            durationSeconds = 6,
+                            type = StretchingStepType.HOLD
+                        ),
+                        StretchingVisualStep(
+                            imageKey = "arms_wrist_flexor_left",
+                            instructionHe = "החליפו צד.",
+                            instructionEn = "Change sides.",
+                            durationSeconds = 6,
+                            type = StretchingStepType.MOVE
+                        )
+                    )
             ),
             StretchingExercise(
                 id = "arms_wrist_extensor",
@@ -254,18 +388,41 @@ internal object ShouldersAndArmsStretchingExercises {
                 titleHe = "מתיחת גב האמה",
                 titleEn = "Wrist extensor stretch",
                 instructionsHe =
-                    "הושיטו יד לפנים כשהמרפק ישר וכף היד פונה כלפי מטה. כופפו את שורש כף היד כך שהאצבעות יפנו מטה. בעזרת היד השנייה משכו בעדינות את כף היד לכיוון הגוף. החליפו צד.",
+                    "הושיטו יד לפנים כשהמרפק ישר אך משוחרר מעט וכף היד פונה כלפי מטה. " +
+                            "כופפו את שורש כף היד כך שהאצבעות יפנו מטה. " +
+                            "בעזרת היד השנייה משכו בעדינות את כף היד לכיוון הגוף. " +
+                            "החליפו צד.",
                 instructionsEn =
-                    "Extend one arm forward with the elbow straight and palm facing downward. Bend the wrist so the fingers point down. Use the opposite hand to gently draw the hand toward your body. Change sides.",
+                    "Extend one arm forward with the elbow straight but slightly relaxed and the palm facing downward. " +
+                            "Bend the wrist so the fingers point toward the floor. " +
+                            "Use the opposite hand to gently draw the hand toward your body. " +
+                            "Change sides.",
                 durationSeconds = 20,
                 repetitions = 2,
                 performBothSides = true,
-                imageKey = "stretch_arms_wrist_extensor",
+                imageKey = "arms_wrist_extensor_right",
                 safetyNoteHe =
-                    "יש לעצור אם מופיעים נימול, כאב חד או הקרנה אל האצבעות.",
+                    "הפעילו משיכה עדינה בלבד. עצרו במקרה של נימול, כאב חד או הקרנה אל האצבעות.",
                 safetyNoteEn =
-                    "Stop if you feel numbness, sharp pain, or symptoms spreading into the fingers.",
-                sortOrder = 9
+                    "Use only gentle pressure. Stop if you feel numbness, sharp pain, or symptoms spreading into the fingers.",
+                sortOrder = 9,
+                visualSteps =
+                    listOf(
+                        StretchingVisualStep(
+                            imageKey = "arms_wrist_extensor_right",
+                            instructionHe = "מתחו בעדינות.",
+                            instructionEn = "Stretch gently.",
+                            durationSeconds = 6,
+                            type = StretchingStepType.HOLD
+                        ),
+                        StretchingVisualStep(
+                            imageKey = "arms_wrist_extensor_left",
+                            instructionHe = "החליפו צד.",
+                            instructionEn = "Change sides.",
+                            durationSeconds = 6,
+                            type = StretchingStepType.MOVE
+                        )
+                    )
             ),
             StretchingExercise(
                 id = "arms_forearm_rotation",
@@ -274,18 +431,46 @@ internal object ShouldersAndArmsStretchingExercises {
                 titleHe = "סיבובי אמות וכפות ידיים",
                 titleEn = "Forearm and palm rotations",
                 instructionsHe =
-                    "כופפו את המרפקים לצדי הגוף בזווית נוחה. סובבו באיטיות את האמות כך שכפות הידיים יפנו פעם כלפי מעלה ופעם כלפי מטה. שמרו את המרפקים קרובים לגוף.",
+                    "כופפו את המרפקים לצד הגוף בזווית של כ־90 מעלות. " +
+                            "סובבו באיטיות את האמות כך שכפות הידיים יפנו כלפי מעלה, פנימה ולמטה. " +
+                            "שמרו את המרפקים צמודים לגוף ואת הכתפיים משוחררות.",
                 instructionsEn =
-                    "Bend your elbows comfortably at your sides. Slowly rotate your forearms so the palms turn upward and then downward. Keep the elbows close to your body.",
+                    "Bend your elbows beside your body to approximately 90 degrees. " +
+                            "Slowly rotate your forearms so the palms face upward, inward, and downward. " +
+                            "Keep your elbows close to your body and your shoulders relaxed.",
                 durationSeconds = 30,
                 repetitions = 10,
                 performBothSides = false,
-                imageKey = "stretch_arms_forearm_rotation",
+                imageKey = "arms_forearm_rotation_up",
                 safetyNoteHe =
-                    "בצעו את הסיבוב בטווח נוח, בלי לכפות תנועה דרך שורש כף היד או המרפק.",
+                    "בצעו את הסיבוב בטווח נוח בלבד. אין לכפות תנועה דרך שורש כף היד או המרפק.",
                 safetyNoteEn =
-                    "Rotate only within a comfortable range and do not force the wrist or elbow.",
-                sortOrder = 10
+                    "Rotate only within a comfortable range. Do not force the wrist or elbow.",
+                sortOrder = 10,
+                visualSteps =
+                    listOf(
+                        StretchingVisualStep(
+                            imageKey = "arms_forearm_rotation_up",
+                            instructionHe = "כפות הידיים למעלה.",
+                            instructionEn = "Palms up.",
+                            durationSeconds = 2,
+                            type = StretchingStepType.MOVE
+                        ),
+                        StretchingVisualStep(
+                            imageKey = "arms_forearm_rotation_neutral",
+                            instructionHe = "סובבו פנימה.",
+                            instructionEn = "Rotate inward.",
+                            durationSeconds = 2,
+                            type = StretchingStepType.MOVE
+                        ),
+                        StretchingVisualStep(
+                            imageKey = "arms_forearm_rotation_down",
+                            instructionHe = "כפות הידיים למטה.",
+                            instructionEn = "Palms down.",
+                            durationSeconds = 2,
+                            type = StretchingStepType.MOVE
+                        )
+                    )
             )
         )
 }

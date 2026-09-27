@@ -16,12 +16,29 @@ internal object LowerBackStretchingExercises {
                 durationSeconds = 35,
                 repetitions = 10,
                 performBothSides = false,
-                imageKey = "stretch_lower_back_pelvic_tilt",
+                imageKey = "lower_back_pelvic_tilt_start",
                 safetyNoteHe =
                     "התנועה קטנה ועדינה. אין לדחוף את הגב בכוח אל המשטח.",
                 safetyNoteEn =
                     "Keep the movement small and gentle. Do not force your back into the floor.",
-                sortOrder = 1
+                sortOrder = 1,
+                visualSteps =
+                    listOf(
+                        StretchingVisualStep(
+                            imageKey = "lower_back_pelvic_tilt_start",
+                            instructionHe = "מוכנים.",
+                            instructionEn = "Get ready.",
+                            durationSeconds = 2,
+                            type = StretchingStepType.PREPARE
+                        ),
+                        StretchingVisualStep(
+                            imageKey = "lower_back_pelvic_tilt_tilt",
+                            instructionHe = "הטו את האגן בעדינות.",
+                            instructionEn = "Gently tilt your pelvis.",
+                            durationSeconds = 3,
+                            type = StretchingStepType.MOVE
+                        )
+                    )
             ),
             StretchingExercise(
                 id = "lower_back_single_knee_chest",
@@ -35,12 +52,36 @@ internal object LowerBackStretchingExercises {
                 durationSeconds = 30,
                 repetitions = 2,
                 performBothSides = true,
-                imageKey = "stretch_lower_back_single_knee_chest",
+                imageKey = "lower_back_single_knee_chest_start",
                 safetyNoteHe =
                     "אין ללחוץ ישירות על פיקת הברך או למשוך דרך כאב בגב או בירך.",
                 safetyNoteEn =
                     "Do not press directly on the kneecap or pull through back or hip pain.",
-                sortOrder = 2
+                sortOrder = 2,
+                visualSteps =
+                    listOf(
+                        StretchingVisualStep(
+                            imageKey = "lower_back_single_knee_chest_start",
+                            instructionHe = "מוכנים.",
+                            instructionEn = "Get ready.",
+                            durationSeconds = 2,
+                            type = StretchingStepType.PREPARE
+                        ),
+                        StretchingVisualStep(
+                            imageKey = "lower_back_single_knee_chest_left",
+                            instructionHe = "קרבו ברך אחת בעדינות.",
+                            instructionEn = "Gently bring one knee closer.",
+                            durationSeconds = 4,
+                            type = StretchingStepType.HOLD
+                        ),
+                        StretchingVisualStep(
+                            imageKey = "lower_back_single_knee_chest_right",
+                            instructionHe = "החליפו צד.",
+                            instructionEn = "Change sides.",
+                            durationSeconds = 4,
+                            type = StretchingStepType.HOLD
+                        )
+                    )
             ),
             StretchingExercise(
                 id = "lower_back_double_knee_chest",
@@ -54,12 +95,29 @@ internal object LowerBackStretchingExercises {
                 durationSeconds = 25,
                 repetitions = 2,
                 performBothSides = false,
-                imageKey = "stretch_lower_back_double_knee_chest",
+                imageKey = "lower_back_double_knee_chest_start",
                 safetyNoteHe =
                     "אם התנוחה מגבירה כאב או גורמת לחץ בבטן, חזרו למתיחה עם רגל אחת.",
                 safetyNoteEn =
                     "If this increases pain or creates abdominal pressure, return to the single-leg version.",
-                sortOrder = 3
+                sortOrder = 3,
+                visualSteps =
+                    listOf(
+                        StretchingVisualStep(
+                            imageKey = "lower_back_double_knee_chest_start",
+                            instructionHe = "מוכנים.",
+                            instructionEn = "Get ready.",
+                            durationSeconds = 2,
+                            type = StretchingStepType.PREPARE
+                        ),
+                        StretchingVisualStep(
+                            imageKey = "lower_back_double_knee_chest_hold",
+                            instructionHe = "קרבו את הברכיים בעדינות.",
+                            instructionEn = "Gently bring both knees closer.",
+                            durationSeconds = 5,
+                            type = StretchingStepType.HOLD
+                        )
+                    )
             ),
             StretchingExercise(
                 id = "lower_back_knee_rolls",
@@ -73,12 +131,36 @@ internal object LowerBackStretchingExercises {
                 durationSeconds = 40,
                 repetitions = 8,
                 performBothSides = true,
-                imageKey = "stretch_lower_back_knee_rolls",
+                imageKey = "lower_back_knee_rolls_start",
                 safetyNoteHe =
                     "הברכיים יורדות רק עד לטווח נוח ואין לבצע תנופה.",
                 safetyNoteEn =
                     "Lower the knees only within a comfortable range and do not use momentum.",
-                sortOrder = 4
+                sortOrder = 4,
+                visualSteps =
+                    listOf(
+                        StretchingVisualStep(
+                            imageKey = "lower_back_knee_rolls_start",
+                            instructionHe = "מוכנים.",
+                            instructionEn = "Get ready.",
+                            durationSeconds = 2,
+                            type = StretchingStepType.PREPARE
+                        ),
+                        StretchingVisualStep(
+                            imageKey = "lower_back_knee_rolls_left",
+                            instructionHe = "הטו את הברכיים לצד.",
+                            instructionEn = "Lower your knees to one side.",
+                            durationSeconds = 3,
+                            type = StretchingStepType.MOVE
+                        ),
+                        StretchingVisualStep(
+                            imageKey = "lower_back_knee_rolls_right",
+                            instructionHe = "עברו לצד השני.",
+                            instructionEn = "Move to the other side.",
+                            durationSeconds = 3,
+                            type = StretchingStepType.MOVE
+                        )
+                    )
             ),
             StretchingExercise(
                 id = "lower_back_cat_cow",
@@ -92,12 +174,36 @@ internal object LowerBackStretchingExercises {
                 durationSeconds = 40,
                 repetitions = 8,
                 performBothSides = false,
-                imageKey = "stretch_lower_back_cat_cow",
+                imageKey = "lower_back_cat_cow_start",
                 safetyNoteHe =
                     "אין לשקוע לקשת עמוקה בגב התחתון או להשליך את הראש לאחור.",
                 safetyNoteEn =
                     "Avoid a deep lower-back arch or dropping the head backward.",
-                sortOrder = 5
+                sortOrder = 5,
+                visualSteps =
+                    listOf(
+                        StretchingVisualStep(
+                            imageKey = "lower_back_cat_cow_start",
+                            instructionHe = "עברו לעמידת שש.",
+                            instructionEn = "Move onto your hands and knees.",
+                            durationSeconds = 2,
+                            type = StretchingStepType.PREPARE
+                        ),
+                        StretchingVisualStep(
+                            imageKey = "lower_back_cat_cow_round",
+                            instructionHe = "עגלו את הגב בעדינות.",
+                            instructionEn = "Gently round your back.",
+                            durationSeconds = 3,
+                            type = StretchingStepType.MOVE
+                        ),
+                        StretchingVisualStep(
+                            imageKey = "lower_back_cat_cow_open",
+                            instructionHe = "פתחו מעט את בית החזה.",
+                            instructionEn = "Gently open your chest.",
+                            durationSeconds = 3,
+                            type = StretchingStepType.MOVE
+                        )
+                    )
             ),
             StretchingExercise(
                 id = "lower_back_child_pose",
@@ -111,12 +217,29 @@ internal object LowerBackStretchingExercises {
                 durationSeconds = 35,
                 repetitions = 6,
                 performBothSides = false,
-                imageKey = "stretch_lower_back_child_pose",
+                imageKey = "lower_back_child_pose_start",
                 safetyNoteHe =
                     "אם יש כאב בברכיים, השתמשו בריפוד או דלגו על התרגיל.",
                 safetyNoteEn =
                     "Use cushioning or skip the exercise if it causes knee pain.",
-                sortOrder = 6
+                sortOrder = 6,
+                visualSteps =
+                    listOf(
+                        StretchingVisualStep(
+                            imageKey = "lower_back_child_pose_start",
+                            instructionHe = "מוכנים.",
+                            instructionEn = "Get ready.",
+                            durationSeconds = 2,
+                            type = StretchingStepType.PREPARE
+                        ),
+                        StretchingVisualStep(
+                            imageKey = "lower_back_child_pose_stretch",
+                            instructionHe = "העבירו את האגן לאחור.",
+                            instructionEn = "Move your hips backward.",
+                            durationSeconds = 4,
+                            type = StretchingStepType.HOLD
+                        )
+                    )
             ),
             StretchingExercise(
                 id = "lower_back_sphinx",
@@ -130,12 +253,29 @@ internal object LowerBackStretchingExercises {
                 durationSeconds = 20,
                 repetitions = 4,
                 performBothSides = false,
-                imageKey = "stretch_lower_back_sphinx",
+                imageKey = "lower_back_sphinx_start",
                 safetyNoteHe =
                     "הפסיקו אם התנוחה מגבירה כאב גב או גורמת הקרנה לרגל.",
                 safetyNoteEn =
                     "Stop if the position increases back pain or causes symptoms to travel into a leg.",
-                sortOrder = 7
+                sortOrder = 7,
+                visualSteps =
+                    listOf(
+                        StretchingVisualStep(
+                            imageKey = "lower_back_sphinx_start",
+                            instructionHe = "מוכנים.",
+                            instructionEn = "Get ready.",
+                            durationSeconds = 2,
+                            type = StretchingStepType.PREPARE
+                        ),
+                        StretchingVisualStep(
+                            imageKey = "lower_back_sphinx_hold",
+                            instructionHe = "הרימו את החזה בעדינות.",
+                            instructionEn = "Gently lift your chest.",
+                            durationSeconds = 4,
+                            type = StretchingStepType.HOLD
+                        )
+                    )
             ),
             StretchingExercise(
                 id = "lower_back_seated_pelvic_rock",
@@ -149,12 +289,36 @@ internal object LowerBackStretchingExercises {
                 durationSeconds = 35,
                 repetitions = 10,
                 performBothSides = false,
-                imageKey = "stretch_lower_back_seated_pelvic_rock",
+                imageKey = "lower_back_seated_pelvic_rock_start",
                 safetyNoteHe =
                     "שמרו על תנועה קטנה ואיטית ואל תגיעו לקשת קיצונית.",
                 safetyNoteEn =
                     "Keep the movement small and slow, and avoid an extreme arch.",
-                sortOrder = 8
+                sortOrder = 8,
+                visualSteps =
+                    listOf(
+                        StretchingVisualStep(
+                            imageKey = "lower_back_seated_pelvic_rock_start",
+                            instructionHe = "שבו זקוף.",
+                            instructionEn = "Sit upright.",
+                            durationSeconds = 2,
+                            type = StretchingStepType.PREPARE
+                        ),
+                        StretchingVisualStep(
+                            imageKey = "lower_back_seated_pelvic_rock_back",
+                            instructionHe = "הטו את האגן לאחור.",
+                            instructionEn = "Tilt your pelvis backward.",
+                            durationSeconds = 3,
+                            type = StretchingStepType.MOVE
+                        ),
+                        StretchingVisualStep(
+                            imageKey = "lower_back_seated_pelvic_rock_forward",
+                            instructionHe = "הטו את האגן לפנים.",
+                            instructionEn = "Tilt your pelvis forward.",
+                            durationSeconds = 3,
+                            type = StretchingStepType.MOVE
+                        )
+                    )
             ),
             StretchingExercise(
                 id = "lower_back_supported_forward",
@@ -168,12 +332,29 @@ internal object LowerBackStretchingExercises {
                 durationSeconds = 25,
                 repetitions = 3,
                 performBothSides = false,
-                imageKey = "stretch_lower_back_supported_forward",
+                imageKey = "lower_back_supported_forward_start",
                 safetyNoteHe =
                     "אין לבצע אם כפיפה קדימה מגבירה כאב או גורמת נימול והקרנה לרגל.",
                 safetyNoteEn =
                     "Do not perform this movement if forward bending increases pain, numbness, or leg symptoms.",
-                sortOrder = 9
+                sortOrder = 9,
+                visualSteps =
+                    listOf(
+                        StretchingVisualStep(
+                            imageKey = "lower_back_supported_forward_start",
+                            instructionHe = "שבו זקוף.",
+                            instructionEn = "Sit upright.",
+                            durationSeconds = 2,
+                            type = StretchingStepType.PREPARE
+                        ),
+                        StretchingVisualStep(
+                            imageKey = "lower_back_supported_forward_stretch",
+                            instructionHe = "הטו את הגוף קדימה בעדינות.",
+                            instructionEn = "Gently lean your body forward.",
+                            durationSeconds = 4,
+                            type = StretchingStepType.HOLD
+                        )
+                    )
             ),
             StretchingExercise(
                 id = "lower_back_standing_extension",
@@ -187,12 +368,29 @@ internal object LowerBackStretchingExercises {
                 durationSeconds = 25,
                 repetitions = 5,
                 performBothSides = false,
-                imageKey = "stretch_lower_back_standing_extension",
+                imageKey = "lower_back_standing_extension_start",
                 safetyNoteHe =
                     "התנועה צריכה להיות קטנה. עצרו אם מופיעים כאב חד, סחרחורת או הקרנה לרגל.",
                 safetyNoteEn =
                     "Keep the movement small. Stop if you feel sharp pain, dizziness, or symptoms spreading into a leg.",
-                sortOrder = 10
+                sortOrder = 10,
+                visualSteps =
+                    listOf(
+                        StretchingVisualStep(
+                            imageKey = "lower_back_standing_extension_start",
+                            instructionHe = "עמדו זקוף.",
+                            instructionEn = "Stand upright.",
+                            durationSeconds = 2,
+                            type = StretchingStepType.PREPARE
+                        ),
+                        StretchingVisualStep(
+                            imageKey = "lower_back_standing_extension_back",
+                            instructionHe = "הישענו מעט לאחור.",
+                            instructionEn = "Lean slightly backward.",
+                            durationSeconds = 4,
+                            type = StretchingStepType.HOLD
+                        )
+                    )
             )
         )
 }
