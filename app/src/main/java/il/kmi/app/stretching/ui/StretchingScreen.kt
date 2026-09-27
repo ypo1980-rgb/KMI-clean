@@ -604,9 +604,15 @@ private fun stretchingCategoryImageResource(
         StretchingCategory.LOWER_BACK ->
             R.drawable.stretching_category_lower_back
 
-        StretchingCategory.HIPS_AND_GROIN,
-        StretchingCategory.LEGS,
-        StretchingCategory.KNEES_AND_ANKLES,
+        StretchingCategory.HIPS_AND_GROIN ->
+            R.drawable.stretching_category_hips_groin
+
+        StretchingCategory.LEGS ->
+            R.drawable.stretching_category_legs
+
+        StretchingCategory.KNEES_AND_ANKLES ->
+            R.drawable.stretching_category_knees_ankles
+
         StretchingCategory.FULL_BODY ->
-            null
+            R.drawable.stretching_category_full_body
     }

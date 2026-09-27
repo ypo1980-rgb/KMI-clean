@@ -14,8 +14,13 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.outlined.StarBorder
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -206,6 +211,16 @@ fun ExerciseExplanationDialog(
         resolvedAccentColor.copy(
             alpha = if (isDarkTheme) 0.34f else 0.16f
         )
+
+    val explanationScrollState =
+        rememberScrollState()
+
+    val explanationScrollbarColor =
+        if (resolvedAccentColor.luminance() > 0.82f) {
+            MaterialTheme.colorScheme.primary
+        } else {
+            resolvedAccentColor
+        }
 
     CompositionLocalProvider(
         LocalLayoutDirection provides layoutDirection
@@ -468,8 +483,17 @@ fun ExerciseExplanationDialog(
                             color = softBorderColor,
                             shape = RoundedCornerShape(24.dp)
                         )
-                        .verticalScroll(rememberScrollState())
-                        .padding(horizontal = 12.dp, vertical = 12.dp)
+                        .kmiVerticalScrollIndicator(
+                            scrollState = explanationScrollState,
+                            color = explanationScrollbarColor
+                        )
+                        .verticalScroll(explanationScrollState)
+                        .padding(
+                            start = 18.dp,
+                            end = 18.dp,
+                            top = 12.dp,
+                            bottom = 12.dp
+                        )
                 ) {
                     StyledExplanationText(
                     raw = explanation,
@@ -1202,3 +1226,104 @@ fun ExerciseNoteEditorDialog(
         }
     }
 }
+
+private fun Modifier.kmiVerticalScrollIndicator(
+    scrollState: ScrollState,
+    color: Color
+): Modifier =
+    drawWithContent {
+        drawContent()
+
+        if (scrollState.maxValue <= 0) {
+            return@drawWithContent
+        }
+
+        val trackWidth =
+            4.dp.toPx()
+
+        val horizontalInset =
+            7.dp.toPx()
+
+        val verticalInset =
+            12.dp.toPx()
+
+        val trackHeight =
+            (size.height - verticalInset * 2f)
+                .coerceAtLeast(0f)
+
+        if (trackHeight <= 0f) {
+            return@drawWithContent
+        }
+
+        val contentHeight =
+            size.height + scrollState.maxValue.toFloat()
+
+        val visibleFraction =
+            (size.height / contentHeight)
+                .coerceIn(0f, 1f)
+
+        val minimumThumbHeight =
+            38.dp.toPx()
+
+        val thumbHeight =
+            (trackHeight * visibleFraction)
+                .coerceAtLeast(minimumThumbHeight)
+                .coerceAtMost(trackHeight)
+
+        val scrollProgress =
+            (
+                    scrollState.value.toFloat() /
+                            scrollState.maxValue.toFloat()
+                    ).coerceIn(0f, 1f)
+
+        val thumbOffset =
+            (trackHeight - thumbHeight) *
+                    scrollProgress
+
+        val indicatorX =
+            if (layoutDirection == LayoutDirection.Rtl) {
+                horizontalInset
+            } else {
+                size.width -
+                        horizontalInset -
+                        trackWidth
+            }
+
+        drawRoundRect(
+            color = color.copy(alpha = 0.13f),
+            topLeft =
+                Offset(
+                    x = indicatorX,
+                    y = verticalInset
+                ),
+            size =
+                Size(
+                    width = trackWidth,
+                    height = trackHeight
+                ),
+            cornerRadius =
+                CornerRadius(
+                    x = trackWidth,
+                    y = trackWidth
+                )
+        )
+
+        drawRoundRect(
+            color = color.copy(alpha = 0.82f),
+            topLeft =
+                Offset(
+                    x = indicatorX,
+                    y = verticalInset + thumbOffset
+                ),
+            size =
+                Size(
+                    width = trackWidth,
+                    height = thumbHeight
+                ),
+            cornerRadius =
+                CornerRadius(
+                    x = trackWidth,
+                    y = trackWidth
+                )
+        )
+    }

@@ -1011,5 +1011,186 @@ internal fun stretchingImageResource(
         "hips_groin_standing_hip_circles_right" ->
             R.drawable.stretching_hips_groin_standing_hip_circles_right
 
+        "legs_standing_quadriceps_start" ->
+            R.drawable.stretching_legs_standing_quadriceps_start
+
+        "legs_standing_quadriceps_left" ->
+            R.drawable.stretching_legs_standing_quadriceps_left
+
+        "legs_standing_quadriceps_right" ->
+            R.drawable.stretching_legs_standing_quadriceps_right
+
+        "legs_seated_hamstring_start" ->
+            R.drawable.stretching_legs_seated_hamstring_start
+
+        "legs_seated_hamstring_left" ->
+            R.drawable.stretching_legs_seated_hamstring_left
+
+        "legs_seated_hamstring_right" ->
+            R.drawable.stretching_legs_seated_hamstring_right
+
+        "legs_standing_hamstring_start" ->
+            R.drawable.stretching_legs_standing_hamstring_start
+
+        "legs_standing_hamstring_left" ->
+            R.drawable.stretching_legs_standing_hamstring_left
+
+        "legs_standing_hamstring_right" ->
+            R.drawable.stretching_legs_standing_hamstring_right
+
+        "legs_wall_calf_start" ->
+            R.drawable.stretching_legs_wall_calf_start
+
+        "legs_wall_calf_left" ->
+            R.drawable.stretching_legs_wall_calf_left
+
+        "legs_wall_calf_right" ->
+            R.drawable.stretching_legs_wall_calf_right
+
+        "legs_wall_soleus_start" ->
+            R.drawable.stretching_legs_wall_soleus_start
+
+        "legs_wall_soleus_left" ->
+            R.drawable.stretching_legs_wall_soleus_left
+
+        "legs_wall_soleus_right" ->
+            R.drawable.stretching_legs_wall_soleus_right
+
+        "legs_standing_inner_thigh_start" ->
+            R.drawable.stretching_legs_standing_inner_thigh_start
+
+        "legs_standing_inner_thigh_left" ->
+            R.drawable.stretching_legs_standing_inner_thigh_left
+
+        "legs_standing_inner_thigh_right" ->
+            R.drawable.stretching_legs_standing_inner_thigh_right
+
+
+        "legs_crossed_outer_thigh_start" ->
+            R.drawable.stretching_legs_crossed_outer_thigh_start
+
+        "legs_crossed_outer_thigh_left" ->
+            R.drawable.stretching_legs_crossed_outer_thigh_left
+
+        "legs_crossed_outer_thigh_right" ->
+            R.drawable.stretching_legs_crossed_outer_thigh_right
+
+        "legs_supine_hamstring_start" ->
+            R.drawable.stretching_legs_supine_hamstring_start
+
+        "legs_supine_hamstring_left" ->
+            R.drawable.stretching_legs_supine_hamstring_left
+
+        "legs_supine_hamstring_right" ->
+            R.drawable.stretching_legs_supine_hamstring_right
+
+        "legs_prone_quadriceps_start" ->
+            R.drawable.stretching_legs_prone_quadriceps_start
+
+        "legs_prone_quadriceps_left" ->
+            R.drawable.stretching_legs_prone_quadriceps_left
+
+        "legs_prone_quadriceps_right" ->
+            R.drawable.stretching_legs_prone_quadriceps_right
+
+        "legs_controlled_leg_swings_start" ->
+            R.drawable.stretching_legs_controlled_leg_swings_start
+
+        "legs_controlled_leg_swings_left" ->
+            R.drawable.stretching_legs_controlled_leg_swings_left
+
+        "legs_controlled_leg_swings_right" ->
+            R.drawable.stretching_legs_controlled_leg_swings_right
+
+        "knees_ankles_knee_extension_start" ->
+            R.drawable.stretching_knees_ankles_knee_extension_start
+
+        "knees_ankles_knee_extension_left" ->
+            R.drawable.stretching_knees_ankles_knee_extension_left
+
+        "knees_ankles_knee_extension_right" ->
+            R.drawable.stretching_knees_ankles_knee_extension_right
+
+        "knees_ankles_knee_flexion_start" ->
+            R.drawable.stretching_knees_ankles_knee_flexion_start
+
+        "knees_ankles_knee_flexion_left" ->
+            R.drawable.stretching_knees_ankles_knee_flexion_left
+
+        "knees_ankles_knee_flexion_right" ->
+            R.drawable.stretching_knees_ankles_knee_flexion_right
+
+        "knees_ankles_heel_slide_start" ->
+            R.drawable.stretching_knees_ankles_heel_slide_start
+
+        "knees_ankles_heel_slide_left" ->
+            R.drawable.stretching_knees_ankles_heel_slide_left
+
+        "knees_ankles_heel_slide_right" ->
+            R.drawable.stretching_knees_ankles_heel_slide_right
+
+        "knees_ankles_standing_knee_flexion_start" ->
+            R.drawable.stretching_knees_ankles_standing_knee_flexion_start
+
+        "knees_ankles_standing_knee_flexion_left" ->
+            R.drawable.stretching_knees_ankles_standing_knee_flexion_left
+
+        "knees_ankles_standing_knee_flexion_right" ->
+            R.drawable.stretching_knees_ankles_standing_knee_flexion_right
+
+        "knees_ankles_mini_squat_start" ->
+            R.drawable.stretching_knees_ankles_mini_squat_start
+
+        "knees_ankles_mini_squat_down" ->
+            R.drawable.stretching_knees_ankles_mini_squat_down
+
+        "knees_ankles_mini_squat_up" ->
+            R.drawable.stretching_knees_ankles_mini_squat_up
+
+        "knees_ankles_ankle_circles_start" ->
+            R.drawable.stretching_knees_ankles_ankle_circles_start
+
+        "knees_ankles_ankle_circles_left" ->
+            R.drawable.stretching_knees_ankles_ankle_circles_left
+
+        "knees_ankles_ankle_circles_right" ->
+            R.drawable.stretching_knees_ankles_ankle_circles_right
+
+        "knees_ankles_ankle_pumps_start" ->
+            R.drawable.stretching_knees_ankles_ankle_pumps_start
+
+        "knees_ankles_ankle_pumps_flex" ->
+            R.drawable.stretching_knees_ankles_ankle_pumps_flex
+
+        "knees_ankles_ankle_pumps_point" ->
+            R.drawable.stretching_knees_ankles_ankle_pumps_point
+
+        "knees_ankles_wall_dorsiflexion_start" ->
+            R.drawable.stretching_knees_ankles_wall_dorsiflexion_start
+
+        "knees_ankles_wall_dorsiflexion_left" ->
+            R.drawable.stretching_knees_ankles_wall_dorsiflexion_left
+
+        "knees_ankles_wall_dorsiflexion_right" ->
+            R.drawable.stretching_knees_ankles_wall_dorsiflexion_right
+
+        "knees_ankles_heel_raises_start" ->
+            R.drawable.stretching_knees_ankles_heel_raises_start
+
+        "knees_ankles_heel_raises_up" ->
+            R.drawable.stretching_knees_ankles_heel_raises_up
+
+        "knees_ankles_heel_raises_down" ->
+            R.drawable.stretching_knees_ankles_heel_raises_down
+
+        "knees_ankles_toe_raises_start" ->
+            R.drawable.stretching_knees_ankles_toe_raises_start
+
+        "knees_ankles_toe_raises_up" ->
+            R.drawable.stretching_knees_ankles_toe_raises_up
+
+        "knees_ankles_toe_raises_down" ->
+            R.drawable.stretching_knees_ankles_toe_raises_down
+
         else -> null
     }
