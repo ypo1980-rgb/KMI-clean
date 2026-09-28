@@ -10,25 +10,47 @@ import kotlinx.coroutines.tasks.await
 object KmiUsageTracker {
 
     suspend fun markAppOpen() {
-        val user = FirebaseAuth.getInstance().currentUser ?: return
-        val uid = user.uid
-        val now = System.currentTimeMillis()
+        val user =
+            FirebaseAuth.getInstance()
+                .currentUser
+                ?: return
 
-        val data = hashMapOf(
-            "uid" to uid,
-            "email" to user.email.orEmpty(),
-            "displayName" to user.displayName.orEmpty(),
-            "appOpenCount" to FieldValue.increment(1),
-            "lastSeenAtMillis" to now,
-            "lastSeenAt" to FieldValue.serverTimestamp(),
-            "updatedAtMillis" to now,
-            "updatedAt" to FieldValue.serverTimestamp()
-        )
+        if (user.isAnonymous) {
+            return
+        }
+
+        val uid =
+            user.uid
+                .trim()
+
+        if (uid.isBlank()) {
+            return
+        }
+
+        val now =
+            System.currentTimeMillis()
+
+        val data =
+            hashMapOf<String, Any>(
+                "uid" to uid,
+
+                "appOpenCount" to
+                        FieldValue.increment(1L),
+
+                "lastSeenAtMillis" to
+                        now,
+
+                "lastSeenAt" to
+                        FieldValue.serverTimestamp()
+            )
 
         Firebase.firestore
             .collection("users")
             .document(uid)
-            .set(data, SetOptions.merge())
+            .set(
+                data,
+                SetOptions.merge()
+            )
             .await()
     }
 }

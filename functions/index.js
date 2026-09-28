@@ -236,6 +236,122 @@ exports.recoverUsername = functions.https.onCall(async (data, context) => {
   }
 });
 
+/**
+ * ====================================================
+ * פתרון שם משתמש לכתובת התחברות
+ *
+ * משמש רק לפני Firebase Auth login.
+ *
+ * הלקוח שולח username בלבד.
+ * החיפוש במסמכי users מתבצע בשרת באמצעות Admin SDK.
+ *
+ * הלקוח אינו קורא יותר ישירות את collection("users").
+ * ====================================================
+ */
+exports.resolveUsernameLoginEmail =
+  functions.https.onCall(
+    async (data, context) => {
+
+      const username =
+        String(
+          data &&
+          data.username ||
+          ""
+        )
+          .trim();
+
+      if (
+        username.length < 2 ||
+        username.length > 120
+      ) {
+        return {
+          found: false,
+          loginEmail: "",
+        };
+      }
+
+      const usernameFields = [
+        "username",
+        "userName",
+        "loginUsername",
+        "login_name",
+        "user_login",
+      ];
+
+      try {
+        let matchedDocument = null;
+
+        for (
+          const fieldName
+          of usernameFields
+        ) {
+          const snapshot =
+            await db
+              .collection("users")
+              .where(
+                fieldName,
+                "==",
+                username
+              )
+              .limit(1)
+              .get();
+
+          if (!snapshot.empty) {
+            matchedDocument =
+              snapshot.docs[0];
+
+            break;
+          }
+        }
+
+        if (!matchedDocument) {
+          return {
+            found: false,
+            loginEmail: "",
+          };
+        }
+
+        const userData =
+          matchedDocument.data() || {};
+
+        const loginEmail =
+          normalizeEmail(
+            userData.email ||
+            userData.emailLower ||
+            userData.userEmail ||
+            userData.user_email ||
+            ""
+          );
+
+        if (!loginEmail) {
+          return {
+            found: false,
+            loginEmail: "",
+          };
+        }
+
+        return {
+          found: true,
+          loginEmail,
+        };
+
+      } catch (error) {
+        console.error(
+          "resolveUsernameLoginEmail failed:",
+          {
+            error:
+              String(error),
+          }
+        );
+
+        throw new functions.https.HttpsError(
+          "internal",
+          "Unable to resolve login username."
+        );
+      }
+    }
+  );
+
 function escapeHtmlForRecovery(value) {
   return String(value || "")
     .replace(/&/g, "&amp;")
@@ -502,17 +618,43 @@ exports.verifyCoachInvite = functions.https.onCall(async (data, context) => {
   const userRef =
     db.collection("users").doc(uid);
 
-  const userSnap =
-    await userRef.get();
+  const authorizedCoachRef =
+    db.collection("authorizedCoaches").doc(uid);
+
+  const [
+    userSnap,
+    existingAuthorizedCoachSnap,
+  ] =
+    await Promise.all([
+      userRef.get(),
+      authorizedCoachRef.get(),
+    ]);
 
   const userData =
     userSnap.exists
       ? userSnap.data() || {}
       : {};
 
+  /*
+   * חשוב:
+   * users/{uid} אינו מקור הרשאה לסניפים ולקבוצות.
+   *
+   * אם כבר קיימים שיוכים אדמיניסטרטיביים
+   * ב-authorizedCoaches, שומרים אותם.
+   *
+   * משתמש אינו יכול ליצור או להרחיב כאן
+   * coachBranchAssignments דרך מסמך users שלו.
+   */
+  const existingAuthorizedCoach =
+    existingAuthorizedCoachSnap.exists
+      ? existingAuthorizedCoachSnap.data() || {}
+      : {};
+
   const coachBranchAssignments =
-    Array.isArray(userData.coachBranchAssignments)
-      ? userData.coachBranchAssignments
+    Array.isArray(
+      existingAuthorizedCoach.coachBranchAssignments
+    )
+      ? existingAuthorizedCoach.coachBranchAssignments
           .map((assignment) => {
             const branch =
               String(
@@ -570,7 +712,7 @@ exports.verifyCoachInvite = functions.https.onCall(async (data, context) => {
     ...permissions,
   };
 
-  await db.collection("authorizedCoaches").doc(uid).set(
+  await authorizedCoachRef.set(
     coachPayload,
     { merge: true }
   );
@@ -620,154 +762,4790 @@ exports.verifyCoachInvite = functions.https.onCall(async (data, context) => {
  * כמאמן פעיל ומורשה ב-authorizedCoaches.
  * ====================================================
  */
+/*
+ * SECURITY:
+ * users/{uid}.coachBranchAssignments אינו מקור הרשאה.
+ *
+ * בעבר הפונקציה הזאת העתיקה שיוכים מתוך users
+ * אל authorizedCoaches, ולכן משתמש שהיה יכול להשפיע
+ * על מסמך המשתמש שלו היה עלול להשפיע בעקיפין
+ * על תחום הרשאות המאמן.
+ *
+ * כרגע משאירים trigger ניטרלי כדי לא לבצע
+ * שינוי deployment נוסף באותו שלב.
+ *
+ * בהמשך, לאחר מעבר מלא למקור אדמיניסטרטיבי,
+ * ניתן למחוק את הפונקציה לחלוטין.
+ */
 exports.syncAuthorizedCoachBranchAssignments =
   functions.firestore
     .document("users/{uid}")
-    .onWrite(async (change, context) => {
+    .onWrite(async () => {
+      return null;
+    });
 
-      if (!change.after.exists) {
-        return null;
-      }
+/**
+ * ====================================================
+ * דו"ח תשלומים מאובטח
+ *
+ * Admin:
+ *   רשאי לקבל את כל המתאמנים.
+ *
+ * Coach:
+ *   חייב להיות מאמן פעיל ומורשה,
+ *   עם canViewPaymentReports או canManagePayments.
+ *
+ *   מוחזרים רק מתאמנים ששייכים לאחד הסניפים
+ *   שב-authorizedCoaches/{uid}.authorizedBranches.
+ *
+ * חשוב:
+ * - הלקוח אינו קורא יותר את כל users.
+ * - הלקוח אינו קורא יותר את כל membershipPayments.
+ * - הסינון מתבצע בשרת עם Admin SDK.
+ * ====================================================
+ */
+exports.loadSecurePaymentsReport =
+  functions.https.onCall(
+    async (data, context) => {
 
       const uid =
         String(
-          context.params.uid || ""
+          context.auth &&
+          context.auth.uid ||
+          ""
         ).trim();
 
       if (!uid) {
-        return null;
+        throw new functions.https.HttpsError(
+          "unauthenticated",
+          "User must be signed in."
+        );
       }
 
-      const user =
-        change.after.data() || {};
+      const adminRef =
+        db.collection("admins")
+          .doc(uid);
 
-      const coachBranchAssignments =
-        Array.isArray(user.coachBranchAssignments)
-          ? user.coachBranchAssignments
-              .map((assignment) => {
-                const branch =
-                  String(
-                    assignment &&
-                    assignment.branch ||
-                    ""
-                  ).trim();
-
-                const groups =
-                  Array.isArray(
-                    assignment &&
-                    assignment.groups
-                  )
-                    ? [
-                        ...new Set(
-                          assignment.groups
-                            .map((group) =>
-                              String(group || "").trim()
-                            )
-                            .filter(Boolean)
-                        ),
-                      ]
-                    : [];
-
-                return {
-                  branch,
-                  groups,
-                };
-              })
-              .filter((assignment) =>
-                assignment.branch.length > 0
-              )
-          : [];
-
-      /*
-       * רשימות שטוחות ומדויקות עבור Firestore Rules.
-       *
-       * authorizedBranches:
-       *   ["סניף א", "סניף ב"]
-       *
-       * authorizedBranchGroups:
-       *   ["סניף א||קבוצה 1", "סניף א||קבוצה 2"]
-       *
-       * כך אין ערבוב בין קבוצות בעלות שם דומה
-       * בסניפים שונים.
-       */
-      const authorizedBranches =
-        [
-          ...new Set(
-            coachBranchAssignments
-              .map((assignment) =>
-                assignment.branch
-              )
-              .filter(Boolean)
-          ),
-        ];
-
-      const authorizedBranchGroups =
-        [
-          ...new Set(
-            coachBranchAssignments
-              .flatMap((assignment) =>
-                assignment.groups.map((group) =>
-                  `${assignment.branch}||${group}`
-                )
-              )
-              .filter(Boolean)
-          ),
-        ];
-
-      const authorizedCoachRef =
+      const coachRef =
         db.collection("authorizedCoaches")
           .doc(uid);
 
-      const authorizedCoachSnap =
-        await authorizedCoachRef.get();
+      const [
+        adminSnapshot,
+        coachSnapshot,
+      ] =
+        await Promise.all([
+          adminRef.get(),
+          coachRef.get(),
+        ]);
 
-      if (!authorizedCoachSnap.exists) {
-        return null;
-      }
+      const adminData =
+        adminSnapshot.exists
+          ? adminSnapshot.data() || {}
+          : {};
 
-      const authorizedCoach =
-        authorizedCoachSnap.data() || {};
+      const coachData =
+        coachSnapshot.exists
+          ? coachSnapshot.data() || {}
+          : {};
 
-      if (
-        authorizedCoach.active !== true ||
+      const isAdminUser =
+        adminData.enabled === true;
+
+      const isActiveCoach =
+        coachSnapshot.exists &&
+        coachData.active === true &&
         String(
-          authorizedCoach.role || ""
+          coachData.role || ""
         )
           .trim()
-          .toLowerCase() !== "coach"
-      ) {
-        return null;
+          .toLowerCase() === "coach";
+
+      const canViewPayments =
+        isAdminUser ||
+        (
+          isActiveCoach &&
+          (
+            coachData.canViewPaymentReports === true ||
+            coachData.canManagePayments === true
+          )
+        );
+
+      if (!canViewPayments) {
+        throw new functions.https.HttpsError(
+          "permission-denied",
+          "User is not allowed to view payment reports."
+        );
       }
 
-      await authorizedCoachRef.set(
-        {
-          coachBranchAssignments,
-          authorizedBranches,
-          authorizedBranchGroups,
+      const normalizeValue =
+        (value) =>
+          String(value || "")
+            .trim()
+            .replace(/[־–—]/g, "-")
+            .replace(/\s+/g, " ")
+            .toLowerCase();
 
-          branchAssignmentsSyncedAt:
-            admin.firestore.FieldValue
-              .serverTimestamp(),
+      const cleanText =
+        (value) =>
+          String(value || "")
+            .trim();
 
-          branchAssignmentsSyncedAtMillis:
-            Date.now(),
-        },
-        {
-          merge: true,
+      const normalizePhone =
+        (value) => {
+          const digits =
+            String(value || "")
+              .replace(/\D/g, "");
+
+          if (
+            digits.startsWith("00972") &&
+            digits.length > 5
+          ) {
+            return "0" +
+              digits.substring(5);
+          }
+
+          if (
+            digits.startsWith("972") &&
+            digits.length > 3
+          ) {
+            return "0" +
+              digits.substring(3);
+          }
+
+          return digits;
+        };
+
+      const valueList =
+        (rawValue) => {
+
+          if (Array.isArray(rawValue)) {
+            return rawValue
+              .map((value) =>
+                cleanText(value)
+              )
+              .filter(Boolean);
+          }
+
+          if (
+            typeof rawValue === "string"
+          ) {
+            const clean =
+              rawValue.trim();
+
+            if (!clean) {
+              return [];
+            }
+
+            if (
+              clean.startsWith("[") &&
+              clean.endsWith("]")
+            ) {
+              try {
+                const parsed =
+                  JSON.parse(clean);
+
+                if (
+                  Array.isArray(parsed)
+                ) {
+                  return parsed
+                    .map((value) =>
+                      cleanText(value)
+                    )
+                    .filter(Boolean);
+                }
+              } catch (_) {
+                // ממשיכים לפיצול רגיל.
+              }
+            }
+
+            return clean
+              .split(/[,;|\n]/)
+              .map((value) =>
+                value.trim()
+              )
+              .filter(Boolean);
+          }
+
+          return [];
+        };
+
+      const userBranches =
+        (user) => {
+
+          const values = [];
+
+          [
+            "branch",
+            "activeBranch",
+            "active_branch",
+            "branchName",
+          ].forEach((key) => {
+            const value =
+              cleanText(
+                user && user[key]
+              );
+
+            if (value) {
+              values.push(value);
+            }
+          });
+
+          [
+            "branches",
+            "branchesCsv",
+            "branches_json",
+            "selectedBranches",
+            "selected_branches",
+          ].forEach((key) => {
+            valueList(
+              user && user[key]
+            ).forEach((value) => {
+              values.push(value);
+            });
+          });
+
+          return [
+            ...new Set(
+              values.filter(Boolean)
+            ),
+          ];
+        };
+
+      const userDisplayName =
+        (user) => {
+
+          const directName =
+            cleanText(
+              user.fullName ||
+              user.full_name ||
+              user.displayName ||
+              user.display_name ||
+              user.name ||
+              user.traineeName ||
+              user.trainee_name ||
+              user.studentName ||
+              user.student_name
+            );
+
+          if (directName) {
+            return directName;
+          }
+
+          return [
+            cleanText(
+              user.firstName ||
+              user.first_name
+            ),
+            cleanText(
+              user.lastName ||
+              user.last_name ||
+              user.familyName ||
+              user.family_name
+            ),
+          ]
+            .filter(Boolean)
+            .join(" ")
+            .trim();
+        };
+
+      const userPhone =
+        (user) =>
+          normalizePhone(
+            user.phone ||
+            user.phoneNumber ||
+            user.phone_number ||
+            user.mobile ||
+            ""
+          );
+
+      const userEmail =
+        (user) =>
+          normalizeEmail(
+            user.email ||
+            user.emailLower ||
+            user.userEmail ||
+            user.user_email ||
+            ""
+          );
+
+      const isRelevantTrainee =
+        (user) => {
+
+          const role =
+            cleanText(
+              user.role ||
+              user.userRole ||
+              user.user_role ||
+              user.userType ||
+              user.type
+            )
+              .toLowerCase();
+
+          const status =
+            cleanText(
+              user.status ||
+              user.active
+            )
+              .toLowerCase();
+
+          const active =
+            user.isActive !== false &&
+            status !== "inactive" &&
+            status !== "disabled" &&
+            status !== "blocked" &&
+            status !== "לא פעיל";
+
+          const traineeRole =
+            role === "trainee" ||
+            role === "student" ||
+            role.includes("trainee") ||
+            role.includes("student") ||
+            role.includes("מתאמן") ||
+            role.includes("חניך");
+
+          const hasProfile =
+            userDisplayName(user) ||
+            userPhone(user) ||
+            userBranches(user).length > 0;
+
+          return Boolean(
+            active &&
+            (
+              traineeRole ||
+              hasProfile
+            )
+          );
+        };
+
+      const authorizedBranches =
+        isAdminUser
+          ? []
+          : (
+              Array.isArray(
+                coachData.authorizedBranches
+              )
+                ? coachData.authorizedBranches
+                    .map((branch) =>
+                      cleanText(branch)
+                    )
+                    .filter(Boolean)
+                : []
+            );
+
+      const authorizedBranchKeys =
+        new Set(
+          authorizedBranches.map(
+            normalizeValue
+          )
+        );
+
+      if (
+        !isAdminUser &&
+        authorizedBranchKeys.size === 0
+      ) {
+        return {
+          items: [],
+        };
+      }
+
+      const [
+        usersSnapshot,
+        paymentsSnapshot,
+      ] =
+        await Promise.all([
+          db.collection("users").get(),
+          db.collection("membershipPayments")
+            .get(),
+        ]);
+
+      const allowedUsers =
+        usersSnapshot.docs
+          .map((document) => ({
+            document,
+            user:
+              document.data() || {},
+          }))
+          .filter(({ user }) =>
+            isRelevantTrainee(user)
+          )
+          .filter(({ user }) => {
+
+            if (isAdminUser) {
+              return true;
+            }
+
+            return userBranches(user)
+              .some((branch) =>
+                authorizedBranchKeys.has(
+                  normalizeValue(branch)
+                )
+              );
+          });
+
+      const allowedIdentityKeys =
+        new Set();
+
+      allowedUsers.forEach(
+        ({ document, user }) => {
+
+          [
+            document.id,
+            user.uid,
+            user.authUid,
+            user.userDocId,
+            user.traineeId,
+          ]
+            .map((value) =>
+              cleanText(value)
+            )
+            .filter(Boolean)
+            .forEach((value) =>
+              allowedIdentityKeys.add(value)
+            );
+        }
+      );
+
+      const paymentByIdentity =
+        new Map();
+
+      paymentsSnapshot.docs
+        .forEach((document) => {
+
+          const payment =
+            document.data() || {};
+
+          const keys =
+            [
+              document.id,
+              payment.traineeId,
+              payment.userDocId,
+              payment.uid,
+              payment.authUid,
+            ]
+              .map((value) =>
+                cleanText(value)
+              )
+              .filter(Boolean);
+
+          const allowed =
+            isAdminUser ||
+            keys.some((key) =>
+              allowedIdentityKeys.has(key)
+            );
+
+          if (!allowed) {
+            return;
+          }
+
+          keys.forEach((key) => {
+            paymentByIdentity.set(
+              key,
+              payment
+            );
+          });
+        });
+
+      const groupedUsers =
+        new Map();
+
+      allowedUsers.forEach(
+        ({ document, user }) => {
+
+          const email =
+            userEmail(user);
+
+          const phone =
+            userPhone(user);
+
+          const mergeKey =
+            email
+              ? `email:${email}`
+              : (
+                  phone
+                    ? `phone:${phone}`
+                    : `doc:${document.id}`
+                );
+
+          const existing =
+            groupedUsers.get(
+              mergeKey
+            ) || [];
+
+          existing.push({
+            document,
+            user,
+          });
+
+          groupedUsers.set(
+            mergeKey,
+            existing
+          );
+        }
+      );
+
+      const items = [];
+
+      groupedUsers.forEach(
+        (entries) => {
+
+          const primary =
+            entries
+              .slice()
+              .sort((a, b) => {
+
+                const aName =
+                  userDisplayName(
+                    a.user
+                  );
+
+                const bName =
+                  userDisplayName(
+                    b.user
+                  );
+
+                if (
+                  Boolean(aName) !==
+                  Boolean(bName)
+                ) {
+                  return aName
+                    ? -1
+                    : 1;
+                }
+
+                return a.document.id
+                  .localeCompare(
+                    b.document.id
+                  );
+              })[0];
+
+          if (!primary) {
+            return;
+          }
+
+          const primaryUser =
+            primary.user;
+
+          const traineeId =
+            cleanText(
+              primaryUser.uid ||
+              primaryUser.authUid ||
+              primary.document.id
+            );
+
+          const identityKeys =
+            [
+              traineeId,
+              primary.document.id,
+              ...entries.flatMap(
+                ({ document, user }) => [
+                  document.id,
+                  user.uid,
+                  user.authUid,
+                  user.userDocId,
+                  user.traineeId,
+                ]
+              ),
+            ]
+              .map((value) =>
+                cleanText(value)
+              )
+              .filter(Boolean);
+
+          let payment = null;
+
+          for (
+            const identityKey
+            of identityKeys
+          ) {
+            const candidate =
+              paymentByIdentity.get(
+                identityKey
+              );
+
+            if (candidate) {
+              payment =
+                candidate;
+              break;
+            }
+          }
+
+          const branches =
+            userBranches(
+              primaryUser
+            );
+
+          let branchName =
+            cleanText(
+              payment &&
+              payment.branchName
+            );
+
+          if (!branchName) {
+            if (isAdminUser) {
+              branchName =
+                branches[0] || "";
+            } else {
+              branchName =
+                branches.find(
+                  (branch) =>
+                    authorizedBranchKeys.has(
+                      normalizeValue(branch)
+                    )
+                ) ||
+                branches[0] ||
+                "";
+            }
+          }
+
+          const requiredAmountRaw =
+            Number(
+              payment &&
+              payment.requiredAmount ||
+              primaryUser.requiredAmount ||
+              primaryUser.membershipRequiredAmount ||
+              primaryUser.membershipFee ||
+              primaryUser.annualMembershipFee ||
+              primaryUser.feeAmount ||
+              150
+            );
+
+          const requiredAmount =
+            Number.isFinite(
+              requiredAmountRaw
+            ) &&
+            requiredAmountRaw > 0
+              ? requiredAmountRaw
+              : 150;
+
+          const paidAmountRaw =
+            Number(
+              payment &&
+              payment.paidAmount ||
+              0
+            );
+
+          const paidAmount =
+            Number.isFinite(
+              paidAmountRaw
+            )
+              ? Math.max(
+                  0,
+                  paidAmountRaw
+                )
+              : 0;
+
+          let status =
+            "PAID";
+
+          if (paidAmount <= 0) {
+            status =
+              "UNPAID";
+          } else if (
+            paidAmount <
+            requiredAmount
+          ) {
+            status =
+              "PARTIAL";
+          }
+
+          const fullName =
+            cleanText(
+              payment &&
+              (
+                payment.fullName ||
+                payment.full_name ||
+                payment.traineeName ||
+                payment.trainee_name
+              )
+            ) ||
+            userDisplayName(
+              primaryUser
+            );
+
+          if (!fullName) {
+            return;
+          }
+
+          items.push({
+            traineeId,
+
+            fullName,
+
+            branchName,
+
+            phone:
+              normalizePhone(
+                payment &&
+                payment.phone ||
+                userPhone(
+                  primaryUser
+                )
+              ),
+
+            requiredAmount,
+
+            paidAmount,
+
+            status,
+
+            paymentMethod:
+              cleanText(
+                payment &&
+                payment.paymentMethod ||
+                "MANUAL"
+              ),
+
+            paymentDate:
+              cleanText(
+                payment &&
+                payment.paymentDate
+              ),
+
+            notes:
+              cleanText(
+                payment &&
+                payment.notes
+              ),
+          });
+        }
+      );
+
+      items.sort(
+        (a, b) => {
+
+          const branchCompare =
+            String(
+              a.branchName || ""
+            )
+              .localeCompare(
+                String(
+                  b.branchName || ""
+                ),
+                "he"
+              );
+
+          if (
+            branchCompare !== 0
+          ) {
+            return branchCompare;
+          }
+
+          return String(
+            a.fullName || ""
+          )
+            .localeCompare(
+              String(
+                b.fullName || ""
+              ),
+              "he"
+            );
         }
       );
 
       console.log(
-        "Coach branch assignments synchronized:",
+        "Secure payments report loaded:",
         {
           uid,
-          branchCount:
-            coachBranchAssignments.length,
+          isAdmin:
+            isAdminUser,
+
+          authorizedBranchCount:
+            isAdminUser
+              ? "all"
+              : authorizedBranches.length,
+
+          itemCount:
+            items.length,
         }
       );
 
-      return null;
-    });
+      return {
+        items,
+      };
+    }
+  );
+
+/**
+ * ====================================================
+ * עדכון תשלום ידני – מאובטח
+ *
+ * הלקוח שולח:
+ * - traineeId
+ * - amountToAdd
+ * - paymentMethod
+ * - notes
+ *
+ * השרת:
+ * - מאמת Firebase Auth
+ * - דורש canManagePayments
+ * - מאמת שהמתאמן בתחום הסניפים של המאמן
+ * - מחשב את הסכום המצטבר והסטטוס בשרת
+ * - כותב Payment + History באותה Transaction
+ * ====================================================
+ */
+exports.updateSecureMembershipPayment =
+  functions.https.onCall(
+    async (data, context) => {
+
+      const uid =
+        String(
+          context.auth &&
+          context.auth.uid ||
+          ""
+        ).trim();
+
+      if (!uid) {
+        throw new functions.https.HttpsError(
+          "unauthenticated",
+          "User must be signed in."
+        );
+      }
+
+      const traineeId =
+        String(
+          data &&
+          data.traineeId ||
+          ""
+        ).trim();
+
+      const amountToAdd =
+        Number(
+          data &&
+          data.amountToAdd
+        );
+
+      const paymentMethod =
+        String(
+          data &&
+          data.paymentMethod ||
+          ""
+        )
+          .trim()
+          .toUpperCase();
+
+      const notes =
+        String(
+          data &&
+          data.notes ||
+          ""
+        )
+          .trim()
+          .slice(0, 3000);
+
+      if (
+        !traineeId ||
+        traineeId.length > 200 ||
+        !Number.isFinite(amountToAdd) ||
+        amountToAdd <= 0 ||
+        amountToAdd > 100000
+      ) {
+        throw new functions.https.HttpsError(
+          "invalid-argument",
+          "Invalid trainee or payment amount."
+        );
+      }
+
+      const allowedPaymentMethods =
+        new Set([
+          "CREDIT_CARD",
+          "CASH",
+          "MANUAL",
+          "BANK_TRANSFER",
+          "BIT",
+          "WEBSITE",
+        ]);
+
+      if (
+        !allowedPaymentMethods.has(
+          paymentMethod
+        )
+      ) {
+        throw new functions.https.HttpsError(
+          "invalid-argument",
+          "Unsupported payment method."
+        );
+      }
+
+      const [
+        adminSnapshot,
+        coachSnapshot,
+      ] =
+        await Promise.all([
+          db.collection("admins")
+            .doc(uid)
+            .get(),
+
+          db.collection("authorizedCoaches")
+            .doc(uid)
+            .get(),
+        ]);
+
+      const adminData =
+        adminSnapshot.exists
+          ? adminSnapshot.data() || {}
+          : {};
+
+      const coachData =
+        coachSnapshot.exists
+          ? coachSnapshot.data() || {}
+          : {};
+
+      const isAdminUser =
+        adminData.enabled === true;
+
+      const isActiveCoach =
+        coachSnapshot.exists &&
+        coachData.active === true &&
+        String(
+          coachData.role || ""
+        )
+          .trim()
+          .toLowerCase() === "coach";
+
+      const canManagePayments =
+        isAdminUser ||
+        (
+          isActiveCoach &&
+          coachData.canManagePayments === true
+        );
+
+      if (!canManagePayments) {
+        throw new functions.https.HttpsError(
+          "permission-denied",
+          "User is not allowed to manage payments."
+        );
+      }
+
+      const authorizedBranches =
+        isAdminUser
+          ? []
+          : (
+              Array.isArray(
+                coachData.authorizedBranches
+              )
+                ? coachData.authorizedBranches
+                    .map((value) =>
+                      String(value || "")
+                        .trim()
+                    )
+                    .filter(Boolean)
+                : []
+            );
+
+      const authorizedBranchKeys =
+        new Set(
+          authorizedBranches
+            .map((branch) =>
+              normalizeTrainingTargetText(
+                branch
+              )
+            )
+            .filter(Boolean)
+        );
+
+      if (
+        !isAdminUser &&
+        authorizedBranchKeys.size === 0
+      ) {
+        throw new functions.https.HttpsError(
+          "permission-denied",
+          "Coach has no authorized branches."
+        );
+      }
+
+      /*
+       * מאתרים את המשתמש האמיתי בשרת.
+       *
+       * traineeId שמגיע מהדו"ח יכול להיות:
+       * - document.id
+       * - uid
+       * - authUid
+       * - userDocId
+       */
+      const usersSnapshot =
+        await db
+          .collection("users")
+          .get();
+
+      let matchedDocument = null;
+      let matchedUser = null;
+
+      for (
+        const document
+        of usersSnapshot.docs
+      ) {
+        const user =
+          document.data() || {};
+
+        const identityKeys =
+          [
+            document.id,
+            user.uid,
+            user.authUid,
+            user.userDocId,
+            user.traineeId,
+          ]
+            .map((value) =>
+              String(value || "")
+                .trim()
+            )
+            .filter(Boolean);
+
+        if (
+          identityKeys.includes(
+            traineeId
+          )
+        ) {
+          matchedDocument =
+            document;
+
+          matchedUser =
+            user;
+
+          break;
+        }
+      }
+
+      if (
+        !matchedDocument ||
+        !matchedUser
+      ) {
+        throw new functions.https.HttpsError(
+          "not-found",
+          "Trainee was not found."
+        );
+      }
+
+      const role =
+        String(
+          matchedUser.role ||
+          matchedUser.userRole ||
+          matchedUser.userType ||
+          ""
+        )
+          .trim()
+          .toLowerCase();
+
+      const isCoachTarget =
+        role === "coach" ||
+        role === "trainer" ||
+        role === "מאמן" ||
+        matchedUser.isCoach === true;
+
+      if (isCoachTarget) {
+        throw new functions.https.HttpsError(
+          "permission-denied",
+          "Payment target is not a trainee."
+        );
+      }
+
+      const traineeBranches =
+        parseUserTargetValues(
+          matchedUser,
+          [
+            "branch",
+            "branches",
+            "branches_json",
+            "branchesCsv",
+            "selected_branches",
+            "selectedBranches",
+            "active_branch",
+            "activeBranch",
+            "branchName",
+          ]
+        );
+
+      let resolvedBranch = "";
+
+      if (isAdminUser) {
+        resolvedBranch =
+          traineeBranches[0] || "";
+      } else {
+        resolvedBranch =
+          traineeBranches.find(
+            (branch) =>
+              authorizedBranchKeys.has(
+                branch
+              )
+          ) || "";
+      }
+
+      if (
+        !isAdminUser &&
+        !resolvedBranch
+      ) {
+        throw new functions.https.HttpsError(
+          "permission-denied",
+          "Trainee is outside the coach payment scope."
+        );
+      }
+
+      function paymentCleanText(value) {
+        return String(value || "")
+          .trim();
+      }
+
+      function paymentDisplayName(user) {
+
+        const directName =
+          paymentCleanText(
+            user.fullName ||
+            user.full_name ||
+            user.displayName ||
+            user.display_name ||
+            user.name ||
+            user.traineeName ||
+            user.trainee_name
+          );
+
+        if (directName) {
+          return directName;
+        }
+
+        return [
+          paymentCleanText(
+            user.firstName ||
+            user.first_name
+          ),
+
+          paymentCleanText(
+            user.lastName ||
+            user.last_name ||
+            user.familyName ||
+            user.family_name
+          ),
+        ]
+          .filter(Boolean)
+          .join(" ")
+          .trim();
+      }
+
+      function paymentPhone(user) {
+        return paymentCleanText(
+          user.phone ||
+          user.phoneNumber ||
+          user.phone_number ||
+          user.mobile ||
+          ""
+        );
+      }
+
+      const paymentDocId =
+        String(
+          matchedUser.uid ||
+          matchedUser.authUid ||
+          matchedDocument.id
+        ).trim();
+
+      if (!paymentDocId) {
+        throw new functions.https.HttpsError(
+          "internal",
+          "Unable to resolve payment identity."
+        );
+      }
+
+      const paymentRef =
+        db.collection(
+          "membershipPayments"
+        )
+          .doc(paymentDocId);
+
+      const historyRef =
+        paymentRef
+          .collection("history")
+          .doc();
+
+      const nowMillis =
+        Date.now();
+
+      const paymentDate =
+        new Intl.DateTimeFormat(
+          "en-GB",
+          {
+            timeZone:
+              "Asia/Jerusalem",
+
+            day:
+              "2-digit",
+
+            month:
+              "2-digit",
+
+            year:
+              "numeric",
+          }
+        )
+          .format(
+            new Date(nowMillis)
+          );
+
+      const paymentYear =
+        Number(
+          new Intl.DateTimeFormat(
+            "en",
+            {
+              timeZone:
+                "Asia/Jerusalem",
+
+              year:
+                "numeric",
+            }
+          )
+            .format(
+              new Date(nowMillis)
+            )
+        );
+
+      const transactionResult =
+        await db.runTransaction(
+          async (transaction) => {
+
+            const paymentSnapshot =
+              await transaction.get(
+                paymentRef
+              );
+
+            const existingPayment =
+              paymentSnapshot.exists
+                ? paymentSnapshot.data() || {}
+                : {};
+
+            const existingPaidAmountRaw =
+              Number(
+                existingPayment.paidAmount ||
+                0
+              );
+
+            const existingPaidAmount =
+              Number.isFinite(
+                existingPaidAmountRaw
+              )
+                ? Math.max(
+                    0,
+                    existingPaidAmountRaw
+                  )
+                : 0;
+
+            const requiredAmountRaw =
+              Number(
+                existingPayment.requiredAmount ||
+                matchedUser.requiredAmount ||
+                matchedUser.membershipRequiredAmount ||
+                matchedUser.membershipFee ||
+                matchedUser.annualMembershipFee ||
+                matchedUser.feeAmount ||
+                150
+              );
+
+            const requiredAmount =
+              Number.isFinite(
+                requiredAmountRaw
+              ) &&
+              requiredAmountRaw > 0
+                ? requiredAmountRaw
+                : 150;
+
+            const newPaidAmount =
+              existingPaidAmount +
+              amountToAdd;
+
+            let status =
+              "PAID";
+
+            if (
+              newPaidAmount <= 0
+            ) {
+              status =
+                "UNPAID";
+            } else if (
+              newPaidAmount <
+              requiredAmount
+            ) {
+              status =
+                "PARTIAL";
+            }
+
+            const fullName =
+              paymentDisplayName(
+                matchedUser
+              );
+
+            const phone =
+              paymentPhone(
+                matchedUser
+              );
+
+            const paymentData = {
+              traineeId:
+                paymentDocId,
+
+              userDocId:
+                matchedDocument.id,
+
+              fullName,
+
+              branchName:
+                resolvedBranch,
+
+              phone,
+
+              requiredAmount,
+
+              paidAmount:
+                newPaidAmount,
+
+              status,
+
+              paymentMethod,
+
+              paymentDate,
+
+              paymentYear,
+
+              lastPaymentAmount:
+                amountToAdd,
+
+              notes,
+
+              updatedAt:
+                admin.firestore
+                  .FieldValue
+                  .serverTimestamp(),
+
+              updatedAtMillis:
+                nowMillis,
+
+              updatedByUid:
+                uid,
+
+              source:
+                "server_secure_payments_report",
+            };
+
+            const historyData = {
+              traineeId:
+                paymentDocId,
+
+              userDocId:
+                matchedDocument.id,
+
+              fullName,
+
+              branchName:
+                resolvedBranch,
+
+              amount:
+                amountToAdd,
+
+              paidAmountAfterUpdate:
+                newPaidAmount,
+
+              requiredAmount,
+
+              statusAfterUpdate:
+                status,
+
+              paymentMethod,
+
+              paymentDate,
+
+              paymentYear,
+
+              notes,
+
+              createdAt:
+                admin.firestore
+                  .FieldValue
+                  .serverTimestamp(),
+
+              createdAtMillis:
+                nowMillis,
+
+              createdByUid:
+                uid,
+
+              source:
+                "server_secure_payments_report_history",
+            };
+
+            transaction.set(
+              paymentRef,
+              paymentData,
+              {
+                merge: true,
+              }
+            );
+
+            transaction.set(
+              historyRef,
+              historyData
+            );
+
+            return {
+              traineeId:
+                paymentDocId,
+
+              fullName,
+
+              branchName:
+                resolvedBranch,
+
+              phone,
+
+              requiredAmount,
+
+              paidAmount:
+                newPaidAmount,
+
+              status,
+
+              paymentMethod,
+
+              paymentDate,
+
+              notes,
+            };
+          }
+        );
+
+      return {
+        success: true,
+
+        item:
+          transactionResult,
+      };
+    }
+  );
+
+/**
+ * ====================================================
+ * Progress Privacy – נתוני התקדמות מאובטחים
+ *
+ * המטרה:
+ * 1. מתאמן מקבל רק נתונים מצטברים להשוואה.
+ *    אף UID או אחוז אישי של משתמש אחר לא מוחזר ללקוח.
+ *
+ * 2. מאמן מקבל רק נתון מצטבר של המתאמנים
+ *    שנמצאים בתחום הסניפים/קבוצות המורשים שלו.
+ *
+ * 3. כל הסינון של users ו-userProgress נעשה בשרת.
+ * ====================================================
+ */
+
+async function loadValidProgressForBelt(
+  beltId
+) {
+  const cleanBeltId =
+    String(beltId || "").trim();
+
+  if (!cleanBeltId) {
+    return new Map();
+  }
+
+  const snapshot =
+    await db
+      .collection("userProgress")
+      .where(
+        "beltId",
+        "==",
+        cleanBeltId
+      )
+      .get();
+
+  const progressByUid =
+    new Map();
+
+  snapshot.docs.forEach(
+    (document) => {
+
+      const progress =
+        document.data() || {};
+
+      const uid =
+        String(
+          progress.uid || ""
+        ).trim();
+
+      const knownPercent =
+        Number(
+          progress.knownPercent
+        );
+
+      const totalCount =
+        Number(
+          progress.totalCount
+        );
+
+      const expectedDocumentId =
+        `${uid}__${cleanBeltId}`;
+
+      if (
+        !uid ||
+        document.id !== expectedDocumentId ||
+        !Number.isFinite(knownPercent) ||
+        knownPercent < 0 ||
+        knownPercent > 100 ||
+        !Number.isFinite(totalCount) ||
+        totalCount <= 0
+      ) {
+        return;
+      }
+
+      progressByUid.set(
+        uid,
+        Math.round(knownPercent)
+      );
+    }
+  );
+
+  return progressByUid;
+}
+
+/**
+ * ====================================================
+ * השוואת מתאמן מאובטחת
+ *
+ * מחזירה רק:
+ * - מספר משתמשים
+ * - ממוצע
+ * - אחוז המשתמשים שמתחת למשתמש הנוכחי
+ *
+ * לא מוחזרים:
+ * - UID של משתמש אחר
+ * - אחוז אישי של משתמש אחר
+ * ====================================================
+ */
+exports.loadSecureBeltComparison =
+  functions.https.onCall(
+    async (data, context) => {
+
+      const uid =
+        String(
+          context.auth &&
+          context.auth.uid ||
+          ""
+        ).trim();
+
+      if (!uid) {
+        throw new functions.https.HttpsError(
+          "unauthenticated",
+          "User must be signed in."
+        );
+      }
+
+      const beltId =
+        String(
+          data &&
+          data.beltId ||
+          ""
+        ).trim();
+
+      if (
+        !beltId ||
+        beltId.length > 80
+      ) {
+        throw new functions.https.HttpsError(
+          "invalid-argument",
+          "Invalid beltId."
+        );
+      }
+
+      const progressByUid =
+        await loadValidProgressForBelt(
+          beltId
+        );
+
+      const currentUserPercent =
+        progressByUid.get(uid);
+
+      /*
+       * אין משתמש נוכחי תקין בנתוני החגורה.
+       */
+      if (
+        typeof currentUserPercent !==
+        "number"
+      ) {
+        return {
+          beltId,
+          usersCount:
+            progressByUid.size,
+          userKnownPercent: 0,
+          averageKnownPercent: 0,
+          percentileAbove: 0,
+          hasEnoughData: false,
+        };
+      }
+
+      const allPercents =
+        Array.from(
+          progressByUid.values()
+        );
+
+      const otherPercents =
+        Array.from(
+          progressByUid.entries()
+        )
+          .filter(
+            ([otherUid]) =>
+              otherUid !== uid
+          )
+          .map(
+            ([, percent]) =>
+              percent
+          );
+
+      /*
+       * פרטיות:
+       *
+       * כאשר המדגם קטן מדי, ממוצע עלול לאפשר
+       * הסקה של ההתקדמות של אדם אחר.
+       *
+       * לכן השוואה מלאה מוצגת רק כאשר קיימים
+       * לפחות 5 משתמשים בסך הכול.
+       */
+      const minimumUsersForComparison =
+        5;
+
+      if (
+        allPercents.length <
+        minimumUsersForComparison
+      ) {
+        return {
+          beltId,
+          usersCount:
+            allPercents.length,
+          userKnownPercent:
+            currentUserPercent,
+          averageKnownPercent: 0,
+          percentileAbove: 0,
+          hasEnoughData: false,
+        };
+      }
+
+      const averageKnownPercent =
+        Math.max(
+          0,
+          Math.min(
+            100,
+            Math.round(
+              allPercents.reduce(
+                (sum, percent) =>
+                  sum + percent,
+                0
+              ) /
+              allPercents.length
+            )
+          )
+        );
+
+      const traineesBelowUser =
+        otherPercents.filter(
+          (percent) =>
+            percent <
+            currentUserPercent
+        ).length;
+
+      const percentileAbove =
+        otherPercents.length > 0
+          ? Math.max(
+              0,
+              Math.min(
+                100,
+                Math.round(
+                  traineesBelowUser /
+                  otherPercents.length *
+                  100
+                )
+              )
+            )
+          : 0;
+
+      return {
+        beltId,
+
+        usersCount:
+          allPercents.length,
+
+        userKnownPercent:
+          currentUserPercent,
+
+        averageKnownPercent,
+
+        percentileAbove,
+
+        hasEnoughData: true,
+      };
+    }
+  );
+
+/**
+ * ====================================================
+ * התקדמות קבוצות מאמן – מאובטח
+ *
+ * המאמן אינו מקבל:
+ * - רשימת users מלאה
+ * - UID של המתאמנים
+ * - אחוז אישי של כל מתאמן
+ *
+ * מוחזרים רק נתונים מצטברים.
+ * ====================================================
+ */
+exports.loadSecureCoachGroupsBeltProgress =
+  functions.https.onCall(
+    async (data, context) => {
+
+      const uid =
+        String(
+          context.auth &&
+          context.auth.uid ||
+          ""
+        ).trim();
+
+      if (!uid) {
+        throw new functions.https.HttpsError(
+          "unauthenticated",
+          "User must be signed in."
+        );
+      }
+
+      const beltId =
+        String(
+          data &&
+          data.beltId ||
+          ""
+        ).trim();
+
+      if (
+        !beltId ||
+        beltId.length > 80
+      ) {
+        throw new functions.https.HttpsError(
+          "invalid-argument",
+          "Invalid beltId."
+        );
+      }
+
+      const [
+        adminSnapshot,
+        coachSnapshot,
+      ] =
+        await Promise.all([
+          db.collection("admins")
+            .doc(uid)
+            .get(),
+
+          db.collection(
+            "authorizedCoaches"
+          )
+            .doc(uid)
+            .get(),
+        ]);
+
+      const adminData =
+        adminSnapshot.exists
+          ? adminSnapshot.data() || {}
+          : {};
+
+      const coachData =
+        coachSnapshot.exists
+          ? coachSnapshot.data() || {}
+          : {};
+
+      const isAdminUser =
+        adminData.enabled === true;
+
+      const isActiveCoach =
+        coachSnapshot.exists &&
+        coachData.active === true &&
+        String(
+          coachData.role || ""
+        )
+          .trim()
+          .toLowerCase() ===
+          "coach";
+
+      const canViewTrainees =
+        isAdminUser ||
+        (
+          isActiveCoach &&
+          (
+            coachData
+              .canViewTrainees ===
+              true ||
+            coachData
+              .canManageTrainees ===
+              true
+          )
+        );
+
+      if (!canViewTrainees) {
+        throw new functions.https.HttpsError(
+          "permission-denied",
+          "User is not allowed to view trainee progress."
+        );
+      }
+
+      /*
+       * מקור ההרשאה של המאמן.
+       *
+       * משתמשים אך ורק ב-authorizedCoaches,
+       * ולא בשדות שהלקוח שולח בבקשה.
+       */
+      const authorizedBranchGroups =
+        Array.isArray(
+          coachData
+            .authorizedBranchGroups
+        )
+          ? coachData
+              .authorizedBranchGroups
+              .map((value) =>
+                String(value || "")
+                  .trim()
+              )
+              .filter(Boolean)
+          : [];
+
+      /*
+       * מנרמלים כל זוג בנפרד.
+       */
+      const authorizedPairKeys =
+        new Set();
+
+      authorizedBranchGroups
+        .forEach((pair) => {
+
+          const separatorIndex =
+            pair.indexOf("||");
+
+          if (
+            separatorIndex <= 0
+          ) {
+            return;
+          }
+
+          const branch =
+            normalizeTrainingTargetText(
+              pair.substring(
+                0,
+                separatorIndex
+              )
+            );
+
+          const group =
+            normalizeTrainingTargetText(
+              pair.substring(
+                separatorIndex + 2
+              )
+            );
+
+          if (
+            branch &&
+            group
+          ) {
+            authorizedPairKeys.add(
+              `${branch}||${group}`
+            );
+          }
+        });
+
+      /*
+       * מאמן ללא זוגות מורשים אינו מקבל
+       * שום מידע על מתאמנים.
+       *
+       * Admin יכול להמשיך בלי זוגות,
+       * משום שמסך מנהל רשאי לראות נתונים כלליים.
+       */
+      if (
+        !isAdminUser &&
+        authorizedPairKeys.size === 0
+      ) {
+        return {
+          beltId,
+          groupsCount: 0,
+          totalTrainees: 0,
+          traineesWithProgress: 0,
+          averageKnownPercent: 0,
+        };
+      }
+
+      const usersSnapshot =
+        await db
+          .collection("users")
+          .get();
+
+      const traineeUids =
+        new Set();
+
+      usersSnapshot.docs
+        .forEach((document) => {
+
+          const user =
+            document.data() || {};
+
+          const role =
+            String(
+              user.role ||
+              user.userRole ||
+              user.userType ||
+              ""
+            )
+              .trim()
+              .toLowerCase();
+
+          const isCoach =
+            role === "coach" ||
+            role === "trainer" ||
+            role === "מאמן" ||
+            user.isCoach === true;
+
+          if (isCoach) {
+            return;
+          }
+
+          /*
+           * Admin:
+           * כל המשתמשים שאינם מאמנים.
+           */
+          if (isAdminUser) {
+            const traineeUid =
+              String(
+                user.uid ||
+                user.authUid ||
+                document.id ||
+                ""
+              ).trim();
+
+            if (
+              traineeUid &&
+              traineeUid !== uid
+            ) {
+              traineeUids.add(
+                traineeUid
+              );
+            }
+
+            return;
+          }
+
+          const traineeBranches =
+            parseUserTargetValues(
+              user,
+              [
+                "branch",
+                "branches",
+                "branches_json",
+                "branchesCsv",
+                "selected_branches",
+                "selectedBranches",
+                "active_branch",
+                "activeBranch",
+                "branchName",
+              ]
+            );
+
+          const traineeGroups =
+            parseUserTargetValues(
+              user,
+              [
+                "group",
+                "groups",
+                "groups_json",
+                "groupsCsv",
+                "selected_groups",
+                "selectedGroups",
+                "active_group",
+                "activeGroup",
+                "age_group",
+                "age_groups",
+                "primaryGroup",
+                "groupKey",
+              ]
+            );
+
+          const belongsToAuthorizedPair =
+            traineeBranches.some(
+              (branch) =>
+                traineeGroups.some(
+                  (group) =>
+                    authorizedPairKeys.has(
+                      `${branch}||${group}`
+                    )
+                )
+            );
+
+          if (
+            !belongsToAuthorizedPair
+          ) {
+            return;
+          }
+
+          const traineeUid =
+            String(
+              user.uid ||
+              user.authUid ||
+              document.id ||
+              ""
+            ).trim();
+
+          if (
+            traineeUid &&
+            traineeUid !== uid
+          ) {
+            traineeUids.add(
+              traineeUid
+            );
+          }
+        });
+
+      if (
+        traineeUids.size === 0
+      ) {
+        return {
+          beltId,
+
+          groupsCount:
+            isAdminUser
+              ? 0
+              : authorizedPairKeys.size,
+
+          totalTrainees: 0,
+          traineesWithProgress: 0,
+          averageKnownPercent: 0,
+        };
+      }
+
+      const progressByUid =
+        await loadValidProgressForBelt(
+          beltId
+        );
+
+      const matchedPercents =
+        [];
+
+      traineeUids.forEach(
+        (traineeUid) => {
+
+          const percent =
+            progressByUid.get(
+              traineeUid
+            );
+
+          if (
+            typeof percent ===
+            "number"
+          ) {
+            matchedPercents.push(
+              percent
+            );
+          }
+        });
+
+      const averageKnownPercent =
+        matchedPercents.length > 0
+          ? Math.max(
+              0,
+              Math.min(
+                100,
+                Math.round(
+                  matchedPercents.reduce(
+                    (sum, percent) =>
+                      sum + percent,
+                    0
+                  ) /
+                  matchedPercents.length
+                )
+              )
+            )
+          : 0;
+
+      return {
+        beltId,
+
+        groupsCount:
+          isAdminUser
+            ? 0
+            : authorizedPairKeys.size,
+
+        totalTrainees:
+          traineeUids.size,
+
+        traineesWithProgress:
+          matchedPercents.length,
+
+        averageKnownPercent,
+      };
+    }
+  );
+
+/**
+ * ====================================================
+ * טעינת מתאמני מאמן – מאובטחת
+ *
+ * הלקוח שולח:
+ * - branch
+ * - group
+ *
+ * השרת:
+ * - מאמת Firebase Auth
+ * - בודק הרשאת Admin / Coach
+ * - למאמן: מאמת branch||group מול authorizedCoaches
+ * - קורא users רק בצד השרת
+ * - מסנן ומאחד מסמכי legacy
+ * - מחזיר רק מתאמנים מהקבוצה המורשית
+ * ====================================================
+ */
+exports.loadSecureCoachTrainees =
+  functions.https.onCall(
+    async (data, context) => {
+
+      const uid =
+        String(
+          context.auth &&
+          context.auth.uid ||
+          ""
+        ).trim();
+
+      if (!uid) {
+        throw new functions.https.HttpsError(
+          "unauthenticated",
+          "User must be signed in."
+        );
+      }
+
+      const requestedBranch =
+        String(
+          data &&
+          data.branch ||
+          ""
+        ).trim();
+
+      const requestedGroup =
+        String(
+          data &&
+          data.group ||
+          ""
+        ).trim();
+
+      if (
+        !requestedBranch ||
+        !requestedGroup ||
+        requestedBranch.length > 160 ||
+        requestedGroup.length > 160
+      ) {
+        throw new functions.https.HttpsError(
+          "invalid-argument",
+          "Invalid branch or group."
+        );
+      }
+
+      const [
+        adminSnapshot,
+        coachSnapshot,
+      ] =
+        await Promise.all([
+          db.collection("admins")
+            .doc(uid)
+            .get(),
+
+          db.collection("authorizedCoaches")
+            .doc(uid)
+            .get(),
+        ]);
+
+      const adminData =
+        adminSnapshot.exists
+          ? adminSnapshot.data() || {}
+          : {};
+
+      const coachData =
+        coachSnapshot.exists
+          ? coachSnapshot.data() || {}
+          : {};
+
+      const isAdminUser =
+        adminData.enabled === true;
+
+      const isActiveCoach =
+        coachSnapshot.exists &&
+        coachData.active === true &&
+        String(
+          coachData.role || ""
+        )
+          .trim()
+          .toLowerCase() === "coach";
+
+      const canViewTrainees =
+        isAdminUser ||
+        (
+          isActiveCoach &&
+          (
+            coachData.canViewTrainees === true ||
+            coachData.canManageTrainees === true
+          )
+        );
+
+      if (!canViewTrainees) {
+        throw new functions.https.HttpsError(
+          "permission-denied",
+          "User is not allowed to view trainees."
+        );
+      }
+
+      const normalizedBranch =
+        normalizeTrainingTargetText(
+          requestedBranch
+        );
+
+      const normalizedGroup =
+        normalizeTrainingTargetText(
+          requestedGroup
+        );
+
+      /*
+       * מאמן חייב להיות מורשה לזוג המדויק
+       * branch||group.
+       */
+      if (!isAdminUser) {
+
+        const authorizedBranchGroups =
+          Array.isArray(
+            coachData.authorizedBranchGroups
+          )
+            ? coachData.authorizedBranchGroups
+            : [];
+
+        const authorizedPairKeys =
+          new Set(
+            authorizedBranchGroups
+              .map((rawPair) => {
+
+                const pair =
+                  String(rawPair || "")
+                    .trim();
+
+                const separatorIndex =
+                  pair.indexOf("||");
+
+                if (separatorIndex <= 0) {
+                  return "";
+                }
+
+                const branch =
+                  normalizeTrainingTargetText(
+                    pair.substring(
+                      0,
+                      separatorIndex
+                    )
+                  );
+
+                const group =
+                  normalizeTrainingTargetText(
+                    pair.substring(
+                      separatorIndex + 2
+                    )
+                  );
+
+                if (!branch || !group) {
+                  return "";
+                }
+
+                return `${branch}||${group}`;
+              })
+              .filter(Boolean)
+          );
+
+        const requestedPair =
+          `${normalizedBranch}||${normalizedGroup}`;
+
+        if (
+          !authorizedPairKeys.has(
+            requestedPair
+          )
+        ) {
+          throw new functions.https.HttpsError(
+            "permission-denied",
+            "Coach is not authorized for this branch and group."
+          );
+        }
+      }
+
+      function cleanCoachText(value) {
+        return String(value || "")
+          .trim();
+      }
+
+      function normalizeCoachEmail(value) {
+        return normalizeEmail(value);
+      }
+
+      function normalizeCoachPhone(value) {
+        const digits =
+          String(value || "")
+            .replace(/\D/g, "");
+
+        if (
+          digits.startsWith("00972") &&
+          digits.length >= 13
+        ) {
+          return "0" +
+            digits.substring(5);
+        }
+
+        if (
+          digits.startsWith("972") &&
+          digits.length >= 11
+        ) {
+          return "0" +
+            digits.substring(3);
+        }
+
+        if (
+          digits.length === 9 &&
+          digits.startsWith("5")
+        ) {
+          return "0" + digits;
+        }
+
+        return digits;
+      }
+
+      function traineeDisplayName(user) {
+        return cleanCoachText(
+          user.fullName ||
+          user.name ||
+          user.displayName ||
+          user.full_name ||
+          ""
+        );
+      }
+
+      function traineeEmail(user) {
+        return cleanCoachText(
+          user.email ||
+          user.userEmail ||
+          user.mail ||
+          user.gmail ||
+          ""
+        );
+      }
+
+      function traineePhone(user) {
+        return cleanCoachText(
+          user.phone ||
+          user.phoneNumber ||
+          user.mobile ||
+          user.mobilePhone ||
+          user.cellPhone ||
+          user.phone_number ||
+          ""
+        );
+      }
+
+      function traineeBelt(user) {
+        return cleanCoachText(
+          user.belt ||
+          user.currentBelt ||
+          user.current_belt ||
+          user.beltName ||
+          user.belt_name ||
+          user.currentBeltName ||
+          user.currentBeltId ||
+          user.beltId ||
+          user.belt_id ||
+          ""
+        );
+      }
+
+      function traineeSeniority(user) {
+
+        const text =
+          cleanCoachText(
+            user.seniority ||
+            user.trainingSeniority ||
+            user.training_seniority ||
+            user.yearsTraining ||
+            user.years_training ||
+            user.experience ||
+            user.trainingExperience ||
+            ""
+          );
+
+        if (text) {
+          return text;
+        }
+
+        const numeric =
+          Number(
+            user.seniorityYears ??
+            user.trainingYears ??
+            user.yearsTraining ??
+            user.years_training ??
+            user.experienceYears ??
+            user.experience_years
+          );
+
+        if (
+          Number.isFinite(numeric) &&
+          numeric > 0
+        ) {
+          return String(numeric);
+        }
+
+        return "";
+      }
+
+      function traineeAge(user) {
+
+        const directAge =
+          Number(
+            user.age ??
+            user.traineeAge ??
+            user.ageYears
+          );
+
+        if (
+          Number.isFinite(directAge) &&
+          directAge >= 1 &&
+          directAge <= 120
+        ) {
+          return Math.round(directAge);
+        }
+
+        const rawBirthDate =
+          user.birthDate ||
+          user.birth_date ||
+          user.dateOfBirth ||
+          user.dob;
+
+        if (
+          typeof rawBirthDate === "string"
+        ) {
+          const clean =
+            rawBirthDate.trim();
+
+          let birthDate = null;
+
+          if (
+            /^\d{4}-\d{2}-\d{2}$/
+              .test(clean)
+          ) {
+            birthDate =
+              new Date(
+                `${clean}T00:00:00Z`
+              );
+          } else {
+
+            const parts =
+              clean
+                .split(/[./-]/)
+                .map((part) =>
+                  Number(part)
+                );
+
+            if (
+              parts.length === 3 &&
+              parts.every(
+                Number.isFinite
+              )
+            ) {
+              const [
+                first,
+                second,
+                third,
+              ] = parts;
+
+              if (first > 1900) {
+                birthDate =
+                  new Date(
+                    Date.UTC(
+                      first,
+                      second - 1,
+                      third
+                    )
+                  );
+              } else if (
+                third > 1900
+              ) {
+                birthDate =
+                  new Date(
+                    Date.UTC(
+                      third,
+                      second - 1,
+                      first
+                    )
+                  );
+              }
+            }
+          }
+
+          if (
+            birthDate &&
+            !Number.isNaN(
+              birthDate.getTime()
+            )
+          ) {
+            const today =
+              new Date();
+
+            let age =
+              today.getUTCFullYear() -
+              birthDate.getUTCFullYear();
+
+            const monthDiff =
+              today.getUTCMonth() -
+              birthDate.getUTCMonth();
+
+            if (
+              monthDiff < 0 ||
+              (
+                monthDiff === 0 &&
+                today.getUTCDate() <
+                birthDate.getUTCDate()
+              )
+            ) {
+              age--;
+            }
+
+            if (
+              age >= 0 &&
+              age <= 120
+            ) {
+              return age;
+            }
+          }
+        }
+
+        const year =
+          Number(
+            user.birthYear ??
+            user.birth_year
+          );
+
+        const month =
+          Number(
+            user.birthMonth ??
+            user.birth_month
+          );
+
+        const day =
+          Number(
+            user.birthDay ??
+            user.birth_day
+          );
+
+        if (
+          Number.isFinite(year) &&
+          Number.isFinite(month) &&
+          Number.isFinite(day) &&
+          year >= 1900 &&
+          month >= 1 &&
+          month <= 12 &&
+          day >= 1 &&
+          day <= 31
+        ) {
+          const today =
+            new Date();
+
+          let age =
+            today.getUTCFullYear() -
+            year;
+
+          const currentMonth =
+            today.getUTCMonth() + 1;
+
+          const currentDay =
+            today.getUTCDate();
+
+          if (
+            currentMonth < month ||
+            (
+              currentMonth === month &&
+              currentDay < day
+            )
+          ) {
+            age--;
+          }
+
+          if (
+            age >= 0 &&
+            age <= 120
+          ) {
+            return age;
+          }
+        }
+
+        return 0;
+      }
+
+      function cleanStringMap(rawValue) {
+
+        if (
+          !rawValue ||
+          typeof rawValue !== "object" ||
+          Array.isArray(rawValue)
+        ) {
+          return {};
+        }
+
+        const result = {};
+
+        Object.entries(rawValue)
+          .forEach(
+            ([key, value]) => {
+
+              const cleanKey =
+                cleanCoachText(key);
+
+              const cleanValue =
+                cleanCoachText(value);
+
+              if (
+                cleanKey &&
+                cleanValue
+              ) {
+                result[cleanKey] =
+                  cleanValue;
+              }
+            }
+          );
+
+        return result;
+      }
+
+      function cleanCoachDateMap(rawValue) {
+
+        if (
+          !rawValue ||
+          typeof rawValue !== "object" ||
+          Array.isArray(rawValue)
+        ) {
+          return {};
+        }
+
+        const result = {};
+
+        Object.entries(rawValue)
+          .forEach(
+            ([key, value]) => {
+
+              const cleanKey =
+                cleanCoachText(key);
+
+              if (!cleanKey) {
+                return;
+              }
+
+              if (
+                typeof value === "string"
+              ) {
+                result[cleanKey] = {
+                  date:
+                    cleanCoachText(
+                      value
+                    ),
+                  description: "",
+                };
+
+                return;
+              }
+
+              if (
+                value &&
+                typeof value === "object"
+              ) {
+                result[cleanKey] = {
+                  date:
+                    cleanCoachText(
+                      value.date
+                    ),
+                  description:
+                    cleanCoachText(
+                      value.description
+                    ),
+                };
+              }
+            }
+          );
+
+        return result;
+      }
+
+      /*
+       * כל הקריאה הרחבה נשארת בתוך השרת בלבד.
+       */
+      const usersSnapshot =
+        await db
+          .collection("users")
+          .get();
+
+      const matchedDocuments =
+        usersSnapshot.docs
+          .map((document) => ({
+            id: document.id,
+            user:
+              document.data() || {},
+          }))
+          .filter(
+            ({ user }) => {
+
+              const role =
+                cleanCoachText(
+                  user.role ||
+                  user.userRole ||
+                  user.userType ||
+                  ""
+                )
+                  .toLowerCase();
+
+              const isCoach =
+                role === "coach" ||
+                role === "trainer" ||
+                role === "מאמן" ||
+                user.isCoach === true;
+
+              if (isCoach) {
+                return false;
+              }
+
+              const branches =
+                parseUserTargetValues(
+                  user,
+                  [
+                    "branch",
+                    "branches",
+                    "branches_json",
+                    "branchesCsv",
+                    "selected_branches",
+                    "selectedBranches",
+                    "active_branch",
+                    "activeBranch",
+                    "branchName",
+                  ]
+                );
+
+              const groups =
+                parseUserTargetValues(
+                  user,
+                  [
+                    "group",
+                    "groups",
+                    "groups_json",
+                    "groupsCsv",
+                    "selected_groups",
+                    "selectedGroups",
+                    "active_group",
+                    "activeGroup",
+                    "age_group",
+                    "age_groups",
+                    "primaryGroup",
+                    "groupKey",
+                  ]
+                );
+
+              return (
+                branches.includes(
+                  normalizedBranch
+                ) &&
+                groups.includes(
+                  normalizedGroup
+                )
+              );
+            }
+          );
+
+      /*
+       * מאחדים רשומות כפולות.
+       */
+      const identityGroups =
+        [];
+
+      matchedDocuments.forEach(
+        (entry) => {
+
+          const emailKey =
+            normalizeCoachEmail(
+              traineeEmail(
+                entry.user
+              )
+            );
+
+          const phoneKey =
+            normalizeCoachPhone(
+              traineePhone(
+                entry.user
+              )
+            );
+
+          const nameKey =
+            normalizeTrainingTargetText(
+              traineeDisplayName(
+                entry.user
+              )
+            );
+
+          const matchingGroup =
+            identityGroups
+              .find((group) =>
+                group.some(
+                  (existing) => {
+
+                    const existingEmail =
+                      normalizeCoachEmail(
+                        traineeEmail(
+                          existing.user
+                        )
+                      );
+
+                    const existingPhone =
+                      normalizeCoachPhone(
+                        traineePhone(
+                          existing.user
+                        )
+                      );
+
+                    const existingName =
+                      normalizeTrainingTargetText(
+                        traineeDisplayName(
+                          existing.user
+                        )
+                      );
+
+                    if (
+                      emailKey &&
+                      existingEmail &&
+                      emailKey ===
+                      existingEmail
+                    ) {
+                      return true;
+                    }
+
+                    if (
+                      phoneKey &&
+                      existingPhone &&
+                      phoneKey ===
+                      existingPhone
+                    ) {
+                      return true;
+                    }
+
+                    return (
+                      !emailKey &&
+                      !phoneKey &&
+                      !existingEmail &&
+                      !existingPhone &&
+                      nameKey &&
+                      nameKey ===
+                      existingName
+                    );
+                  }
+                )
+              );
+
+          if (matchingGroup) {
+            matchingGroup.push(
+              entry
+            );
+          } else {
+            identityGroups.push([
+              entry,
+            ]);
+          }
+        }
+      );
+
+      const items =
+        identityGroups
+          .map((entries) => {
+
+            const primary =
+              entries
+                .slice()
+                .sort(
+                  (a, b) => {
+
+                    const aScore =
+                      (
+                        traineeBelt(a.user)
+                          ? 4
+                          : 0
+                      ) +
+                      (
+                        traineeAge(a.user) > 0
+                          ? 3
+                          : 0
+                      ) +
+                      (
+                        traineeSeniority(
+                          a.user
+                        )
+                          ? 2
+                          : 0
+                      ) +
+                      (
+                        traineeEmail(a.user)
+                          ? 1
+                          : 0
+                      ) +
+                      (
+                        traineePhone(a.user)
+                          ? 1
+                          : 0
+                      );
+
+                    const bScore =
+                      (
+                        traineeBelt(b.user)
+                          ? 4
+                          : 0
+                      ) +
+                      (
+                        traineeAge(b.user) > 0
+                          ? 3
+                          : 0
+                      ) +
+                      (
+                        traineeSeniority(
+                          b.user
+                        )
+                          ? 2
+                          : 0
+                      ) +
+                      (
+                        traineeEmail(b.user)
+                          ? 1
+                          : 0
+                      ) +
+                      (
+                        traineePhone(b.user)
+                          ? 1
+                          : 0
+                      );
+
+                    return bScore - aScore;
+                  }
+                )[0];
+
+            if (!primary) {
+              return null;
+            }
+
+            const fullName =
+              entries
+                .map(({ user }) =>
+                  traineeDisplayName(user)
+                )
+                .find(Boolean) ||
+              "";
+
+            if (!fullName) {
+              return null;
+            }
+
+            const email =
+              entries
+                .map(({ user }) =>
+                  traineeEmail(user)
+                )
+                .find(Boolean) ||
+              "";
+
+            const phone =
+              entries
+                .map(({ user }) =>
+                  traineePhone(user)
+                )
+                .find(Boolean) ||
+              "";
+
+            const belt =
+              entries
+                .map(({ user }) =>
+                  traineeBelt(user)
+                )
+                .filter(Boolean)
+                .sort(
+                  (a, b) =>
+                    b.length -
+                    a.length
+                )[0] ||
+              "";
+
+            const age =
+              entries
+                .map(({ user }) =>
+                  traineeAge(user)
+                )
+                .find(
+                  (value) =>
+                    value > 0
+                ) ||
+              0;
+
+            const seniority =
+              entries
+                .map(({ user }) =>
+                  traineeSeniority(user)
+                )
+                .find(Boolean) ||
+              "";
+
+            const beltAwardDates =
+              {};
+
+            const beltAwardDescriptions =
+              {};
+
+            const seminarDates =
+              {};
+
+            const campDates =
+              {};
+
+            const certificationDates =
+              {};
+
+            let coachNotes = "";
+
+            entries.forEach(
+              ({ user }) => {
+
+                Object.assign(
+                  beltAwardDates,
+                  cleanStringMap(
+                    user.beltAwardDates
+                  )
+                );
+
+                Object.assign(
+                  beltAwardDescriptions,
+                  cleanStringMap(
+                    user.beltAwardDescriptions
+                  )
+                );
+
+                Object.assign(
+                  seminarDates,
+                  cleanCoachDateMap(
+                    user.seminarDates
+                  )
+                );
+
+                Object.assign(
+                  campDates,
+                  cleanCoachDateMap(
+                    user.campDates
+                  )
+                );
+
+                Object.assign(
+                  certificationDates,
+                  cleanCoachDateMap(
+                    user.certificationDates
+                  )
+                );
+
+                if (!coachNotes) {
+                  coachNotes =
+                    cleanCoachText(
+                      user.coachNotes
+                    );
+                }
+              }
+            );
+
+            return {
+              userDocId:
+                primary.id,
+
+              fullName,
+
+              email,
+
+              phone,
+
+              age,
+
+              belt,
+
+              seniority,
+
+              branch:
+                requestedBranch,
+
+              group:
+                requestedGroup,
+
+              beltAwardDates,
+
+              beltAwardDescriptions,
+
+              coachNotes,
+
+              seminarDates,
+
+              campDates,
+
+              certificationDates,
+            };
+          })
+          .filter(Boolean)
+          .sort(
+            (a, b) =>
+              String(
+                a.fullName || ""
+              )
+                .localeCompare(
+                  String(
+                    b.fullName || ""
+                  ),
+                  "he"
+                )
+          );
+
+      return {
+        branch:
+          requestedBranch,
+
+        group:
+          requestedGroup,
+
+        items,
+      };
+    }
+  );
+
+/**
+ * ====================================================
+ * עדכון נתוני מתאמן ע"י מאמן – מאובטח
+ *
+ * מותר לעדכן רק שדות מקצועיים מוגדרים מראש.
+ * המאמן חייב:
+ * - להיות מאמן פעיל
+ * - להחזיק canManageTrainees
+ * - להיות מורשה לזוג branch||group
+ * - והמתאמן עצמו חייב להשתייך לזוג הזה
+ * ====================================================
+ */
+exports.updateSecureCoachTrainee =
+  functions.https.onCall(
+    async (data, context) => {
+
+      const coachUid =
+        String(
+          context.auth &&
+          context.auth.uid ||
+          ""
+        ).trim();
+
+      if (!coachUid) {
+        throw new functions.https.HttpsError(
+          "unauthenticated",
+          "User must be signed in."
+        );
+      }
+
+      const traineeDocId =
+        String(
+          data &&
+          data.traineeDocId ||
+          ""
+        ).trim();
+
+      const branch =
+        String(
+          data &&
+          data.branch ||
+          ""
+        ).trim();
+
+      const group =
+        String(
+          data &&
+          data.group ||
+          ""
+        ).trim();
+
+      const updateType =
+        String(
+          data &&
+          data.updateType ||
+          ""
+        )
+          .trim()
+          .toLowerCase();
+
+      if (
+        !traineeDocId ||
+        !branch ||
+        !group ||
+        traineeDocId.length > 200 ||
+        branch.length > 160 ||
+        group.length > 160
+      ) {
+        throw new functions.https.HttpsError(
+          "invalid-argument",
+          "Invalid trainee, branch or group."
+        );
+      }
+
+      const coachSnapshot =
+        await db
+          .collection("authorizedCoaches")
+          .doc(coachUid)
+          .get();
+
+      if (!coachSnapshot.exists) {
+        throw new functions.https.HttpsError(
+          "permission-denied",
+          "Coach authorization was not found."
+        );
+      }
+
+      const coachData =
+        coachSnapshot.data() || {};
+
+      const isActiveCoach =
+        coachData.active === true &&
+        String(
+          coachData.role || ""
+        )
+          .trim()
+          .toLowerCase() === "coach";
+
+      if (
+        !isActiveCoach ||
+        coachData.canManageTrainees !== true
+      ) {
+        throw new functions.https.HttpsError(
+          "permission-denied",
+          "Coach is not allowed to manage trainees."
+        );
+      }
+
+      const normalizedBranch =
+        normalizeTrainingTargetText(
+          branch
+        );
+
+      const normalizedGroup =
+        normalizeTrainingTargetText(
+          group
+        );
+
+      const requestedPair =
+        `${normalizedBranch}||${normalizedGroup}`;
+
+      const authorizedPairKeys =
+        new Set(
+          (
+            Array.isArray(
+              coachData.authorizedBranchGroups
+            )
+              ? coachData.authorizedBranchGroups
+              : []
+          )
+            .map((rawPair) => {
+
+              const pair =
+                String(rawPair || "")
+                  .trim();
+
+              const separatorIndex =
+                pair.indexOf("||");
+
+              if (separatorIndex <= 0) {
+                return "";
+              }
+
+              const pairBranch =
+                normalizeTrainingTargetText(
+                  pair.substring(
+                    0,
+                    separatorIndex
+                  )
+                );
+
+              const pairGroup =
+                normalizeTrainingTargetText(
+                  pair.substring(
+                    separatorIndex + 2
+                  )
+                );
+
+              if (
+                !pairBranch ||
+                !pairGroup
+              ) {
+                return "";
+              }
+
+              return `${pairBranch}||${pairGroup}`;
+            })
+            .filter(Boolean)
+        );
+
+      if (
+        !authorizedPairKeys.has(
+          requestedPair
+        )
+      ) {
+        throw new functions.https.HttpsError(
+          "permission-denied",
+          "Coach is not authorized for this branch and group."
+        );
+      }
+
+      const traineeRef =
+        db
+          .collection("users")
+          .doc(traineeDocId);
+
+      const traineeSnapshot =
+        await traineeRef.get();
+
+      if (!traineeSnapshot.exists) {
+        throw new functions.https.HttpsError(
+          "not-found",
+          "Trainee was not found."
+        );
+      }
+
+      const trainee =
+        traineeSnapshot.data() || {};
+
+      const traineeBranches =
+        parseUserTargetValues(
+          trainee,
+          [
+            "branch",
+            "branches",
+            "branches_json",
+            "branchesCsv",
+            "selected_branches",
+            "selectedBranches",
+            "active_branch",
+            "activeBranch",
+            "branchName",
+          ]
+        );
+
+      const traineeGroups =
+        parseUserTargetValues(
+          trainee,
+          [
+            "group",
+            "groups",
+            "groups_json",
+            "groupsCsv",
+            "selected_groups",
+            "selectedGroups",
+            "active_group",
+            "activeGroup",
+            "age_group",
+            "age_groups",
+            "primaryGroup",
+            "groupKey",
+          ]
+        );
+
+      const traineeBelongsToPair =
+        traineeBranches.includes(
+          normalizedBranch
+        ) &&
+        traineeGroups.includes(
+          normalizedGroup
+        );
+
+      if (!traineeBelongsToPair) {
+        throw new functions.https.HttpsError(
+          "permission-denied",
+          "Trainee is outside the coach authorization scope."
+        );
+      }
+
+      const nowMillis =
+        Date.now();
+
+      if (
+        updateType === "coach_notes"
+      ) {
+        const note =
+          String(
+            data &&
+            data.note ||
+            ""
+          )
+            .trim()
+            .slice(0, 5000);
+
+        await traineeRef.update({
+          coachNotes:
+            note,
+
+          coachNotesUpdatedAtMillis:
+            nowMillis,
+
+          coachNotesUpdatedBy:
+            coachUid,
+        });
+
+        return {
+          success: true,
+        };
+      }
+
+      const allowedMapFields =
+        new Set([
+          "beltAwardDates",
+          "beltAwardDescriptions",
+          "seminarDates",
+          "campDates",
+          "certificationDates",
+        ]);
+
+      if (
+        updateType === "map_update"
+      ) {
+        const fieldName =
+          String(
+            data &&
+            data.fieldName ||
+            ""
+          ).trim();
+
+        if (
+          !allowedMapFields.has(
+            fieldName
+          )
+        ) {
+          throw new functions.https.HttpsError(
+            "invalid-argument",
+            "Unsupported trainee field."
+          );
+        }
+
+        const rawEntries =
+          data &&
+          data.entries;
+
+        if (
+          !rawEntries ||
+          typeof rawEntries !== "object" ||
+          Array.isArray(rawEntries)
+        ) {
+          throw new functions.https.HttpsError(
+            "invalid-argument",
+            "Invalid entries."
+          );
+        }
+
+        const cleanEntries = {};
+
+        Object.entries(rawEntries)
+          .slice(0, 100)
+          .forEach(
+            ([rawKey, rawValue]) => {
+
+              const key =
+                String(rawKey || "")
+                  .trim()
+                  .slice(0, 160);
+
+              if (!key) {
+                return;
+              }
+
+              if (
+                fieldName ===
+                "beltAwardDates" ||
+                fieldName ===
+                "beltAwardDescriptions"
+              ) {
+                const value =
+                  String(rawValue || "")
+                    .trim()
+                    .slice(0, 2000);
+
+                if (value) {
+                  cleanEntries[key] =
+                    value;
+                }
+
+                return;
+              }
+
+              if (
+                rawValue &&
+                typeof rawValue === "object" &&
+                !Array.isArray(rawValue)
+              ) {
+                cleanEntries[key] = {
+                  date:
+                    String(
+                      rawValue.date || ""
+                    )
+                      .trim()
+                      .slice(0, 100),
+
+                  description:
+                    String(
+                      rawValue.description || ""
+                    )
+                      .trim()
+                      .slice(0, 3000),
+                };
+              }
+            }
+          );
+
+        if (
+          Object.keys(cleanEntries)
+            .length === 0
+        ) {
+          return {
+            success: true,
+          };
+        }
+
+        const updates = {};
+
+        Object.entries(cleanEntries)
+          .forEach(
+            ([key, value]) => {
+              updates[
+                `${fieldName}.${key}`
+              ] = value;
+            }
+          );
+
+        updates.coachProfessionalUpdatedAtMillis =
+          nowMillis;
+
+        updates.coachProfessionalUpdatedBy =
+          coachUid;
+
+        await traineeRef.update(
+          updates
+        );
+
+        return {
+          success: true,
+        };
+      }
+
+      throw new functions.https.HttpsError(
+        "invalid-argument",
+        "Unsupported update type."
+      );
+    }
+  );
+
+/**
+ * ====================================================
+ * טעינת נמענים לשידור מאמן – מאובטחת
+ *
+ * הלקוח שולח:
+ * - branch
+ * - groups
+ *
+ * השרת:
+ * - מאמת Firebase Auth
+ * - דורש canSendBroadcasts
+ * - מאמת branch||group מול authorizedCoaches
+ * - קורא users רק בצד השרת
+ * - מחזיר רק נמענים מורשים
+ * ====================================================
+ */
+exports.loadSecureCoachBroadcastRecipients =
+  functions.https.onCall(
+    async (data, context) => {
+
+      const coachUid =
+        String(
+          context.auth &&
+          context.auth.uid ||
+          ""
+        ).trim();
+
+      if (!coachUid) {
+        throw new functions.https.HttpsError(
+          "unauthenticated",
+          "User must be signed in."
+        );
+      }
+
+      const requestedBranch =
+        String(
+          data &&
+          data.branch ||
+          ""
+        ).trim();
+
+      const requestedGroups =
+        Array.isArray(
+          data &&
+          data.groups
+        )
+          ? data.groups
+              .map((value) =>
+                String(value || "")
+                  .trim()
+              )
+              .filter(Boolean)
+              .slice(0, 50)
+          : [];
+
+      if (
+        !requestedBranch ||
+        requestedBranch.length > 160
+      ) {
+        throw new functions.https.HttpsError(
+          "invalid-argument",
+          "Invalid branch."
+        );
+      }
+
+      const [
+        adminSnapshot,
+        coachSnapshot,
+      ] =
+        await Promise.all([
+          db.collection("admins")
+            .doc(coachUid)
+            .get(),
+
+          db.collection("authorizedCoaches")
+            .doc(coachUid)
+            .get(),
+        ]);
+
+      const adminData =
+        adminSnapshot.exists
+          ? adminSnapshot.data() || {}
+          : {};
+
+      const coachData =
+        coachSnapshot.exists
+          ? coachSnapshot.data() || {}
+          : {};
+
+      const isAdminUser =
+        adminData.enabled === true;
+
+      const isActiveCoach =
+        coachSnapshot.exists &&
+        coachData.active === true &&
+        String(
+          coachData.role || ""
+        )
+          .trim()
+          .toLowerCase() === "coach";
+
+      const canSendBroadcasts =
+        isAdminUser ||
+        (
+          isActiveCoach &&
+          coachData.canSendBroadcasts === true
+        );
+
+      if (!canSendBroadcasts) {
+        throw new functions.https.HttpsError(
+          "permission-denied",
+          "User is not allowed to send coach broadcasts."
+        );
+      }
+
+      const normalizedBranch =
+        normalizeTrainingTargetText(
+          requestedBranch
+        );
+
+      const requestedGroupKeys =
+        new Set(
+          requestedGroups
+            .map((group) =>
+              normalizeTrainingTargetText(
+                group
+              )
+            )
+            .filter(Boolean)
+        );
+
+      /*
+       * זוגות branch||group שהמאמן מורשה אליהם.
+       */
+      const authorizedGroupsForBranch =
+        new Map();
+
+      if (!isAdminUser) {
+
+        const authorizedBranchGroups =
+          Array.isArray(
+            coachData.authorizedBranchGroups
+          )
+            ? coachData.authorizedBranchGroups
+            : [];
+
+        authorizedBranchGroups
+          .forEach((rawPair) => {
+
+            const pair =
+              String(rawPair || "")
+                .trim();
+
+            const separatorIndex =
+              pair.indexOf("||");
+
+            if (separatorIndex <= 0) {
+              return;
+            }
+
+            const pairBranchRaw =
+              pair.substring(
+                0,
+                separatorIndex
+              ).trim();
+
+            const pairGroupRaw =
+              pair.substring(
+                separatorIndex + 2
+              ).trim();
+
+            const pairBranch =
+              normalizeTrainingTargetText(
+                pairBranchRaw
+              );
+
+            const pairGroup =
+              normalizeTrainingTargetText(
+                pairGroupRaw
+              );
+
+            if (
+              pairBranch !== normalizedBranch ||
+              !pairGroup
+            ) {
+              return;
+            }
+
+            authorizedGroupsForBranch.set(
+              pairGroup,
+              pairGroupRaw
+            );
+          });
+
+        if (
+          authorizedGroupsForBranch.size === 0
+        ) {
+          throw new functions.https.HttpsError(
+            "permission-denied",
+            "Coach is not authorized for this branch."
+          );
+        }
+
+        /*
+         * אם הלקוח ביקש קבוצות מסוימות,
+         * כל אחת מהן חייבת להיות מורשית.
+         */
+        for (
+          const requestedGroupKey
+          of requestedGroupKeys
+        ) {
+          if (
+            !authorizedGroupsForBranch.has(
+              requestedGroupKey
+            )
+          ) {
+            throw new functions.https.HttpsError(
+              "permission-denied",
+              "Coach is not authorized for one of the requested groups."
+            );
+          }
+        }
+      }
+
+      const usersSnapshot =
+        await db
+          .collection("users")
+          .get();
+
+      const branchUsers = [];
+
+      usersSnapshot.docs
+        .forEach((document) => {
+
+          const user =
+            document.data() || {};
+
+          const role =
+            String(
+              user.role ||
+              user.userRole ||
+              user.user_role ||
+              user.userType ||
+              user.type ||
+              ""
+            )
+              .trim()
+              .toLowerCase();
+
+          const isCoach =
+            role === "coach" ||
+            role === "trainer" ||
+            role === "מאמן" ||
+            user.isCoach === true;
+
+          if (isCoach) {
+            return;
+          }
+
+          const status =
+            String(
+              user.status ||
+              user.active ||
+              ""
+            )
+              .trim()
+              .toLowerCase();
+
+          const isActive =
+            user.isActive !== false &&
+            status !== "inactive" &&
+            status !== "disabled" &&
+            status !== "blocked" &&
+            status !== "לא פעיל";
+
+          if (!isActive) {
+            return;
+          }
+
+          const branches =
+            parseUserTargetValues(
+              user,
+              [
+                "branch",
+                "branches",
+                "branches_json",
+                "branchesCsv",
+                "selected_branches",
+                "selectedBranches",
+                "active_branch",
+                "activeBranch",
+                "branchName",
+              ]
+            );
+
+          if (
+            !branches.includes(
+              normalizedBranch
+            )
+          ) {
+            return;
+          }
+
+          const groups =
+            parseUserTargetValues(
+              user,
+              [
+                "group",
+                "groups",
+                "groups_json",
+                "groupsCsv",
+                "selected_groups",
+                "selectedGroups",
+                "active_group",
+                "activeGroup",
+                "age_group",
+                "age_groups",
+                "primaryGroup",
+                "groupKey",
+              ]
+            );
+
+          branchUsers.push({
+            document,
+            user,
+            groups,
+          });
+        });
+
+      /*
+       * Admin יכול לגלות קבוצות בפועל מהמשתמשים.
+       * אצל Coach הרשימה מגיעה רק מההרשאה המאובטחת.
+       */
+      if (isAdminUser) {
+        branchUsers.forEach(
+          ({ groups }) => {
+            groups.forEach((group) => {
+              if (
+                group &&
+                !authorizedGroupsForBranch.has(
+                  group
+                )
+              ) {
+                authorizedGroupsForBranch.set(
+                  group,
+                  group
+                );
+              }
+            });
+          }
+        );
+      }
+
+      const allowedGroupKeys =
+        new Set(
+          authorizedGroupsForBranch.keys()
+        );
+
+      /*
+       * אם נבחרו קבוצות – רק הן.
+       * אם לא נבחרה קבוצה – כל הקבוצות המורשות בסניף.
+       */
+      const effectiveGroupKeys =
+        requestedGroupKeys.size > 0
+          ? requestedGroupKeys
+          : allowedGroupKeys;
+
+      const groupCounts = {};
+
+      allowedGroupKeys.forEach(
+        (groupKey) => {
+          groupCounts[
+            authorizedGroupsForBranch.get(
+              groupKey
+            ) || groupKey
+          ] = 0;
+        }
+      );
+
+      const recipients = [];
+
+      branchUsers.forEach(
+        ({
+          document,
+          user,
+          groups,
+        }) => {
+
+          const matchedAllowedGroups =
+            groups.filter(
+              (group) =>
+                allowedGroupKeys.has(group)
+            );
+
+          matchedAllowedGroups
+            .forEach((group) => {
+
+              const displayGroup =
+                authorizedGroupsForBranch.get(
+                  group
+                ) || group;
+
+              groupCounts[displayGroup] =
+                (
+                  groupCounts[displayGroup] ||
+                  0
+                ) + 1;
+            });
+
+          const belongsToRequestedScope =
+            matchedAllowedGroups.some(
+              (group) =>
+                effectiveGroupKeys.has(
+                  group
+                )
+            );
+
+          if (!belongsToRequestedScope) {
+            return;
+          }
+
+          const targetUid =
+            String(
+              user.uid ||
+              user.authUid ||
+              document.id ||
+              ""
+            ).trim();
+
+          if (
+            !targetUid ||
+            targetUid === coachUid
+          ) {
+            return;
+          }
+
+          const fullName =
+            String(
+              user.fullName ||
+              user.name ||
+              user.displayName ||
+              user.full_name ||
+              ""
+            ).trim();
+
+          const phone =
+            String(
+              user.phone ||
+              user.phoneNumber ||
+              user.phone_number ||
+              user.mobile ||
+              user.mobilePhone ||
+              user.cellPhone ||
+              ""
+            ).trim();
+
+          const email =
+            normalizeEmail(
+              user.email ||
+              user.emailLower ||
+              user.userEmail ||
+              user.user_email ||
+              ""
+            );
+
+          recipients.push({
+            uid:
+              targetUid,
+
+            userDocId:
+              document.id,
+
+            name:
+              fullName,
+
+            phone,
+
+            email,
+
+            groups:
+              matchedAllowedGroups
+                .map(
+                  (group) =>
+                    authorizedGroupsForBranch.get(
+                      group
+                    ) || group
+                )
+                .filter(Boolean),
+          });
+        }
+      );
+
+      /*
+       * מניעת כפילויות.
+       */
+      const uniqueRecipients =
+        Array.from(
+          recipients.reduce(
+            (map, recipient) => {
+
+              const key =
+                recipient.uid ||
+                recipient.userDocId;
+
+              if (
+                key &&
+                !map.has(key)
+              ) {
+                map.set(
+                  key,
+                  recipient
+                );
+              }
+
+              return map;
+            },
+            new Map()
+          ).values()
+        )
+          .sort(
+            (a, b) =>
+              String(a.name || "")
+                .localeCompare(
+                  String(b.name || ""),
+                  "he"
+                )
+          );
+
+      const availableGroups =
+        Array.from(
+          authorizedGroupsForBranch.values()
+        )
+          .filter(Boolean)
+          .sort(
+            (a, b) =>
+              String(a)
+                .localeCompare(
+                  String(b),
+                  "he"
+                )
+          );
+
+      return {
+        branch:
+          requestedBranch,
+
+        availableGroups,
+
+        groupCounts,
+
+        recipients:
+          uniqueRecipients,
+      };
+    }
+  );
+
+/**
+ * ====================================================
+ * יצירת שידור מאמן – מאובטחת
+ *
+ * הלקוח שולח:
+ * - region
+ * - branch
+ * - groups
+ * - message
+ * - targetUids
+ *
+ * השרת:
+ * - מאמת Firebase Auth
+ * - דורש canSendBroadcasts
+ * - מאמת branch||group מול authorizedCoaches
+ * - מאמת מחדש כל UID שנבחר
+ * - ורק אז יוצר coachBroadcasts/{id}
+ * ====================================================
+ */
+exports.createSecureCoachBroadcast =
+  functions.https.onCall(
+    async (data, context) => {
+
+      const coachUid =
+        String(
+          context.auth &&
+          context.auth.uid ||
+          ""
+        ).trim();
+
+      if (!coachUid) {
+        throw new functions.https.HttpsError(
+          "unauthenticated",
+          "User must be signed in."
+        );
+      }
+
+      const region =
+        String(
+          data &&
+          data.region ||
+          ""
+        )
+          .trim()
+          .slice(0, 160);
+
+      const branch =
+        String(
+          data &&
+          data.branch ||
+          ""
+        )
+          .trim()
+          .slice(0, 160);
+
+      const message =
+        String(
+          data &&
+          data.message ||
+          ""
+        )
+          .trim()
+          .slice(0, 5000);
+
+      const requestedGroups =
+        Array.isArray(
+          data &&
+          data.groups
+        )
+          ? [
+              ...new Set(
+                data.groups
+                  .map((value) =>
+                    String(value || "")
+                      .trim()
+                      .slice(0, 160)
+                  )
+                  .filter(Boolean)
+              ),
+            ].slice(0, 50)
+          : [];
+
+      const requestedTargetUids =
+        Array.isArray(
+          data &&
+          data.targetUids
+        )
+          ? [
+              ...new Set(
+                data.targetUids
+                  .map((value) =>
+                    String(value || "")
+                      .trim()
+                      .slice(0, 200)
+                  )
+                  .filter(Boolean)
+              ),
+            ].slice(0, 500)
+          : [];
+
+      if (
+        !branch ||
+        !message ||
+        requestedTargetUids.length === 0
+      ) {
+        throw new functions.https.HttpsError(
+          "invalid-argument",
+          "Missing branch, message or recipients."
+        );
+      }
+
+      const [
+        adminSnapshot,
+        coachSnapshot,
+      ] =
+        await Promise.all([
+          db.collection("admins")
+            .doc(coachUid)
+            .get(),
+
+          db.collection("authorizedCoaches")
+            .doc(coachUid)
+            .get(),
+        ]);
+
+      const adminData =
+        adminSnapshot.exists
+          ? adminSnapshot.data() || {}
+          : {};
+
+      const coachData =
+        coachSnapshot.exists
+          ? coachSnapshot.data() || {}
+          : {};
+
+      const isAdminUser =
+        adminData.enabled === true;
+
+      const isActiveCoach =
+        coachSnapshot.exists &&
+        coachData.active === true &&
+        String(
+          coachData.role || ""
+        )
+          .trim()
+          .toLowerCase() === "coach";
+
+      const canSendBroadcasts =
+        isAdminUser ||
+        (
+          isActiveCoach &&
+          coachData.canSendBroadcasts === true
+        );
+
+      if (!canSendBroadcasts) {
+        throw new functions.https.HttpsError(
+          "permission-denied",
+          "User is not allowed to send coach broadcasts."
+        );
+      }
+
+      const normalizedBranch =
+        normalizeTrainingTargetText(
+          branch
+        );
+
+      const requestedGroupKeys =
+        new Set(
+          requestedGroups
+            .map((group) =>
+              normalizeTrainingTargetText(
+                group
+              )
+            )
+            .filter(Boolean)
+        );
+
+      /*
+       * קבוצות שהמאמן באמת מורשה אליהן
+       * בסניף שנבחר.
+       */
+      const authorizedGroupKeys =
+        new Set();
+
+      if (!isAdminUser) {
+
+        const authorizedBranchGroups =
+          Array.isArray(
+            coachData.authorizedBranchGroups
+          )
+            ? coachData.authorizedBranchGroups
+            : [];
+
+        authorizedBranchGroups
+          .forEach((rawPair) => {
+
+            const pair =
+              String(rawPair || "")
+                .trim();
+
+            const separatorIndex =
+              pair.indexOf("||");
+
+            if (separatorIndex <= 0) {
+              return;
+            }
+
+            const pairBranch =
+              normalizeTrainingTargetText(
+                pair.substring(
+                  0,
+                  separatorIndex
+                )
+              );
+
+            const pairGroup =
+              normalizeTrainingTargetText(
+                pair.substring(
+                  separatorIndex + 2
+                )
+              );
+
+            if (
+              pairBranch === normalizedBranch &&
+              pairGroup
+            ) {
+              authorizedGroupKeys.add(
+                pairGroup
+              );
+            }
+          });
+
+        if (
+          authorizedGroupKeys.size === 0
+        ) {
+          throw new functions.https.HttpsError(
+            "permission-denied",
+            "Coach is not authorized for this branch."
+          );
+        }
+
+        for (
+          const requestedGroupKey
+          of requestedGroupKeys
+        ) {
+          if (
+            !authorizedGroupKeys.has(
+              requestedGroupKey
+            )
+          ) {
+            throw new functions.https.HttpsError(
+              "permission-denied",
+              "Coach is not authorized for one of the requested groups."
+            );
+          }
+        }
+      }
+
+      /*
+       * קריאת users מתבצעת רק בשרת.
+       */
+      const usersSnapshot =
+        await db
+          .collection("users")
+          .get();
+
+      /*
+       * Admin:
+       * אם לא נשלחו קבוצות, כל הקבוצות בסניף מותרות.
+       */
+      if (isAdminUser) {
+        usersSnapshot.docs
+          .forEach((document) => {
+
+            const user =
+              document.data() || {};
+
+            const branches =
+              parseUserTargetValues(
+                user,
+                [
+                  "branch",
+                  "branches",
+                  "branches_json",
+                  "branchesCsv",
+                  "selected_branches",
+                  "selectedBranches",
+                  "active_branch",
+                  "activeBranch",
+                  "branchName",
+                ]
+              );
+
+            if (
+              !branches.includes(
+                normalizedBranch
+              )
+            ) {
+              return;
+            }
+
+            const groups =
+              parseUserTargetValues(
+                user,
+                [
+                  "group",
+                  "groups",
+                  "groups_json",
+                  "groupsCsv",
+                  "selected_groups",
+                  "selectedGroups",
+                  "active_group",
+                  "activeGroup",
+                  "age_group",
+                  "age_groups",
+                  "primaryGroup",
+                  "groupKey",
+                ]
+              );
+
+            groups.forEach(
+              (group) => {
+                if (group) {
+                  authorizedGroupKeys.add(
+                    group
+                  );
+                }
+              }
+            );
+          });
+      }
+
+      const effectiveGroupKeys =
+        requestedGroupKeys.size > 0
+          ? requestedGroupKeys
+          : authorizedGroupKeys;
+
+      if (
+        effectiveGroupKeys.size === 0
+      ) {
+        throw new functions.https.HttpsError(
+          "permission-denied",
+          "No authorized groups are available."
+        );
+      }
+
+      /*
+       * כל מזהה שהלקוח יכול לשלוח ממופה
+       * למסמך המשתמש המאומת שלו.
+       */
+      const allowedRecipientByIdentity =
+        new Map();
+
+      usersSnapshot.docs
+        .forEach((document) => {
+
+          const user =
+            document.data() || {};
+
+          const role =
+            String(
+              user.role ||
+              user.userRole ||
+              user.user_role ||
+              user.userType ||
+              user.type ||
+              ""
+            )
+              .trim()
+              .toLowerCase();
+
+          const isCoach =
+            role === "coach" ||
+            role === "trainer" ||
+            role === "מאמן" ||
+            user.isCoach === true;
+
+          if (isCoach) {
+            return;
+          }
+
+          const status =
+            String(
+              user.status ||
+              user.active ||
+              ""
+            )
+              .trim()
+              .toLowerCase();
+
+          const active =
+            user.isActive !== false &&
+            status !== "inactive" &&
+            status !== "disabled" &&
+            status !== "blocked" &&
+            status !== "לא פעיל";
+
+          if (!active) {
+            return;
+          }
+
+          const branches =
+            parseUserTargetValues(
+              user,
+              [
+                "branch",
+                "branches",
+                "branches_json",
+                "branchesCsv",
+                "selected_branches",
+                "selectedBranches",
+                "active_branch",
+                "activeBranch",
+                "branchName",
+              ]
+            );
+
+          if (
+            !branches.includes(
+              normalizedBranch
+            )
+          ) {
+            return;
+          }
+
+          const groups =
+            parseUserTargetValues(
+              user,
+              [
+                "group",
+                "groups",
+                "groups_json",
+                "groupsCsv",
+                "selected_groups",
+                "selectedGroups",
+                "active_group",
+                "activeGroup",
+                "age_group",
+                "age_groups",
+                "primaryGroup",
+                "groupKey",
+              ]
+            );
+
+          const belongsToAllowedGroup =
+            groups.some(
+              (group) =>
+                effectiveGroupKeys.has(
+                  group
+                )
+            );
+
+          if (!belongsToAllowedGroup) {
+            return;
+          }
+
+          const identities =
+            [
+              document.id,
+              user.uid,
+              user.authUid,
+              user.userDocId,
+            ]
+              .map((value) =>
+                String(value || "")
+                  .trim()
+              )
+              .filter(Boolean);
+
+          identities.forEach(
+            (identity) => {
+              allowedRecipientByIdentity.set(
+                identity,
+                document.id
+              );
+            }
+          );
+        });
+
+      const verifiedTargetUids =
+        requestedTargetUids
+          .map((requestedUid) =>
+            allowedRecipientByIdentity.get(
+              requestedUid
+            )
+          )
+          .filter(Boolean);
+
+      const uniqueVerifiedTargetUids =
+        [
+          ...new Set(
+            verifiedTargetUids
+          ),
+        ];
+
+      /*
+       * אם אפילו UID אחד שהלקוח שלח אינו חוקי,
+       * לא שולחים חלקית ולא מתעלמים ממנו.
+       */
+      if (
+        uniqueVerifiedTargetUids.length !==
+        requestedTargetUids.length
+      ) {
+        throw new functions.https.HttpsError(
+          "permission-denied",
+          "One or more recipients are outside the authorized scope."
+        );
+      }
+
+      const nowMillis =
+        Date.now();
+
+      const coachName =
+        String(
+          coachData.fullName ||
+          context.auth.token.name ||
+          context.auth.token.email ||
+          "מאמן"
+        )
+          .trim()
+          .slice(0, 200);
+
+      const cleanGroups =
+        requestedGroups.length > 0
+          ? requestedGroups
+          : Array.from(
+              effectiveGroupKeys
+            );
+
+      const docRef =
+        db.collection(
+          "coachBroadcasts"
+        ).doc();
+
+      const broadcastId =
+        docRef.id;
+
+      await docRef.set({
+        broadcastId,
+
+        type:
+          "coach_broadcast",
+
+        authorUid:
+          coachUid,
+
+        coachUid,
+
+        coachName,
+
+        senderName:
+          "צוות ק.מ.י",
+
+        senderNameHe:
+          "צוות ק.מ.י",
+
+        senderNameEn:
+          "K.M.I Team",
+
+        titleHe:
+          "הודעה מצוות ק.מ.י",
+
+        titleEn:
+          "Message from K.M.I Team",
+
+        messageType:
+          "general",
+
+        priority:
+          "normal",
+
+        inAppEnabled:
+          true,
+
+        region,
+
+        branch,
+
+        group:
+          cleanGroups.join(", "),
+
+        groupKey:
+          cleanGroups.join(", "),
+
+        groups:
+          cleanGroups,
+
+        targetGroup:
+          cleanGroups.join(", "),
+
+        targetGroups:
+          cleanGroups,
+
+        selectedGroups:
+          cleanGroups,
+
+        text:
+          message,
+
+        message,
+
+        body:
+          message,
+
+        targetUids:
+          uniqueVerifiedTargetUids,
+
+        targetUidCount:
+          uniqueVerifiedTargetUids.length,
+
+        targetCount:
+          uniqueVerifiedTargetUids.length,
+
+        pushEnabled:
+          true,
+
+        pushTarget:
+          "targetUids",
+
+        pushStatus:
+          "pending",
+
+        pushCreatedBy:
+          "createSecureCoachBroadcast",
+
+        createdAt:
+          admin.firestore.FieldValue
+            .serverTimestamp(),
+
+        createdAtMillis:
+          nowMillis,
+
+        sentAtMillis:
+          nowMillis,
+
+        source:
+          "server_secure_coach_broadcast",
+      });
+
+      return {
+        success: true,
+
+        broadcastId,
+
+        targetCount:
+          uniqueVerifiedTargetUids.length,
+      };
+    }
+  );
 
 /**
  * ====================================================

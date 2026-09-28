@@ -60,6 +60,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.ktx.firestore
+import com.google.firebase.functions.FirebaseFunctions
 import com.google.firebase.ktx.Firebase
 import il.kmi.app.attendance.data.AttendanceRepository
 import il.kmi.app.attendance.data.AttendanceStatus
@@ -73,7 +74,6 @@ import il.kmi.app.ui.KmiIconSize
 import il.kmi.app.ui.KmiPremiumDropdown
 import il.kmi.app.ui.KmiTopBar
 import il.kmi.app.ui.KmiTypography
-import il.yuval.ui.theme.kmiSectionHeaderBrush
 import il.yuval.ui.theme.kmiScreenBackgroundBrush
 import il.kmi.shared.localization.AppLanguage
 import il.kmi.shared.localization.AppLanguageManager
@@ -1150,91 +1150,86 @@ fun CoachTraineesScreen(
             return@LaunchedEffect
         }
 
-        // --- סנכרון אוטומטי מ-Firestore (users) לטבלת group_members ---
+        // --- סנכרון מאובטח מהשרת לטבלת group_members ---
         var serverHasPotentialMembers = false
 
         try {
-            val existingMembers = repo.members(branchDbKey, groupName).firstOrNull().orEmpty()
-            val existingNames = existingMembers.map { it.displayName.trim() }.toSet()
+            val existingMembers =
+                repo.members(
+                    branchDbKey,
+                    groupName
+                )
+                    .firstOrNull()
+                    .orEmpty()
 
-            suspend fun fetchUsersByBranchesArray(cand: String) =
-                Firebase.firestore.collection("users")
-                    .whereArrayContains("branches", cand)
-                    .whereArrayContains("groups", groupName)
-                    .whereEqualTo("role", "trainee")
-                    .get()
+            val existingNames =
+                existingMembers
+                    .map {
+                        it.displayName.trim()
+                    }
+                    .filter {
+                        it.isNotBlank()
+                    }
+                    .toSet()
+
+            val result =
+                FirebaseFunctions
+                    .getInstance()
+                    .getHttpsCallable(
+                        "loadSecureCoachTrainees"
+                    )
+                    .call(
+                        mapOf(
+                            "branch" to
+                                    branchDbKey,
+                            "group" to
+                                    groupName
+                        )
+                    )
                     .await()
 
-            suspend fun fetchUsersByBranchesCsv(cand: String) =
-                Firebase.firestore.collection("users")
-                    .whereEqualTo("branchesCsv", cand)
-                    .whereArrayContains("groups", groupName)
-                    .whereEqualTo("role", "trainee")
-                    .get()
-                    .await()
+            val payload =
+                result.data as? Map<*, *>
 
-            suspend fun fetchUsersBySingleBranch(cand: String) =
-                Firebase.firestore.collection("users")
-                    .whereEqualTo("branch", cand)
-                    .whereArrayContains("groups", groupName)
-                    .whereEqualTo("role", "trainee")
-                    .get()
-                    .await()
+            val rawItems =
+                payload
+                    ?.get("items")
+                        as? List<*>
+                    ?: emptyList<Any>()
 
-            var usersSnap =
-                runCatching { fetchUsersByBranchesArray(branchKeys.first()) }.getOrNull()
+            serverHasPotentialMembers =
+                rawItems.isNotEmpty()
 
-            if (usersSnap == null || usersSnap.isEmpty) {
-                for (cand in branchKeys.drop(1)) {
-                    val tmp = runCatching { fetchUsersByBranchesArray(cand) }.getOrNull()
-                    if (tmp != null && !tmp.isEmpty) {
-                        usersSnap = tmp; break
-                    }
+            rawItems.forEach { rawItem ->
+
+                val item =
+                    rawItem as? Map<*, *>
+                        ?: return@forEach
+
+                val fullName =
+                    item["fullName"]
+                        ?.toString()
+                        ?.trim()
+                        .orEmpty()
+
+                if (fullName.isBlank()) {
+                    return@forEach
                 }
-            }
 
-            if (usersSnap == null || usersSnap.isEmpty) {
-                usersSnap = runCatching { fetchUsersByBranchesCsv(branchKeys.first()) }.getOrNull()
-                if (usersSnap == null || usersSnap.isEmpty) {
-                    for (cand in branchKeys.drop(1)) {
-                        val tmp = runCatching { fetchUsersByBranchesCsv(cand) }.getOrNull()
-                        if (tmp != null && !tmp.isEmpty) {
-                            usersSnap = tmp; break
-                        }
-                    }
+                if (fullName in existingNames) {
+                    return@forEach
                 }
-            }
-
-            if (usersSnap == null || usersSnap.isEmpty) {
-                usersSnap = runCatching { fetchUsersBySingleBranch(branchKeys.first()) }.getOrNull()
-                if (usersSnap == null || usersSnap.isEmpty) {
-                    for (cand in branchKeys.drop(1)) {
-                        val tmp = runCatching { fetchUsersBySingleBranch(cand) }.getOrNull()
-                        if (tmp != null && !tmp.isEmpty) {
-                            usersSnap = tmp; break
-                        }
-                    }
-                }
-            }
-
-            val docs = usersSnap?.documents.orEmpty()
-            serverHasPotentialMembers = docs.isNotEmpty()
-
-            for (doc in docs) {
-                val fullName = doc.getString("fullName")
-                    ?: doc.getString("name")
-                    ?: doc.getString("displayName")
-                    ?: continue
-
-                if (fullName.trim() in existingNames) continue
 
                 repo.addMember(
                     branch = branchDbKey,
                     groupKey = groupName,
-                    displayName = fullName.trim()
+                    displayName = fullName
                 )
             }
+
         } catch (_: Exception) {
+            // במקרה של תקלה נשארים עם members שכבר קיימים מקומית.
+
         } finally {
             isInitialServerSyncRunning = false
         }
@@ -1280,82 +1275,140 @@ fun CoachTraineesScreen(
                 d = d.plusDays(1)
             }
 
-            // 2) פרטים מ-Firestore (belt + birthDate -> age) לפי שם, עם נרמול קשוח
-            fun String.normKey(): String = this
-                .trim()
-                .replace('־', '-')
-                .replace('–', '-')
-                .replace('—', '-')
-                .replace(Regex("""[."'\u05F3\u05F4,;:()\[\]{}]"""), "")
-                .replace(Regex("\\s+"), " ")
-                .lowercase(Locale("he", "IL"))
+            // 2) פרטי המתאמנים מגיעים כעת דרך Cloud Function מאובטחת.
+// הלקוח אינו קורא יותר ישירות את collection("users").
 
-            fun beltHeb(b: String): String {
-                return when (b.trim().lowercase(Locale.US)) {
-                    "white" -> "לבנה"
-                    "yellow" -> "צהובה"
-                    "orange" -> "כתומה"
-                    "green" -> "ירוקה"
-                    "blue" -> "כחולה"
-                    "brown" -> "חומה"
-                    "black" -> "שחורה"
-                    else -> b // אם תרצה להציג באנגלית כמו שהוא
+            fun String.normKey(): String =
+                this
+                    .trim()
+                    .replace('־', '-')
+                    .replace('–', '-')
+                    .replace('—', '-')
+                    .replace(
+                        Regex("""[."'׳״,;:()\[\]{}]"""),
+                        ""
+                    )
+                    .replace(
+                        Regex("\\s+"),
+                        " "
+                    )
+                    .lowercase(
+                        Locale(
+                            "he",
+                            "IL"
+                        )
+                    )
+
+            fun normalizeEmailForMerge(
+                value: String
+            ): String =
+                value
+                    .trim()
+                    .lowercase(
+                        Locale.US
+                    )
+
+            fun normalizePhoneForMerge(
+                value: String
+            ): String {
+
+                val digits =
+                    value.filter {
+                        it.isDigit()
+                    }
+
+                return when {
+
+                    digits.startsWith("00972") &&
+                            digits.length >= 13 ->
+                        "0" + digits.drop(5)
+
+                    digits.startsWith("972") &&
+                            digits.length >= 11 ->
+                        "0" + digits.drop(3)
+
+                    digits.startsWith("05") ->
+                        digits
+
+                    digits.length == 9 &&
+                            digits.startsWith("5") ->
+                        "0$digits"
+
+                    else ->
+                        digits
                 }
             }
 
-            fun beltFromDoc(
-                doc: com.google.firebase.firestore.DocumentSnapshot
+            fun beltForCoachUi(
+                rawValue: String
             ): String {
 
-                val raw = (
-                        doc.getString("belt")
-                            ?: doc.getString("currentBelt")
-                            ?: doc.getString("current_belt")
-                            ?: doc.getString("beltName")
-                            ?: doc.getString("belt_name")
-                            ?: doc.getString("currentBeltName")
-                            ?: doc.getString("currentBeltId")
-                            ?: doc.getString("beltId")
-                            ?: doc.getString("belt_id")
-                            ?: ""
-                        ).trim()
+                val raw =
+                    rawValue.trim()
 
-                if (raw.isBlank()) return ""
+                if (raw.isBlank()) {
+                    return ""
+                }
 
-                val clean = raw
-                    .lowercase(Locale.US)
-                    .replace("_", " ")
-                    .replace("-", " ")
-                    .trim()
+                val clean =
+                    raw
+                        .lowercase(
+                            Locale.US
+                        )
+                        .replace(
+                            "_",
+                            " "
+                        )
+                        .replace(
+                            "-",
+                            " "
+                        )
+                        .trim()
 
                 val isBlackBelt =
-                    clean.contains("black") ||
-                            clean.contains("שחור")
+                    clean.contains(
+                        "black"
+                    ) ||
+                            clean.contains(
+                                "שחור"
+                            )
 
                 if (isBlackBelt) {
 
                     val danFromText =
-                        Regex("""(?:dan|דאן)\s*(\d{1,2})""")
+                        Regex(
+                            """(?:dan|דאן)\s*(\d{1,2})"""
+                        )
                             .find(clean)
                             ?.groupValues
                             ?.getOrNull(1)
                             ?.toIntOrNull()
 
                     val danFromAnyNumber =
-                        Regex("""\b(\d{1,2})\b""")
+                        Regex(
+                            """\b(\d{1,2})\b"""
+                        )
                             .find(clean)
                             ?.groupValues
                             ?.getOrNull(1)
                             ?.toIntOrNull()
 
                     val dan =
-                        (danFromText ?: danFromAnyNumber ?: 1)
-                            .coerceIn(1, 10)
+                        (
+                                danFromText
+                                    ?: danFromAnyNumber
+                                    ?: 1
+                                )
+                            .coerceIn(
+                                1,
+                                10
+                            )
 
                     return "שחורה דאן $dan"
                 }
 
                 return when {
+
                     clean == "white" ||
                             clean.contains("white") ||
                             clean == "לבנה" ||
@@ -1393,232 +1446,7 @@ fun CoachTraineesScreen(
                         "חומה"
 
                     else ->
-                        beltHeb(raw)
-                }
-            }
-
-            fun seniorityFromDoc(doc: com.google.firebase.firestore.DocumentSnapshot): String {
-                val textValue = (
-                        doc.getString("seniority")
-                            ?: doc.getString("trainingSeniority")
-                            ?: doc.getString("training_seniority")
-                            ?: doc.getString("yearsTraining")
-                            ?: doc.getString("years_training")
-                            ?: doc.getString("experience")
-                            ?: doc.getString("trainingExperience")
-                            ?: ""
-                        ).trim()
-
-                if (textValue.isNotBlank()) return textValue
-
-                val numericYears = (
-                        doc.getLong("seniorityYears")
-                            ?: doc.getLong("trainingYears")
-                            ?: doc.getLong("yearsTraining")
-                            ?: doc.getLong("years_training")
-                            ?: doc.getLong("experienceYears")
-                            ?: doc.getLong("experience_years")
-                        )?.toDouble()
-
-                if (numericYears != null && numericYears > 0.0) {
-                    val formatted = if (numericYears % 1.0 == 0.0) {
-                        numericYears.toInt().toString()
-                    } else {
-                        String.format(Locale.US, "%.1f", numericYears)
-                    }
-
-                    return "$formatted שנים"
-                }
-
-                val startRaw = doc.get("trainingStartDate")
-                    ?: doc.get("training_start_date")
-                    ?: doc.get("startTrainingDate")
-                    ?: doc.get("startedTrainingAt")
-
-                val startAge = when (startRaw) {
-                    is String -> runCatching {
-                        LocalDate.parse(startRaw.trim())
-                    }.getOrNull()
-
-                    is com.google.firebase.Timestamp -> runCatching {
-                        startRaw.toDate()
-                            .toInstant()
-                            .atZone(ZoneId.systemDefault())
-                            .toLocalDate()
-                    }.getOrNull()
-
-                    is java.util.Date -> runCatching {
-                        startRaw.toInstant()
-                            .atZone(ZoneId.systemDefault())
-                            .toLocalDate()
-                    }.getOrNull()
-
-                    is Number -> runCatching {
-                        Instant.ofEpochMilli(startRaw.toLong())
-                            .atZone(ZoneId.systemDefault())
-                            .toLocalDate()
-                    }.getOrNull()
-
-                    else -> null
-                }
-
-                if (startAge != null) {
-                    val years = java.time.Period.between(startAge, LocalDate.now()).years
-                    if (years > 0) return "$years שנים"
-                }
-
-                return ""
-            }
-
-            fun ageFromBirthDateRaw(raw: Any?): Int {
-                fun yearsFromDate(dob: LocalDate): Int {
-                    val years = java.time.Period.between(dob, LocalDate.now()).years
-                    return years.coerceIn(0, 120)
-                }
-
-                return when (raw) {
-                    is String -> {
-                        val s = raw.trim()
-                        if (s.isBlank()) return 0
-
-                        runCatching {
-                            yearsFromDate(LocalDate.parse(s))
-                        }.getOrElse {
-                            runCatching {
-                                val parts = s.split("/", ".", "-")
-                                    .map { it.trim() }
-                                    .filter { it.isNotBlank() }
-
-                                if (parts.size == 3) {
-                                    val a = parts[0].toInt()
-                                    val b = parts[1].toInt()
-                                    val c = parts[2].toInt()
-
-                                    val dob = if (a > 1900) {
-                                        LocalDate.of(a, b, c)
-                                    } else {
-                                        LocalDate.of(c, b, a)
-                                    }
-
-                                    yearsFromDate(dob)
-                                } else {
-                                    0
-                                }
-                            }.getOrDefault(0)
-                        }
-                    }
-
-                    is com.google.firebase.Timestamp -> {
-                        runCatching {
-                            yearsFromDate(
-                                raw.toDate()
-                                    .toInstant()
-                                    .atZone(ZoneId.systemDefault())
-                                    .toLocalDate()
-                            )
-                        }.getOrDefault(0)
-                    }
-
-                    is java.util.Date -> {
-                        runCatching {
-                            yearsFromDate(
-                                raw.toInstant()
-                                    .atZone(ZoneId.systemDefault())
-                                    .toLocalDate()
-                            )
-                        }.getOrDefault(0)
-                    }
-
-                    is Number -> {
-                        runCatching {
-                            yearsFromDate(
-                                Instant.ofEpochMilli(raw.toLong())
-                                    .atZone(ZoneId.systemDefault())
-                                    .toLocalDate()
-                            )
-                        }.getOrDefault(0)
-                    }
-
-                    is Map<*, *> -> {
-                        val day = (
-                                raw["day"]
-                                    ?: raw["birthDay"]
-                                    ?: raw["birth_day"]
-                                    ?: raw["dd"]
-                                )?.toString()?.toIntOrNull()
-
-                        val month = (
-                                raw["month"]
-                                    ?: raw["birthMonth"]
-                                    ?: raw["birth_month"]
-                                    ?: raw["mm"]
-                                )?.toString()?.toIntOrNull()
-
-                        val year = (
-                                raw["year"]
-                                    ?: raw["birthYear"]
-                                    ?: raw["birth_year"]
-                                    ?: raw["yyyy"]
-                                )?.toString()?.toIntOrNull()
-
-                        if (day != null && month != null && year != null) {
-                            runCatching {
-                                yearsFromDate(LocalDate.of(year, month, day))
-                            }.getOrDefault(0)
-                        } else {
-                            0
-                        }
-                    }
-
-                    else -> 0
-                }
-            }
-
-            fun ageFromDoc(doc: com.google.firebase.firestore.DocumentSnapshot): Int {
-                val directAge = (
-                        doc.getLong("age")
-                            ?: doc.getLong("traineeAge")
-                            ?: doc.getLong("ageYears")
-                        )?.toInt()
-
-                if (directAge != null && directAge in 1..120) return directAge
-
-                val fromBirthDate = ageFromBirthDateRaw(
-                    doc.get("birthDate")
-                        ?: doc.get("birth_date")
-                        ?: doc.get("dateOfBirth")
-                        ?: doc.get("dob")
-                )
-
-                if (fromBirthDate > 0) return fromBirthDate
-
-                val day = (
-                        doc.getLong("birthDay")
-                            ?: doc.getLong("birth_day")
-                            ?: doc.getLong("day")
-                        )?.toInt()
-
-                val month = (
-                        doc.getLong("birthMonth")
-                            ?: doc.getLong("birth_month")
-                            ?: doc.getLong("month")
-                        )?.toInt()
-
-                val year = (
-                        doc.getLong("birthYear")
-                            ?: doc.getLong("birth_year")
-                            ?: doc.getLong("year")
-                        )?.toInt()
-
-                return if (day != null && month != null && year != null) {
-                    runCatching {
-                        java.time.Period.between(
-                            LocalDate.of(year, month, day),
-                            LocalDate.now()
-                        ).years.coerceIn(0, 120)
-                    }.getOrDefault(0)
-                } else {
-                    0
+                        raw
                 }
             }
 
@@ -1637,423 +1465,15 @@ fun CoachTraineesScreen(
                 val certificationDates: Map<String, CoachDateEntry>
             )
 
-            val userInfoByName = mutableMapOf<String, FireUserInfo>() // nameKey -> full user info
-
-            fun normalizeEmailForMerge(value: String): String =
-                value.trim().lowercase(Locale.US)
-
-            fun normalizePhoneForMerge(value: String): String {
-                val digits = value.filter { it.isDigit() }
-                return when {
-                    digits.startsWith("972") && digits.length >= 11 -> "0" + digits.drop(3)
-                    digits.startsWith("05") -> digits
-                    digits.length == 9 && digits.startsWith("5") -> "0$digits"
-                    else -> digits
-                }
-            }
-
-            fun primaryEmailFromDoc(doc: com.google.firebase.firestore.DocumentSnapshot): String =
-                listOf(
-                    doc.getString("email"),
-                    doc.getString("userEmail"),
-                    doc.getString("mail"),
-                    doc.getString("gmail")
-                ).firstOrNull { !it.isNullOrBlank() }
-                    ?.trim()
-                    .orEmpty()
-
-            fun primaryPhoneFromDoc(doc: com.google.firebase.firestore.DocumentSnapshot): String =
-                listOf(
-                    doc.getString("phone"),
-                    doc.getString("phoneNumber"),
-                    doc.getString("mobile"),
-                    doc.getString("mobilePhone"),
-                    doc.getString("cellPhone"),
-                    doc.getString("phone_number")
-                ).firstOrNull { !it.isNullOrBlank() }
-                    ?.trim()
-                    .orEmpty()
-
-            fun String.normProfileKey(): String = this
-                .trim()
-                .replace('־', '-')
-                .replace('–', '-')
-                .replace('—', '-')
-                .replace(Regex("\\s+"), " ")
-                .lowercase(Locale("he", "IL"))
-
-            fun userDocMatchesBranchAndGroup(
-                doc: com.google.firebase.firestore.DocumentSnapshot,
-                branchCandidates: List<String>,
-                groupCandidate: String
-            ): Boolean {
-                val branchSet = branchCandidates
-                    .map { it.normProfileKey() }
-                    .filter { it.isNotBlank() }
-                    .toSet()
-
-                val docBranches = buildList {
-                    doc.getString("branch")?.let { add(it) }
-                    doc.getString("activeBranch")?.let { add(it) }
-                    doc.getString("active_branch")?.let { add(it) }
-                    doc.getString("branchesCsv")?.split(",")?.forEach { add(it) }
-                    (doc.get("branches") as? List<*>)?.forEach { item ->
-                        item?.toString()?.let { add(it) }
-                    }
-                }
-                    .map { it.normProfileKey() }
-                    .filter { it.isNotBlank() }
-
-                val groupNorm = groupCandidate.normProfileKey()
-
-                val docGroups = buildList {
-                    doc.getString("primaryGroup")?.let { add(it) }
-                    doc.getString("activeGroup")?.let { add(it) }
-                    doc.getString("active_group")?.let { add(it) }
-                    doc.getString("groupKey")?.let { add(it) }
-                    doc.getString("group_key")?.let { add(it) }
-                    doc.getString("group")?.let { add(it) }
-                    doc.getString("age_group")?.let { add(it) }
-                    (doc.get("groups") as? List<*>)?.forEach { item ->
-                        item?.toString()?.let { add(it) }
-                    }
-                }
-                    .map { it.normProfileKey() }
-                    .filter { it.isNotBlank() }
-
-                val branchMatches =
-                    branchSet.isEmpty() ||
-                            docBranches.any { docBranch ->
-                                docBranch in branchSet ||
-                                        branchSet.any { candidate ->
-                                            candidate.length >= 3 &&
-                                                    docBranch.length >= 3 &&
-                                                    (docBranch.contains(candidate) || candidate.contains(
-                                                        docBranch
-                                                    ))
-                                        }
-                            }
-
-                val groupMatches =
-                    groupNorm.isBlank() ||
-                            docGroups.any { docGroup ->
-                                docGroup == groupNorm
-                            }
-
-                return branchMatches && groupMatches
-            }
-
-            val userDocs = runCatching {
-                val directDocs = mutableListOf<com.google.firebase.firestore.DocumentSnapshot>()
-
-                for (branchCandidate in branchKeys) {
-                    runCatching {
-                        directDocs.addAll(
-                            Firebase.firestore.collection("users")
-                                .whereArrayContains("branches", branchCandidate)
-                                .whereArrayContains("groups", groupName)
-                                .whereEqualTo("role", "trainee")
-                                .get()
-                                .await()
-                                .documents
-                        )
-                    }
-
-                    runCatching {
-                        directDocs.addAll(
-                            Firebase.firestore.collection("users")
-                                .whereEqualTo("branch", branchCandidate)
-                                .whereArrayContains("groups", groupName)
-                                .whereEqualTo("role", "trainee")
-                                .get()
-                                .await()
-                                .documents
-                        )
-                    }
-
-                    runCatching {
-                        directDocs.addAll(
-                            Firebase.firestore.collection("users")
-                                .whereEqualTo("branchesCsv", branchCandidate)
-                                .whereArrayContains("groups", groupName)
-                                .whereEqualTo("role", "trainee")
-                                .get()
-                                .await()
-                                .documents
-                        )
-                    }
-                }
-
-                val distinctDirect =
-                    directDocs.distinctBy { it.id }
-
-                /*
-                 * שאילתה ישירה יכולה למצוא רק חלק מהמתאמנים,
-                 * משום שבמסמכי משתמש ישנים הסניף והקבוצה
-                 * נשמרו בשמות שדות או במבנים שונים.
-                 *
-                 * לכן קוראים גם את מסמכי users ומצרפים כל
-                 * מסמך ששמו תואם למתאמן ברשימת הקבוצה.
-                 */
-                val memberNameKeys =
-                    members
-                        .map { member ->
-                            member.displayName.normKey()
-                        }
-                        .filter { nameKey ->
-                            nameKey.isNotBlank()
-                        }
-                        .toSet()
-
-                val fallbackDocs =
-                    Firebase.firestore
-                        .collection("users")
-                        .get()
-                        .await()
-                        .documents
-                        .filter { doc ->
-                            val documentNameKey =
-                                (
-                                        doc.getString("fullName")
-                                            ?: doc.getString("name")
-                                            ?: doc.getString(
-                                                "displayName"
-                                            )
-                                            ?: ""
-                                        ).normKey()
-
-                            val matchesMemberName =
-                                documentNameKey.isNotBlank() &&
-                                        documentNameKey in
-                                        memberNameKeys
-
-                            val matchesBranchAndGroup =
-                                userDocMatchesBranchAndGroup(
-                                    doc = doc,
-                                    branchCandidates =
-                                        branchKeys,
-                                    groupCandidate =
-                                        groupName
-                                )
-
-                            matchesMemberName ||
-                                    matchesBranchAndGroup
-                        }
-
-                /*
-                 * מאחדים את תוצאות השאילתות הישירות
-                 * עם מסמכי ההתאמה ומסירים כפילויות.
-                 */
-                (distinctDirect + fallbackDocs)
-                    .distinctBy { document ->
-                        document.id
-                    }
-            }.getOrNull().orEmpty()
-
-            /*
-    * =========================================================
-    * איחוד אמיתי של מסמכי users
-    *
-    * אותו מתאמן נחשב זהה כאשר יש:
-    * 1. אותו מייל, או
-    * 2. אותו טלפון מנורמל.
-    *
-    * לא בוחרים עוד מסמך אחד בלבד.
-    * מאחדים את השדות מכל המסמכים של אותו אדם.
-    * =========================================================
-    */
-
-            val identityGroups =
-                mutableListOf<
-                        MutableList<
-                                com.google.firebase.firestore.DocumentSnapshot
-                                >
-                        >()
-
-            userDocs.forEach { doc ->
-
-                val docEmail =
-                    normalizeEmailForMerge(
-                        primaryEmailFromDoc(doc)
-                    )
-
-                val docPhone =
-                    normalizePhoneForMerge(
-                        primaryPhoneFromDoc(doc)
-                    )
-
-                val docName =
-                    (
-                            doc.getString("fullName")
-                                ?: doc.getString("name")
-                                ?: doc.getString("displayName")
-                                ?: ""
-                            ).normKey()
-
-                /*
-                 * מחפשים קבוצה שכבר מכילה מסמך
-                 * עם אותו מייל או אותו טלפון.
-                 */
-                val matchingGroup =
-                    identityGroups.firstOrNull { group ->
-
-                        group.any { existing ->
-
-                            val existingEmail =
-                                normalizeEmailForMerge(
-                                    primaryEmailFromDoc(existing)
-                                )
-
-                            val existingPhone =
-                                normalizePhoneForMerge(
-                                    primaryPhoneFromDoc(existing)
-                                )
-
-                            val existingName =
-                                (
-                                        existing.getString("fullName")
-                                            ?: existing.getString("name")
-                                            ?: existing.getString(
-                                                "displayName"
-                                            )
-                                            ?: ""
-                                        ).normKey()
-
-                            val sameEmail =
-                                docEmail.isNotBlank() &&
-                                        existingEmail.isNotBlank() &&
-                                        docEmail == existingEmail
-
-                            val samePhone =
-                                docPhone.isNotBlank() &&
-                                        existingPhone.isNotBlank() &&
-                                        docPhone == existingPhone
-
-                            /*
-                             * שם משמש fallback רק כאשר
-                             * לשתי הרשומות אין שום מזהה אמין.
-                             */
-                            val sameNameWithoutIdentity =
-                                docEmail.isBlank() &&
-                                        docPhone.isBlank() &&
-                                        existingEmail.isBlank() &&
-                                        existingPhone.isBlank() &&
-                                        docName.isNotBlank() &&
-                                        docName == existingName
-
-                            sameEmail ||
-                                    samePhone ||
-                                    sameNameWithoutIdentity
-                        }
-                    }
-
-                if (matchingGroup != null) {
-                    matchingGroup.add(doc)
-                } else {
-                    identityGroups.add(
-                        mutableListOf(doc)
-                    )
-                }
-            }
-
-            /*
-             * מיזוג קבוצות שעשויות להתחבר בעקיפין:
-             *
-             * A = אותו מייל כמו B
-             * B = אותו טלפון כמו C
-             *
-             * לכן בסוף גם A,B,C הם אותו מתאמן.
-             */
-            var didMergeGroups: Boolean
-
-            do {
-                didMergeGroups = false
-
-                outer@ for (
-                firstIndex in identityGroups.indices
-                ) {
-                    for (
-                    secondIndex in
-                    firstIndex + 1 until identityGroups.size
-                    ) {
-
-                        val firstGroup =
-                            identityGroups[firstIndex]
-
-                        val secondGroup =
-                            identityGroups[secondIndex]
-
-                        val shouldMerge =
-                            firstGroup.any { firstDoc ->
-
-                                val firstEmail =
-                                    normalizeEmailForMerge(
-                                        primaryEmailFromDoc(firstDoc)
-                                    )
-
-                                val firstPhone =
-                                    normalizePhoneForMerge(
-                                        primaryPhoneFromDoc(firstDoc)
-                                    )
-
-                                secondGroup.any { secondDoc ->
-
-                                    val secondEmail =
-                                        normalizeEmailForMerge(
-                                            primaryEmailFromDoc(
-                                                secondDoc
-                                            )
-                                        )
-
-                                    val secondPhone =
-                                        normalizePhoneForMerge(
-                                            primaryPhoneFromDoc(
-                                                secondDoc
-                                            )
-                                        )
-
-                                    val sameEmail =
-                                        firstEmail.isNotBlank() &&
-                                                secondEmail.isNotBlank() &&
-                                                firstEmail ==
-                                                secondEmail
-
-                                    val samePhone =
-                                        firstPhone.isNotBlank() &&
-                                                secondPhone.isNotBlank() &&
-                                                firstPhone ==
-                                                secondPhone
-
-                                    sameEmail || samePhone
-                                }
-                            }
-
-                        if (shouldMerge) {
-                            firstGroup.addAll(secondGroup)
-
-                            identityGroups.removeAt(
-                                secondIndex
-                            )
-
-                            didMergeGroups = true
-                            break@outer
-                        }
-                    }
-                }
-            } while (didMergeGroups)
-
-
-            fun readStringMapFromDoc(
-                doc:
-                com.google.firebase.firestore.DocumentSnapshot,
-                fieldName: String
+            fun readStringMap(
+                raw: Any?
             ): Map<String, String> {
 
-                val raw =
-                    doc.get(fieldName) as? Map<*, *>
+                val map =
+                    raw as? Map<*, *>
                         ?: return emptyMap()
 
-                return raw.entries
+                return map.entries
                     .mapNotNull { entry ->
 
                         val key =
@@ -2080,18 +1500,15 @@ fun CoachTraineesScreen(
                     .toMap()
             }
 
-
-            fun readCoachEntryMapFromDoc(
-                doc:
-                com.google.firebase.firestore.DocumentSnapshot,
-                fieldName: String
+            fun readCoachDateMap(
+                raw: Any?
             ): Map<String, CoachDateEntry> {
 
-                val raw =
-                    doc.get(fieldName) as? Map<*, *>
+                val map =
+                    raw as? Map<*, *>
                         ?: return emptyMap()
 
-                return raw.entries
+                return map.entries
                     .mapNotNull { entry ->
 
                         val key =
@@ -2104,27 +1521,30 @@ fun CoachTraineesScreen(
                             return@mapNotNull null
                         }
 
+                        val value =
+                            entry.value
+
                         val parsed =
-                            when (
-                                val value = entry.value
-                            ) {
+                            when (value) {
 
                                 is Map<*, *> ->
                                     CoachDateEntry(
                                         date =
                                             value["date"]
                                                 ?.toString()
+                                                ?.trim()
                                                 .orEmpty(),
                                         description =
                                             value["description"]
                                                 ?.toString()
+                                                ?.trim()
                                                 .orEmpty()
                                     )
 
-                                // תאימות לאחור
                                 is String ->
                                     CoachDateEntry(
-                                        date = value,
+                                        date =
+                                            value.trim(),
                                         description = ""
                                     )
 
@@ -2137,225 +1557,133 @@ fun CoachTraineesScreen(
                     .toMap()
             }
 
+            val userInfoByName =
+                mutableMapOf<
+                        String,
+                        FireUserInfo
+                        >()
 
-            /*
-             * =========================================================
-             * בונים מידע מאוחד מכל קבוצת מסמכים.
-             * =========================================================
-             */
-            identityGroups.forEach { docs ->
+            val secureTraineesResult =
+                runCatching {
 
-                /*
-                 * המסמך הראשי משמש רק בשביל userDocId.
-                 * שאר השדות נלקחים מכל המסמכים.
-                 */
-                val primaryDoc =
-                    docs.maxWithOrNull(
-                        compareBy<
-                                com.google.firebase.firestore.DocumentSnapshot
-                                > { doc ->
+                    FirebaseFunctions
+                        .getInstance()
+                        .getHttpsCallable(
+                            "loadSecureCoachTrainees"
+                        )
+                        .call(
+                            mapOf(
+                                "branch" to
+                                        branchDbKey,
+                                "group" to
+                                        groupName
+                            )
+                        )
+                        .await()
 
-                            var score = 0
+                }.getOrNull()
 
-                            if (
-                                beltFromDoc(doc).isNotBlank()
-                            ) {
-                                score += 4
-                            }
+            val securePayload =
+                secureTraineesResult
+                    ?.data as? Map<*, *>
 
-                            if (ageFromDoc(doc) > 0) {
-                                score += 3
-                            }
+            val secureItems =
+                securePayload
+                    ?.get("items")
+                        as? List<*>
+                    ?: emptyList<Any>()
 
-                            if (
-                                seniorityFromDoc(doc)
-                                    .isNotBlank()
-                            ) {
-                                score += 2
-                            }
+            secureItems.forEach { rawItem ->
 
-                            if (
-                                primaryEmailFromDoc(doc)
-                                    .isNotBlank()
-                            ) {
-                                score += 1
-                            }
+                val item =
+                    rawItem as? Map<*, *>
+                        ?: return@forEach
 
-                            if (
-                                primaryPhoneFromDoc(doc)
-                                    .isNotBlank()
-                            ) {
-                                score += 1
-                            }
+                val fullName =
+                    item["fullName"]
+                        ?.toString()
+                        ?.trim()
+                        .orEmpty()
 
-                            score
-                        }
-                    ) ?: docs.first()
+                if (fullName.isBlank()) {
+                    return@forEach
+                }
 
+                val userDocId =
+                    item["userDocId"]
+                        ?.toString()
+                        ?.trim()
+                        .orEmpty()
 
                 val email =
-                    docs
-                        .asSequence()
-                        .map {
-                            primaryEmailFromDoc(it)
-                                .trim()
-                        }
-                        .firstOrNull {
-                            it.isNotBlank()
-                        }
+                    item["email"]
+                        ?.toString()
+                        ?.trim()
                         .orEmpty()
-
 
                 val phone =
-                    docs
-                        .asSequence()
-                        .map {
-                            primaryPhoneFromDoc(it)
-                                .trim()
-                        }
-                        .firstOrNull {
-                            it.isNotBlank()
-                        }
+                    item["phone"]
+                        ?.toString()
+                        ?.trim()
                         .orEmpty()
-
-
-                /*
-                 * אם החגורה קיימת באחד המסמכים –
-                 * לוקחים אותה.
-                 */
-                val belt =
-                    docs
-                        .asSequence()
-                        .map {
-                            beltFromDoc(it)
-                                .trim()
-                        }
-                        .filter {
-                            it.isNotBlank()
-                        }
-                        /*
-                         * מעדיפים ערך מפורט יותר,
-                         * למשל "שחורה דאן 2"
-                         * על פני "שחורה".
-                         */
-                        .maxByOrNull {
-                            it.length
-                        }
-                        .orEmpty()
-
 
                 val age =
-                    docs
-                        .asSequence()
-                        .map {
-                            ageFromDoc(it)
-                        }
-                        .firstOrNull {
-                            it > 0
-                        }
+                    (item["age"] as? Number)
+                        ?.toInt()
+                        ?.coerceIn(
+                            0,
+                            120
+                        )
                         ?: 0
 
+                val belt =
+                    beltForCoachUi(
+                        item["belt"]
+                            ?.toString()
+                            .orEmpty()
+                    )
 
                 val seniority =
-                    docs
-                        .asSequence()
-                        .map {
-                            seniorityFromDoc(it)
-                                .trim()
-                        }
-                        .firstOrNull {
-                            it.isNotBlank()
-                        }
+                    item["seniority"]
+                        ?.toString()
+                        ?.trim()
                         .orEmpty()
 
-
-                /*
-                 * מאחדים Maps מכל המסמכים
-                 * במקום לקחת אותם רק ממסמך אחד.
-                 */
                 val beltAwardDates =
-                    buildMap<String, String> {
-                        docs.forEach { doc ->
-                            putAll(
-                                readStringMapFromDoc(
-                                    doc,
-                                    "beltAwardDates"
-                                )
-                            )
-                        }
-                    }
-
+                    readStringMap(
+                        item["beltAwardDates"]
+                    )
 
                 val beltAwardDescriptions =
-                    buildMap<String, String> {
-                        docs.forEach { doc ->
-                            putAll(
-                                readStringMapFromDoc(
-                                    doc,
-                                    "beltAwardDescriptions"
-                                )
-                            )
-                        }
-                    }
+                    readStringMap(
+                        item["beltAwardDescriptions"]
+                    )
 
-
-                val seminarDates =
-                    buildMap<String, CoachDateEntry> {
-                        docs.forEach { doc ->
-                            putAll(
-                                readCoachEntryMapFromDoc(
-                                    doc,
-                                    "seminarDates"
-                                )
-                            )
-                        }
-                    }
-
-
-                val campDates =
-                    buildMap<String, CoachDateEntry> {
-                        docs.forEach { doc ->
-                            putAll(
-                                readCoachEntryMapFromDoc(
-                                    doc,
-                                    "campDates"
-                                )
-                            )
-                        }
-                    }
-
-
-                val certificationDates =
-                    buildMap<String, CoachDateEntry> {
-                        docs.forEach { doc ->
-                            putAll(
-                                readCoachEntryMapFromDoc(
-                                    doc,
-                                    "certificationDates"
-                                )
-                            )
-                        }
-                    }
-
-
-                val coachNotes =
-                    docs
-                        .asSequence()
-                        .map {
-                            it.getString("coachNotes")
-                                .orEmpty()
-                                .trim()
-                        }
-                        .firstOrNull {
-                            it.isNotBlank()
-                        }
+                val coachNotesValue =
+                    item["coachNotes"]
+                        ?.toString()
+                        ?.trim()
                         .orEmpty()
 
+                val seminarDates =
+                    readCoachDateMap(
+                        item["seminarDates"]
+                    )
 
-                val mergedFireUserInfo =
+                val campDates =
+                    readCoachDateMap(
+                        item["campDates"]
+                    )
+
+                val certificationDates =
+                    readCoachDateMap(
+                        item["certificationDates"]
+                    )
+
+                val fireUserInfo =
                     FireUserInfo(
                         userDocId =
-                            primaryDoc.id,
+                            userDocId,
                         email =
                             email,
                         phone =
@@ -2371,7 +1699,7 @@ fun CoachTraineesScreen(
                         beltAwardDescriptions =
                             beltAwardDescriptions,
                         coachNotes =
-                            coachNotes,
+                            coachNotesValue,
                         seminarDates =
                             seminarDates,
                         campDates =
@@ -2380,41 +1708,10 @@ fun CoachTraineesScreen(
                             certificationDates
                     )
 
-
-                /*
-                 * כל השמות מכל המסמכים מקבלים
-                 * את אותו מידע מאוחד.
-                 *
-                 * כך גם אם group_members מכיל
-                 * שם מגרסה אחרת של אותו משתמש,
-                 * הוא מתחבר לאותו פרופיל.
-                 */
-                val identityNameKeys =
-                    docs
-                        .mapNotNull { candidate ->
-
-                            (
-                                    candidate.getString(
-                                        "fullName"
-                                    )
-                                        ?: candidate.getString(
-                                            "name"
-                                        )
-                                        ?: candidate.getString(
-                                            "displayName"
-                                        )
-                                    )
-                                ?.normKey()
-                                ?.takeIf {
-                                    it.isNotBlank()
-                                }
-                        }
-                        .distinct()
-
-                identityNameKeys.forEach { nameKey ->
-                    userInfoByName[nameKey] =
-                        mergedFireUserInfo
-                }
+                userInfoByName[
+                    fullName.normKey()
+                ] =
+                    fireUserInfo
             }
 
             val builtProfiles = members.map { m ->
@@ -2743,74 +2040,19 @@ fun CoachTraineesScreen(
     suspend fun resolveUserDocIdForSelected(
         selectedProfile: TraineeProfile
     ): String {
-        val directDocId = selectedProfile.userDocId.trim()
-        if (directDocId.isNotBlank()) return directDocId
 
-        fun String.normSaveKey(): String = this
-            .trim()
-            .replace('־', '-')
-            .replace('–', '-')
-            .replace('—', '-')
-            .replace(Regex("\\s+"), " ")
-            .lowercase(Locale("he", "IL"))
+        val userDocId =
+            selectedProfile
+                .userDocId
+                .trim()
 
-        val targetName = selectedProfile.fullName.normSaveKey()
-        val targetBranch = selectedProfile.branch.normSaveKey()
-        val targetGroup = selectedProfile.groupKey.normSaveKey()
-
-        val docs = Firebase.firestore.collection("users")
-            .whereEqualTo("role", "trainee")
-            .get()
-            .await()
-            .documents
-
-        val matched = docs.firstOrNull { doc ->
-            val docName = (
-                    doc.getString("fullName")
-                        ?: doc.getString("name")
-                        ?: doc.getString("displayName")
-                        ?: ""
-                    ).normSaveKey()
-
-            val docGroups = (doc.get("groups") as? List<*>)
-                ?.mapNotNull { it?.toString()?.normSaveKey() }
-                .orEmpty()
-
-            val docBranches = buildList {
-                doc.getString("branch")?.let { add(it.normSaveKey()) }
-                doc.getString("branchesCsv")?.split(",")?.forEach { add(it.normSaveKey()) }
-                (doc.get("branches") as? List<*>)?.forEach { item ->
-                    item?.toString()?.let { add(it.normSaveKey()) }
-                }
-            }
-
-            val nameMatches = docName == targetName
-            val groupMatches = targetGroup.isBlank() || targetGroup in docGroups
-            val branchMatches = targetBranch.isBlank() || docBranches.any { branch ->
-                branch == targetBranch ||
-                        branch.contains(targetBranch) ||
-                        targetBranch.contains(branch)
-            }
-
-            nameMatches && groupMatches && branchMatches
-        } ?: docs.firstOrNull { doc ->
-            val docName = (
-                    doc.getString("fullName")
-                        ?: doc.getString("name")
-                        ?: doc.getString("displayName")
-                        ?: ""
-                    ).normSaveKey()
-
-            docName == targetName
+        if (userDocId.isBlank()) {
+            error(
+                "Missing userDocId for trainee"
+            )
         }
 
-        val resolvedDocId = matched?.id.orEmpty()
-
-        if (resolvedDocId.isBlank()) {
-            error("Missing userDocId for trainee: ${selectedProfile.fullName}")
-        }
-
-        return resolvedDocId
+        return userDocId
     }
 
     suspend fun saveBeltAwardDatesForSelected(
@@ -2827,29 +2069,70 @@ fun CoachTraineesScreen(
                 selectedProfile
             )
 
-        val cleanedDates = dates
-            .mapValues { it.value.trim() }
-            .filterValues { it.isNotBlank() }
+        val cleanedDates =
+            dates
+                .mapValues {
+                    it.value.trim()
+                }
+                .filterValues {
+                    it.isNotBlank()
+                }
 
-        val cleanedDescriptions = descriptions
-            .mapValues { it.value.trim() }
-            .filterValues { it.isNotBlank() }
+        val cleanedDescriptions =
+            descriptions
+                .mapValues {
+                    it.value.trim()
+                }
+                .filterValues {
+                    it.isNotBlank()
+                }
 
-        if (cleanedDates.isEmpty() && cleanedDescriptions.isEmpty()) return
-
-        val dateUpdates = cleanedDates.entries.associate { (beltName, dateValue) ->
-            "beltAwardDates.$beltName" to dateValue
+        if (
+            cleanedDates.isEmpty() &&
+            cleanedDescriptions.isEmpty()
+        ) {
+            return
         }
 
-        val descriptionUpdates =
-            cleanedDescriptions.entries.associate { (beltName, descriptionValue) ->
-                "beltAwardDescriptions.$beltName" to descriptionValue
-            }
+        if (cleanedDates.isNotEmpty()) {
 
-        Firebase.firestore.collection("users")
-            .document(userDocId)
-            .update(dateUpdates + descriptionUpdates)
-            .await()
+            FirebaseFunctions
+                .getInstance()
+                .getHttpsCallable(
+                    "updateSecureCoachTrainee"
+                )
+                .call(
+                    mapOf(
+                        "traineeDocId" to userDocId,
+                        "branch" to selectedProfile.branch,
+                        "group" to selectedProfile.groupKey,
+                        "updateType" to "map_update",
+                        "fieldName" to "beltAwardDates",
+                        "entries" to cleanedDates
+                    )
+                )
+                .await()
+        }
+
+        if (cleanedDescriptions.isNotEmpty()) {
+
+            FirebaseFunctions
+                .getInstance()
+                .getHttpsCallable(
+                    "updateSecureCoachTrainee"
+                )
+                .call(
+                    mapOf(
+                        "traineeDocId" to userDocId,
+                        "branch" to selectedProfile.branch,
+                        "group" to selectedProfile.groupKey,
+                        "updateType" to "map_update",
+                        "fieldName" to "beltAwardDescriptions",
+                        "entries" to cleanedDescriptions
+                    )
+                )
+                .await()
+        }
     }
 
     suspend fun saveCoachDateSectionForSelected(
@@ -2866,27 +2149,44 @@ fun CoachTraineesScreen(
                 selectedProfile
             )
 
-        val cleanedEntries = entries
-            .mapValues { (_, value) ->
-                mapOf(
-                    "date" to value.date.trim(),
-                    "description" to value.description.trim()
-                )
-            }
-            .filterValues { value ->
-                value["date"].orEmpty().isNotBlank() ||
-                        value["description"].orEmpty().isNotBlank()
-            }
+        val cleanedEntries =
+            entries
+                .mapValues { (_, value) ->
+                    mapOf(
+                        "date" to
+                                value.date.trim(),
+                        "description" to
+                                value.description.trim()
+                    )
+                }
+                .filterValues { value ->
+                    value["date"]
+                        .orEmpty()
+                        .isNotBlank() ||
+                            value["description"]
+                                .orEmpty()
+                                .isNotBlank()
+                }
 
-        if (cleanedEntries.isEmpty()) return
-
-        val updates = cleanedEntries.entries.associate { (itemName, value) ->
-            "$firestoreFieldName.$itemName" to value
+        if (cleanedEntries.isEmpty()) {
+            return
         }
 
-        Firebase.firestore.collection("users")
-            .document(userDocId)
-            .update(updates)
+        FirebaseFunctions
+            .getInstance()
+            .getHttpsCallable(
+                "updateSecureCoachTrainee"
+            )
+            .call(
+                mapOf(
+                    "traineeDocId" to userDocId,
+                    "branch" to selectedProfile.branch,
+                    "group" to selectedProfile.groupKey,
+                    "updateType" to "map_update",
+                    "fieldName" to firestoreFieldName,
+                    "entries" to cleanedEntries
+                )
+            )
             .await()
     }
 
@@ -2903,14 +2203,18 @@ fun CoachTraineesScreen(
                 selectedProfile
             )
 
-        val cleanNote = note.trim()
-
-        Firebase.firestore.collection("users")
-            .document(userDocId)
-            .update(
+        FirebaseFunctions
+            .getInstance()
+            .getHttpsCallable(
+                "updateSecureCoachTrainee"
+            )
+            .call(
                 mapOf(
-                    "coachNotes" to cleanNote,
-                    "coachNotesUpdatedAtMillis" to System.currentTimeMillis()
+                    "traineeDocId" to userDocId,
+                    "branch" to selectedProfile.branch,
+                    "group" to selectedProfile.groupKey,
+                    "updateType" to "coach_notes",
+                    "note" to note.trim()
                 )
             )
             .await()

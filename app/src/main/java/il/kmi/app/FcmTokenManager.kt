@@ -39,21 +39,47 @@ object FcmTokenManager {
     }
 
     fun refreshTokenForUserDocId(userDocId: String) {
-        val cleanUserDocId = userDocId.trim()
+        val firebaseUser =
+            FirebaseAuth.getInstance().currentUser
+                ?: return
 
-        if (cleanUserDocId.isBlank()) {
+        if (firebaseUser.isAnonymous) {
+            return
+        }
+
+        val authUid =
+            firebaseUser.uid.trim()
+
+        val cleanUserDocId =
+            userDocId.trim()
+
+        if (
+            authUid.isBlank() ||
+            cleanUserDocId.isBlank() ||
+            cleanUserDocId != authUid
+        ) {
             return
         }
 
         FirebaseMessaging.getInstance().token
             .addOnSuccessListener { token ->
-                if (token.isNullOrBlank()) {
+
+                val cleanToken =
+                    token
+                        ?.trim()
+                        .orEmpty()
+
+                if (cleanToken.isBlank()) {
                     return@addOnSuccessListener
                 }
 
-                saveTokenToFirestore(cleanUserDocId, token)
+                saveTokenToFirestore(
+                    userDocId = authUid,
+                    token = cleanToken
+                )
             }
             .addOnFailureListener {
+                // FCM token refresh is non-blocking.
             }
     }
 

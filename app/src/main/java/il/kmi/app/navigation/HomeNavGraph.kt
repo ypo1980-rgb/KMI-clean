@@ -33,6 +33,7 @@ import il.kmi.app.screens.BeltQuestions.ByTopic.BeltQuestionsByTopicScreen
 import il.kmi.app.screens.ExercisesTabsScreen
 import il.kmi.app.screens.FavoritesScreen
 import il.kmi.app.screens.HomeScreen
+import il.kmi.app.screens.rememberHomeCoachAssignmentsState
 import il.kmi.app.messages.ui.MessageCenterScreen
 import il.kmi.app.screens.PracticeByTopicsSelection
 import il.kmi.app.screens.TrainingArchiveNavigationStore
@@ -815,16 +816,23 @@ fun NavGraphBuilder.homeNavGraph(
 
     // ----- מסך מבחן פנימי -----
     composable(route = Route.InternalExam.route) {
+        val uid =
+            FirebaseAuth.getInstance()
+                .currentUser
+                ?.uid
+                .orEmpty()
+
+        val internalExamAssignments =
+            rememberHomeCoachAssignmentsState(
+                currentUid = uid,
+                userSp = sp
+            )
+
         var internalExamAuthorized by remember {
             mutableStateOf<Boolean?>(null)
         }
 
-        LaunchedEffect(Unit) {
-            val uid =
-                FirebaseAuth.getInstance()
-                    .currentUser
-                    ?.uid
-                    .orEmpty()
+        LaunchedEffect(uid) {
 
             if (uid.isBlank()) {
                 internalExamAuthorized = false
@@ -888,7 +896,9 @@ fun NavGraphBuilder.homeNavGraph(
                                 inclusive = false
                             }
                         }
-                    }
+                    },
+                    authorizedBranchGroupPairs =
+                        internalExamAssignments.branchGroupPairs
                 )
             }
         }

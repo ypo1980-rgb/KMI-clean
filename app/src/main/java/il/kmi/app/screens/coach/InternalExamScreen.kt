@@ -1118,6 +1118,8 @@ fun InternalExamScreen(
     onTraineeNameChange: (String) -> Unit,
     belt: Belt,
     exercises: List<ExamExerciseItem>,
+    branch: String,
+    group: String,
     @Suppress("UNUSED_PARAMETER")
     examResults: Map<String, Boolean> = emptyMap(),
     @Suppress("UNUSED_PARAMETER")
@@ -1654,13 +1656,16 @@ fun InternalExamScreen(
 
                                                                     val activeName =
                                                                         traineeName.trim()
+
                                                                     if (activeName.isNotBlank()) {
                                                                         scope.launch {
                                                                             saveExamDraft(
-                                                                                ctx,
-                                                                                activeName,
-                                                                                belt,
-                                                                                marksMap
+                                                                                context = ctx,
+                                                                                traineeName = activeName,
+                                                                                belt = belt,
+                                                                                marksMap = marksMap,
+                                                                                branch = branch,
+                                                                                group = group
                                                                             )
                                                                         }
                                                                     }
@@ -1716,13 +1721,16 @@ fun InternalExamScreen(
 
                                                                     val activeName =
                                                                         traineeName.trim()
+
                                                                     if (activeName.isNotBlank()) {
                                                                         scope.launch {
                                                                             saveExamDraft(
-                                                                                ctx,
-                                                                                activeName,
-                                                                                belt,
-                                                                                marksMap
+                                                                                context = ctx,
+                                                                                traineeName = activeName,
+                                                                                belt = belt,
+                                                                                marksMap = marksMap,
+                                                                                branch = branch,
+                                                                                group = group
                                                                             )
                                                                         }
                                                                     }
@@ -1755,7 +1763,14 @@ fun InternalExamScreen(
                                             val activeName = traineeName.trim()
                                             if (activeName.isNotBlank()) {
                                                 scope.launch {
-                                                    saveExamDraft(ctx, activeName, belt, marksMap)
+                                                    saveExamDraft(
+                                                        context = ctx,
+                                                        traineeName = activeName,
+                                                        belt = belt,
+                                                        marksMap = marksMap,
+                                                        branch = branch,
+                                                        group = group
+                                                    )
                                                 }
                                             }
                                         }
@@ -1816,7 +1831,14 @@ fun InternalExamScreen(
                     onChangeBelt = {
                         val activeName = traineeName.trim()
                         if (activeName.isNotBlank()) {
-                            saveExamDraft(ctx, activeName, belt, marksMap)
+                            saveExamDraft(
+                                context = ctx,
+                                traineeName = activeName,
+                                belt = belt,
+                                marksMap = marksMap,
+                                branch = branch,
+                                group = group
+                            )
                             pushRecentTrainee(ctx, activeName)
                             saveLastTrainee(ctx, activeName)
                         }
@@ -1872,7 +1894,9 @@ fun InternalExamScreen(
                                         context = ctx,
                                         traineeName = activeName,
                                         belt = belt,
-                                        marksMap = marksMap
+                                        marksMap = marksMap,
+                                        branch = branch,
+                                        group = group
                                     )
 
                                     val resultId = saveCompletedInternalExamResult(
@@ -2114,7 +2138,14 @@ fun InternalExamScreen(
                     Button(onClick = {
                         val name = traineeName.trim()
                         if (name.isNotBlank()) {
-                            saveExamDraft(ctx, name, belt, marksMap)
+                            saveExamDraft(
+                                context = ctx,
+                                traineeName = name,
+                                belt = belt,
+                                marksMap = marksMap,
+                                branch = branch,
+                                group = group
+                            )
                             pushRecentTrainee(ctx, name)
                             saveLastTrainee(ctx, name)
                         }
@@ -2434,7 +2465,8 @@ private fun SubTopicHeader(
 fun InternalExamEntryScreen(
     @Suppress("UNUSED_PARAMETER")
     onBack: () -> Unit,
-    onHome: () -> Unit
+    onHome: () -> Unit,
+    authorizedBranchGroupPairs: List<Pair<String, String>> = emptyList()
 ) {
     val ctx = LocalContext.current
     val isEnglish = rememberIsEnglish()
@@ -2470,6 +2502,57 @@ fun InternalExamEntryScreen(
 
     var traineeName by rememberSaveable { mutableStateOf("") }
     var currentBelt by remember { mutableStateOf(Belt.YELLOW) }
+
+    val authorizedBranches =
+        remember(authorizedBranchGroupPairs) {
+            authorizedBranchGroupPairs
+                .map { (branch, _) ->
+                    branch.trim()
+                }
+                .filter { branch ->
+                    branch.isNotBlank()
+                }
+                .distinct()
+        }
+
+    var selectedBranch by remember(
+        authorizedBranchGroupPairs
+    ) {
+        mutableStateOf(
+            authorizedBranches
+                .singleOrNull()
+                .orEmpty()
+        )
+    }
+
+    val authorizedGroupsForSelectedBranch =
+        remember(
+            authorizedBranchGroupPairs,
+            selectedBranch
+        ) {
+            authorizedBranchGroupPairs
+                .filter { (branch, _) ->
+                    branch.trim() == selectedBranch
+                }
+                .map { (_, group) ->
+                    group.trim()
+                }
+                .filter { group ->
+                    group.isNotBlank()
+                }
+                .distinct()
+        }
+
+    var selectedGroup by remember(
+        selectedBranch,
+        authorizedGroupsForSelectedBranch
+    ) {
+        mutableStateOf(
+            authorizedGroupsForSelectedBranch
+                .singleOrNull()
+                .orEmpty()
+        )
+    }
 
     var recentTrainees by remember { mutableStateOf<List<String>>(emptyList()) }
     var recentCompletedResults by remember {
@@ -3250,6 +3333,82 @@ fun InternalExamEntryScreen(
                                 }
                             }
 
+                            if (authorizedBranches.size > 1) {
+                                KmiPremiumDropdown(
+                                    title =
+                                        examTr(
+                                            isEnglish,
+                                            "סניף",
+                                            "Branch"
+                                        ),
+                                    options = authorizedBranches,
+                                    selectedValue = selectedBranch,
+                                    isEnglish = isEnglish,
+                                    onSelected = { branch ->
+                                        selectedBranch = branch
+
+                                        val groupsForBranch =
+                                            authorizedBranchGroupPairs
+                                                .filter { (authorizedBranch, _) ->
+                                                    authorizedBranch.trim() ==
+                                                            branch.trim()
+                                                }
+                                                .map { (_, group) ->
+                                                    group.trim()
+                                                }
+                                                .filter { group ->
+                                                    group.isNotBlank()
+                                                }
+                                                .distinct()
+
+                                        selectedGroup =
+                                            groupsForBranch
+                                                .singleOrNull()
+                                                .orEmpty()
+                                    },
+                                    modifier =
+                                        Modifier.fillMaxWidth(),
+                                    placeholder =
+                                        examTr(
+                                            isEnglish,
+                                            "בחר סניף",
+                                            "Select branch"
+                                        )
+                                )
+                            }
+
+                            if (
+                                selectedBranch.isNotBlank() &&
+                                authorizedGroupsForSelectedBranch.size > 1
+                            ) {
+                                KmiPremiumDropdown(
+                                    title =
+                                        examTr(
+                                            isEnglish,
+                                            "קבוצה",
+                                            "Group"
+                                        ),
+                                    options =
+                                        authorizedGroupsForSelectedBranch,
+                                    selectedValue =
+                                        selectedGroup,
+                                    isEnglish =
+                                        isEnglish,
+                                    onSelected = { group ->
+                                        selectedGroup =
+                                            group.trim()
+                                    },
+                                    modifier =
+                                        Modifier.fillMaxWidth(),
+                                    placeholder =
+                                        examTr(
+                                            isEnglish,
+                                            "בחר קבוצה",
+                                            "Select group"
+                                        )
+                                )
+                            }
+
                             BeltSelector(
                                 currentBelt = currentBelt,
                                 isEnglish = isEnglish,
@@ -3284,34 +3443,62 @@ fun InternalExamEntryScreen(
                                 onClick = {
                                     val cleanName = traineeName.trim()
 
-                                    if (cleanName.isBlank()) {
-                                        Toast.makeText(
-                                            ctx,
-                                            examTr(
-                                                isEnglish,
-                                                "בחר נבחן מהרשימה או לחץ על נבחן חדש",
-                                                "Select a trainee from the list or tap New trainee"
-                                            ),
-                                            Toast.LENGTH_SHORT
-                                        ).show()
-                                    } else {
-                                        traineeName = cleanName
+                                    when {
+                                        cleanName.isBlank() -> {
+                                            Toast.makeText(
+                                                ctx,
+                                                examTr(
+                                                    isEnglish,
+                                                    "בחר נבחן מהרשימה או לחץ על נבחן חדש",
+                                                    "Select a trainee from the list or tap New trainee"
+                                                ),
+                                                Toast.LENGTH_SHORT
+                                            ).show()
+                                        }
 
-                                        scope.launch {
-                                            val savedDraft =
-                                                loadExamDraft(ctx, cleanName, currentBelt)
+                                        selectedBranch.isBlank() -> {
+                                            Toast.makeText(
+                                                ctx,
+                                                examTr(
+                                                    isEnglish,
+                                                    "נא לבחור סניף",
+                                                    "Please select a branch"
+                                                ),
+                                                Toast.LENGTH_SHORT
+                                            ).show()
+                                        }
 
-                                            if (savedDraft.isNotEmpty()) {
-                                                marksMap.clear()
-                                                marksMap.putAll(savedDraft)
+                                        selectedGroup.isBlank() -> {
+                                            Toast.makeText(
+                                                ctx,
+                                                examTr(
+                                                    isEnglish,
+                                                    "נא לבחור קבוצה",
+                                                    "Please select a group"
+                                                ),
+                                                Toast.LENGTH_SHORT
+                                            ).show()
+                                        }
+
+                                        else -> {
+                                            traineeName = cleanName
+
+                                            scope.launch {
+                                                val savedDraft =
+                                                    loadExamDraft(ctx, cleanName, currentBelt)
+
+                                                if (savedDraft.isNotEmpty()) {
+                                                    marksMap.clear()
+                                                    marksMap.putAll(savedDraft)
+                                                }
+
+                                                pushRecentTrainee(ctx, cleanName)
+                                                saveLastTrainee(ctx, cleanName)
+                                                recentTrainees = loadRecentTrainees(ctx)
+
+                                                traineeSessionKey++
+                                                examStarted = true
                                             }
-
-                                            pushRecentTrainee(ctx, cleanName)
-                                            saveLastTrainee(ctx, cleanName)
-                                            recentTrainees = loadRecentTrainees(ctx)
-
-                                            traineeSessionKey++
-                                            examStarted = true
                                         }
                                     }
                                 }
@@ -3342,7 +3529,9 @@ fun InternalExamEntryScreen(
                                                     context = ctx,
                                                     traineeName = cleanName,
                                                     belt = currentBelt,
-                                                    marksMap = marksMap
+                                                    marksMap = marksMap,
+                                                    branch = selectedBranch,
+                                                    group = selectedGroup
                                                 )
                                             }.onSuccess {
                                                 recentTrainees = loadRecentTrainees(ctx)
@@ -3680,6 +3869,8 @@ fun InternalExamEntryScreen(
                 onTraineeNameChange = { traineeName = it },
                 belt = currentBelt,
                 exercises = exercises,
+                branch = selectedBranch,
+                group = selectedGroup,
                 onBeltChange = { newBelt -> currentBelt = newBelt },
                 onBack = {
                     examStarted = false
@@ -5930,10 +6121,21 @@ private fun saveExamDraft(
     context: Context,
     traineeName: String,
     belt: Belt,
-    marksMap: Map<String, Int>
+    marksMap: Map<String, Int>,
+    branch: String,
+    group: String
 ) {
     val cleanName = traineeName.trim()
-    if (cleanName.isBlank()) return
+    val cleanBranch = branch.trim()
+    val cleanGroup = group.trim()
+
+    if (
+        cleanName.isBlank() ||
+        cleanBranch.isBlank() ||
+        cleanGroup.isBlank()
+    ) {
+        return
+    }
 
     val coachUid = internalExamCoachUid() ?: return
 
@@ -5952,6 +6154,8 @@ private fun saveExamDraft(
     val data = hashMapOf(
         "examId" to docId,
         "coachUid" to coachUid,
+        "branch" to cleanBranch,
+        "group" to cleanGroup,
         "traineeName" to cleanName,
         "traineeKey" to internalExamTraineeKey(cleanName),
         "belt" to belt.name,
@@ -5982,10 +6186,21 @@ private suspend fun saveExamDraftAwait(
     context: Context,
     traineeName: String,
     belt: Belt,
-    marksMap: Map<String, Int>
+    marksMap: Map<String, Int>,
+    branch: String,
+    group: String
 ) {
     val cleanName = traineeName.trim()
-    if (cleanName.isBlank()) return
+    val cleanBranch = branch.trim()
+    val cleanGroup = group.trim()
+
+    if (
+        cleanName.isBlank() ||
+        cleanBranch.isBlank() ||
+        cleanGroup.isBlank()
+    ) {
+        return
+    }
 
     val coachUid = internalExamCoachUid()
         ?: error("Missing coach uid")
@@ -6005,6 +6220,8 @@ private suspend fun saveExamDraftAwait(
     val data = hashMapOf(
         "examId" to docId,
         "coachUid" to coachUid,
+        "branch" to cleanBranch,
+        "group" to cleanGroup,
         "traineeName" to cleanName,
         "traineeKey" to internalExamTraineeKey(cleanName),
         "belt" to belt.name,

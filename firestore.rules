@@ -201,6 +201,50 @@ function canViewAttendanceBranchGroup(branch, groupKey) {
     );
 }
 
+function isAuthorizedCoachForBranchGroup(branch, groupKey) {
+  return isAdmin()
+    || (
+      isAuthorizedCoach()
+
+      && branch is string
+      && branch.size() > 0
+
+      && groupKey is string
+      && groupKey.size() > 0
+
+      && get(
+        /databases/$(database)/documents/authorizedCoaches/$(request.auth.uid)
+      ).data.authorizedBranchGroups is list
+
+      && (
+        branch + "||" + groupKey
+      ) in get(
+        /databases/$(database)/documents/authorizedCoaches/$(request.auth.uid)
+      ).data.authorizedBranchGroups
+    );
+}
+
+function isAuthorizedCoachDisplayName(displayName) {
+  return isAdmin()
+    || (
+      isAuthorizedCoach()
+
+      && displayName is string
+
+      && get(
+        /databases/$(database)/documents/authorizedCoaches/$(request.auth.uid)
+      ).data.fullName is string
+
+      && get(
+        /databases/$(database)/documents/authorizedCoaches/$(request.auth.uid)
+      ).data.fullName.size() > 0
+
+      && displayName == get(
+        /databases/$(database)/documents/authorizedCoaches/$(request.auth.uid)
+      ).data.fullName
+    );
+}
+
 function canViewAttendance() {
   return isAdmin()
     || canManageAttendanceBranch("")
@@ -240,22 +284,6 @@ function canViewAttendance() {
           attendanceParentGroupKey(groupId)
         );
     }
-
-    // מאמן / מנהל / אדמין רשאי לעדכן רק שדות מקצועיים של מתאמן
-    // ולא פרטים רגישים כמו email / phone / role / uid.
- function canCoachUpdateTraineeTrainingFields() {
-  return isSignedIn()
-    && canManageTrainees()
-    && resource.data.role == "trainee"
-    && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-      "beltAwardDates",
-      "seminarDates",
-      "campDates",
-      "certificationDates",
-      "coachNotes",
-      "coachNotesUpdatedAtMillis"
-    ]);
-}
 
     // =========================
     // Admins – מאפשר בדיקת אדמין (רק המסמך של המשתמש עצמו)
@@ -471,7 +499,10 @@ match /trainingOverrides/{overrideId} {
    * רק מאמן מורשה או אדמין.
    */
   allow create: if
-    (isAuthorizedCoach() || isAdmin())
+    isAuthorizedCoachForBranchGroup(
+      request.resource.data.branch,
+      request.resource.data.group
+    )
 
     && hasValidCommonOverrideData()
 
@@ -480,11 +511,17 @@ match /trainingOverrides/{overrideId} {
       || hasValidTimeChangeData()
     )
 
-    // מאמן יוצר שינוי רק בשמו.
+    // מאמן יוצר שינוי רק בזהות המאומתת שלו.
     && (
       isAdmin()
-      || request.resource.data.changedByUid ==
-         request.auth.uid
+      || (
+        request.resource.data.changedByUid ==
+          request.auth.uid
+
+        && isAuthorizedCoachDisplayName(
+          request.resource.data.changedByName
+        )
+      )
     )
 
     && request.resource.data.createdAt ==
@@ -505,17 +542,20 @@ match /trainingOverrides/{overrideId} {
    * עדכון שינוי קיים:
    * המאמן שיצר את השינוי או אדמין.
    */
-  allow update: if
-    (
-      isAdmin()
-      || (
-        isAuthorizedCoach()
-        && resource.data.changedByUid ==
-           request.auth.uid
-      )
-    )
+ allow update: if
+   (
+     isAdmin()
+     || (
+       isAuthorizedCoachForBranchGroup(
+         resource.data.branch,
+         resource.data.group
+       )
+       && resource.data.changedByUid ==
+          request.auth.uid
+     )
+   )
 
-    && hasValidCommonOverrideData()
+   && hasValidCommonOverrideData()
 
     && (
       hasValidCancellationData()
@@ -554,6 +594,9 @@ match /trainingOverrides/{overrideId} {
 
     && request.resource.data.changedByUid ==
        resource.data.changedByUid
+
+    && request.resource.data.changedByName ==
+       resource.data.changedByName
 
     && request.resource.data.createdAt ==
        resource.data.createdAt
@@ -599,8 +642,14 @@ match /trainingOverrides/{overrideId} {
 
         && (
           isAdmin()
-          || request.resource.data.restoredByUid ==
-             request.auth.uid
+          || (
+            request.resource.data.restoredByUid ==
+              request.auth.uid
+
+            && isAuthorizedCoachDisplayName(
+              request.resource.data.restoredByName
+            )
+          )
         )
       )
     );
@@ -629,7 +678,10 @@ match /trainingOccurrences/{occurrenceId} {
    * רק מאמן מורשה / אדמין.
    */
   allow create: if
-    (isAuthorizedCoach() || isAdmin())
+    isAuthorizedCoachForBranchGroup(
+      request.resource.data.branch,
+      request.resource.data.group
+    )
 
     && request.resource.data.keys().hasOnly([
       "occurrenceId",
@@ -713,11 +765,14 @@ match /trainingOccurrences/{occurrenceId} {
    * רק הזמן האפקטיבי / ביטול / פרטי עדכון
    * יכולים להשתנות.
    */
-  allow update: if
-    (isAuthorizedCoach() || isAdmin())
+ allow update: if
+   isAuthorizedCoachForBranchGroup(
+     resource.data.branch,
+     resource.data.group
+   )
 
-    && request.resource.data.occurrenceId ==
-       resource.data.occurrenceId
+   && request.resource.data.occurrenceId ==
+      resource.data.occurrenceId
 
     && request.resource.data.occurrenceKey ==
        resource.data.occurrenceKey
@@ -792,11 +847,15 @@ match /trainingOccurrences/{occurrenceId} {
     // אוסף users
     // =========================
     match /users/{uid} {
-    // קריאה: כל משתמש מחובר יכול לקרוא את כל אוסף users
-      // (האפליקציה מבצעת Query על כל האוסף וגם לפי פילטרים)
-    allow read: if isSelf(uid)
-            || isAdmin()
-            || canViewTrainees();
+  // קריאה:
+  // המשתמש רשאי לקרוא רק את המסמך של עצמו.
+  // אדמין רשאי לקרוא את כלל המשתמשים.
+  //
+  // מאמנים אינם קוראים עוד users ישירות.
+  // נתוני מתאמנים עבור מאמן מתקבלים דרך
+  // Cloud Functions מאובטחות בלבד.
+  allow read: if isSelf(uid)
+          || isAdmin();
 
       // יצירה: המשתמש עצמו (או אדמין)
      allow create: if isAdmin()
@@ -911,8 +970,6 @@ match /trainingOccurrences/{occurrenceId} {
             "group",
             "age_group",
 
-            "coachBranchAssignments",
-
             "birthDate",
             "gender",
 
@@ -940,10 +997,6 @@ match /trainingOccurrences/{occurrenceId} {
     ||
 
     isAdmin()
-
-    ||
-
-    canCoachUpdateTraineeTrainingFields()
 );
 
       // מחיקה: רק המשתמש עצמו או אדמין
@@ -1073,126 +1126,111 @@ match /branches/{branchId}/forumRooms/{roomId} {
   // coachBroadcasts/{broadcastId}
   // coachBroadcasts/{broadcastId}/recipients/{uid}
   // =========================
-  match /coachBroadcasts/{broadcastId} {
+match /coachBroadcasts/{broadcastId} {
 
-    // קריאת המסמך הראשי:
-    // רק המאמן שיצר את ההודעה או אדמין.
-    //
-    // מתאמן אינו קורא את המסמך הראשי,
-    // משום שהוא כולל מידע על כלל הנמענים.
-    // המתאמן קורא רק את הרשומה האישית שלו
-    // תחת recipients/{uid}.
+  // =====================================================
+  // מסמך שידור ראשי
+  // =====================================================
+
+  /*
+   * קריאה:
+   * - אדמין
+   * - המאמן שיצר את השידור
+   *
+   * מתאמן אינו קורא את המסמך הראשי,
+   * משום שהוא עשוי לכלול את רשימת היעד.
+   */
+  allow read: if isSignedIn()
+    && (
+      isAdmin()
+      || request.auth.uid == resource.data.authorUid
+    );
+
+  /*
+   * כל יצירה / שינוי / מחיקה של שידור ראשי
+   * חסומים מהלקוח.
+   *
+   * יצירת שידור מתבצעת רק דרך:
+   * createSecureCoachBroadcast
+   *
+   * Cloud Functions משתמשות ב-Admin SDK
+   * ולכן אינן תלויות ב-Firestore Rules.
+   */
+  allow create, update, delete: if false;
+
+
+  // =====================================================
+  // רשומה אישית של נמען
+  // coachBroadcasts/{broadcastId}/recipients/{uid}
+  // =====================================================
+
+  match /recipients/{uid} {
+
+    /*
+     * קריאה:
+     * - הנמען עצמו
+     * - אדמין
+     * - המאמן שיצר את השידור
+     */
     allow read: if isSignedIn()
-              && (
-                   isAdmin()
-                   || request.auth.uid == resource.data.authorUid
-                 );
+      && (
+        request.auth.uid == uid
 
-    // יצירת הודעת שידור:
-    // רק מאמן מורשה עם הרשאת שליחת הודעות.
-    allow create: if isSignedIn()
-               && isAuthorizedCoach()
-               && get(
-                 /databases/$(database)/documents/authorizedCoaches/$(request.auth.uid)
-               ).data.canSendBroadcasts == true
-               && request.auth.uid == request.resource.data.authorUid;
+        || isAdmin()
 
-    // שינוי / מחיקת ההודעה הראשית:
-    // רק המאמן שיצר אותה או אדמין.
-    allow update, delete: if isSignedIn()
-                       && (
-                            isAdmin()
-                            || (
-                                 isAuthorizedCoach()
-                                 && get(
-                                   /databases/$(database)/documents/authorizedCoaches/$(request.auth.uid)
-                                 ).data.canSendBroadcasts == true
-                                 && request.auth.uid == resource.data.authorUid
-                               )
-                          );
+        || (
+          isAuthorizedCoach()
 
-    // =========================
-    // מצב אישי של כל נמען
-    // =========================
-    match /recipients/{uid} {
+          && exists(
+            /databases/$(database)/documents/coachBroadcasts/$(broadcastId)
+          )
 
-      // המשתמש קורא רק את רשומת הנמען שלו.
-      // המאמן שיצר את ההודעה והאדמין רשאים גם לקרוא.
-      allow read: if isSignedIn()
-                && (
-                     request.auth.uid == uid
-                     || isAdmin()
-                     || (
-                          isAuthorizedCoach()
-                          && get(
-                            /databases/$(database)/documents/coachBroadcasts/$(broadcastId)
-                          ).data.authorUid == request.auth.uid
-                        )
-                   );
+          && get(
+            /databases/$(database)/documents/coachBroadcasts/$(broadcastId)
+          ).data.authorUid == request.auth.uid
+        )
+      );
 
-      // יצירת רשומת נמען:
-      // רק המאמן שיצר את הודעת השידור,
-      // ורק עבור UID שנמצא ברשימת היעד.
-      allow create: if isSignedIn()
-                 && isAuthorizedCoach()
-                 && get(
-                   /databases/$(database)/documents/authorizedCoaches/$(request.auth.uid)
-                 ).data.canSendBroadcasts == true
+    /*
+     * יצירת recipient נעשית רק בשרת
+     * ע"י onCoachBroadcastCreated.
+     */
+    allow create: if false;
 
-                 && exists(
-                   /databases/$(database)/documents/coachBroadcasts/$(broadcastId)
-                 )
+    /*
+     * המתאמן רשאי לשנות רק את מצב ההודעה האישי:
+     * read / readAt / deleted / deletedAt.
+     */
+    allow update: if isSignedIn()
 
-                 && get(
-                   /databases/$(database)/documents/coachBroadcasts/$(broadcastId)
-                 ).data.authorUid == request.auth.uid
+      && request.auth.uid == uid
 
-                 && get(
-                   /databases/$(database)/documents/coachBroadcasts/$(broadcastId)
-                 ).data.targetUids is list
+      && resource.data.uid == uid
+      && request.resource.data.uid == uid
 
-                 && uid in get(
-                   /databases/$(database)/documents/coachBroadcasts/$(broadcastId)
-                 ).data.targetUids
+      && resource.data.broadcastId == broadcastId
+      && request.resource.data.broadcastId == broadcastId
 
-                 && request.resource.data.uid == uid
-                 && request.resource.data.broadcastId == broadcastId
+      && request.resource.data
+        .diff(resource.data)
+        .affectedKeys()
+        .hasOnly([
+          "read",
+          "readAt",
+          "deleted",
+          "deletedAt"
+        ])
 
-                 && request.resource.data.read == false
-                 && request.resource.data.deleted == false;
+      && request.resource.data.read is bool
+      && request.resource.data.deleted is bool;
 
-      // המתאמן רשאי לשנות רק את מצב ההודעה האישי שלו:
-      // נקרא / תאריך קריאה / נמחק / תאריך מחיקה.
-      //
-      // אסור לו לשנות uid, broadcastId,
-      // שם, אימייל, טלפון, createdAt וכו'.
-      allow update: if isSignedIn()
-                 && request.auth.uid == uid
-
-                 && resource.data.uid == uid
-                 && request.resource.data.uid == uid
-
-                 && resource.data.broadcastId == broadcastId
-                 && request.resource.data.broadcastId == broadcastId
-
-                 && request.resource.data
-                      .diff(resource.data)
-                      .affectedKeys()
-                      .hasOnly([
-                        "read",
-                        "readAt",
-                        "deleted",
-                        "deletedAt"
-                      ])
-
-                 && request.resource.data.read is bool
-                 && request.resource.data.deleted is bool;
-
-      // לא מוחקים פיזית הודעות מתיבת המשתמש.
-      // "מחיקה" היא soft-delete באמצעות deleted=true.
-      allow delete: if false;
-    }
+    /*
+     * מחיקה פיזית אינה מותרת מהאפליקציה.
+     * משתמשים ב-soft delete.
+     */
+    allow delete: if false;
   }
+}
 
   // =========================
   // Collection Group – recipients
@@ -1788,27 +1826,20 @@ match /internalExamRecentTrainees/{coachUid} {
       // קריאה:
       // אדמין / מאמן / מנהל יכולים לקרוא את דוח התשלומים.
       // משתמש רגיל יכול לקרוא רק מסמך תשלום ששייך אליו.
-     allow read: if isSignedIn()
-  && (
-    isAdmin()
-    || (
-      isAuthorizedCoach()
-      && (
-        get(
-          /databases/$(database)/documents/authorizedCoaches/$(request.auth.uid)
-        ).data.canViewPaymentReports == true
-        ||
-        get(
-          /databases/$(database)/documents/authorizedCoaches/$(request.auth.uid)
-        ).data.canManagePayments == true
-      )
-    )
-    || paymentId == request.auth.uid
-    || resource.data.traineeId == request.auth.uid
-    || resource.data.userDocId == request.auth.uid
-    || resource.data.uid == request.auth.uid
-    || resource.data.authUid == request.auth.uid
-  );
+   allow read: if isSignedIn()
+     && (
+       isAdmin()
+
+       || paymentId == request.auth.uid
+
+       || resource.data.traineeId == request.auth.uid
+
+       || resource.data.userDocId == request.auth.uid
+
+       || resource.data.uid == request.auth.uid
+
+       || resource.data.authUid == request.auth.uid
+     );
 
       // יצירה / עדכון:
       // בשלב הנוכחי מסך דוח התשלומים מאפשר למנהל/מאמן לעדכן תשלום ידני.
@@ -1869,9 +1900,19 @@ match /internalExamRecentTrainees/{coachUid} {
 // =========================
 match /userProgress/{progressId} {
 
-  // נתוני ההתקדמות משמשים להשוואה אנונימית בין מתאמנים.
-  // כל משתמש מחובר יכול לקרוא את האוסף לצורך חישוב ההשוואה.
-  allow read: if isSignedIn();
+  /*
+   * קריאה:
+   * - משתמש רשאי לקרוא רק את נתוני ההתקדמות שלו.
+   * - אדמין רשאי לקרוא את כלל הנתונים.
+   *
+   * השוואות בין משתמשים וסטטיסטיקות קבוצתיות
+   * מתבצעות רק דרך Cloud Functions מאובטחות.
+   */
+  allow read: if isSignedIn()
+    && (
+      isAdmin()
+      || resource.data.uid == request.auth.uid
+    );
 
   /*
    * המשתמש רשאי ליצור או לעדכן רק מסמך ששייך אליו.

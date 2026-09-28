@@ -48,6 +48,7 @@ import com.google.firebase.firestore.FirebaseFirestore
 import il.kmi.app.attendance.data.AttendanceRepository
 import il.kmi.app.attendance.data.TrainingAttendanceForecast
 import il.kmi.app.database.KmiDatabaseProvider
+import il.kmi.app.screens.registration.CoachBranchAssignment
 import il.kmi.app.screens.registration.CoachBranchAssignmentsCodec
 import il.kmi.app.training.TrainingCatalog
 import il.kmi.app.training.TrainingData
@@ -60,7 +61,6 @@ import il.kmi.app.ui.scaledIconSize
 import il.yuval.ui.theme.kmiOnSuccessContainerColor
 import il.yuval.ui.theme.kmiSuccessColor
 import il.yuval.ui.theme.kmiSuccessContainerColor
-import org.json.JSONArray
 import java.text.SimpleDateFormat
 import java.time.LocalDate
 import java.util.Date
@@ -555,177 +555,94 @@ internal fun rememberHomeCoachAssignmentsState(
 
         FirebaseFirestore
             .getInstance()
-            .collection("users")
+            .collection("authorizedCoaches")
             .document(uid)
             .get()
             .addOnSuccessListener { document ->
 
-                fun listFromFirestore(
-                    listKey: String,
-                    csvKey: String,
-                    fallbackKey: String
-                ): List<String> {
-                    val storedList =
-                        (document.get(listKey) as? List<*>)
-                            ?.mapNotNull { value ->
-                                value
-                                    ?.toString()
-                                    ?.trim()
-                            }
-                            ?.filter { value ->
-                                value.isNotBlank()
-                            }
-                            ?.distinct()
-                            .orEmpty()
-
-                    if (storedList.isNotEmpty()) {
-                        return@listFromFirestore storedList
-                    }
-
-                    val storedText =
-                        document
-                            .getString(csvKey)
-                            ?.takeIf { value ->
-                                value.isNotBlank()
-                            }
-                            ?: document
-                                .getString(fallbackKey)
-                                .orEmpty()
-
-                    return@listFromFirestore storedText
-                        .split(
-                            ',',
-                            ';',
-                            '|',
-                            '\n'
-                        )
-                        .map { value ->
-                            value.trim()
-                        }
-                        .filter { value ->
-                            value.isNotBlank()
-                        }
-                        .distinct()
+                if (!document.exists()) {
+                    return@addOnSuccessListener
                 }
 
-                val remoteBranches =
-                    listFromFirestore(
-                        listKey = "branches",
-                        csvKey = "branchesCsv",
-                        fallbackKey = "branch"
-                    )
-
-                val remoteGroups =
-                    listFromFirestore(
-                        listKey = "groups",
-                        csvKey = "groupsCsv",
-                        fallbackKey = "primaryGroup"
-                    )
-
                 if (
-                    remoteBranches.isEmpty() &&
-                    remoteGroups.isEmpty()
+                    document.getBoolean("active") != true ||
+                    !document
+                        .getString("role")
+                        .orEmpty()
+                        .equals(
+                            "coach",
+                            ignoreCase = true
+                        )
                 ) {
                     return@addOnSuccessListener
                 }
 
-                val remoteActiveBranch =
-                    document
-                        .getString("activeBranch")
-                        ?.takeIf { branch ->
-                            branch.isNotBlank() &&
-                                    branch in remoteBranches
+                val remoteAssignments =
+                    (document.get("coachBranchAssignments")
+                            as? List<*>)
+                        .orEmpty()
+                        .mapNotNull { rawAssignment ->
+                            val assignment =
+                                rawAssignment as? Map<*, *>
+                                    ?: return@mapNotNull null
+
+                            val branch =
+                                assignment["branch"]
+                                    ?.toString()
+                                    ?.trim()
+                                    .orEmpty()
+
+                            if (branch.isBlank()) {
+                                return@mapNotNull null
+                            }
+
+                            val groups =
+                                (assignment["groups"] as? List<*>)
+                                    .orEmpty()
+                                    .mapNotNull { value ->
+                                        value
+                                            ?.toString()
+                                            ?.trim()
+                                            ?.takeIf {
+                                                it.isNotBlank()
+                                            }
+                                    }
+                                    .distinct()
+
+                            CoachBranchAssignment(
+                                branch = branch,
+                                groups = groups
+                            )
                         }
-                        ?: remoteBranches
-                            .firstOrNull()
-                            .orEmpty()
-
-                val remoteActiveGroup =
-                    document
-                        .getString("activeGroup")
-                        ?.takeIf { group ->
-                            group.isNotBlank() &&
-                                    group in remoteGroups
+                        .distinctBy { assignment ->
+                            assignment.branch
                         }
-                        ?: remoteGroups
-                            .firstOrNull()
-                            .orEmpty()
 
-                val branchesCsv =
-                    remoteBranches.joinToString(", ")
-
-                val groupsCsv =
-                    remoteGroups.joinToString(", ")
-
-                val branchesJson =
-                    JSONArray(
-                        remoteBranches
-                    ).toString()
-
-                val groupsJson =
-                    JSONArray(
-                        remoteGroups
-                    ).toString()
+                val remoteCoachName =
+                    document
+                        .getString("fullName")
+                        ?.trim()
+                        .orEmpty()
 
                 userSp.edit {
-                    remove("branches")
-                    remove("selected_branches")
-                    remove("groups")
-                    remove("selected_groups")
-
                     putString(
-                        "branch",
-                        branchesCsv
-                    )
-                    putString(
-                        "branches",
-                        branchesCsv
-                    )
-                    putString(
-                        "branches_json",
-                        branchesJson
-                    )
-                    putString(
-                        "selected_branches",
-                        branchesCsv
-                    )
-                    putString(
-                        "active_branch",
-                        remoteActiveBranch
+                        "coach_branch_assignments_json",
+                        CoachBranchAssignmentsCodec.encode(
+                            remoteAssignments
+                        )
                     )
 
-                    putString(
-                        "age_groups",
-                        groupsCsv
-                    )
-                    putString(
-                        "groups",
-                        groupsCsv
-                    )
-                    putString(
-                        "groups_json",
-                        groupsJson
-                    )
-                    putString(
-                        "selected_groups",
-                        groupsCsv
-                    )
-                    putString(
-                        "age_group",
-                        remoteGroups
-                            .firstOrNull()
-                            .orEmpty()
-                    )
-                    putString(
-                        "group",
-                        remoteGroups
-                            .firstOrNull()
-                            .orEmpty()
-                    )
-                    putString(
-                        "active_group",
-                        remoteActiveGroup
-                    )
+                    if (remoteCoachName.isNotBlank()) {
+                        putString(
+                            "coach_name",
+                            remoteCoachName
+                        )
+                    }
+                }
+
+                if (remoteCoachName.isNotBlank()) {
+                    coachName =
+                        remoteCoachName
                 }
 
                 branchesRefreshTick++
@@ -733,8 +650,8 @@ internal fun rememberHomeCoachAssignmentsState(
             }
             .addOnFailureListener {
                 /*
-                 * כשל זמני בטעינת הפרופיל אינו
-                 * מוחק את השיוכים המקומיים.
+                 * כשל זמני בטעינת הרשאת המאמן אינו
+                 * מוחק את המטמון המקומי האחרון.
                  */
             }
     }

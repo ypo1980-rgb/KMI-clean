@@ -1215,7 +1215,29 @@ object AdminUsersPreloadCache {
                 loadedAtMillis > 0L &&
                 System.currentTimeMillis() - loadedAtMillis <= FRESH_WINDOW_MILLIS
 
-    suspend fun preload(isEnglish: Boolean): AdminUsersPreloadResult {
+    suspend fun preload(
+        isEnglish: Boolean
+    ): AdminUsersPreloadResult {
+
+        val isAdmin =
+            runCatching {
+                AdminAccess.isCurrentUserAdmin()
+            }.getOrDefault(false)
+
+        if (!isAdmin) {
+            usersSnapshot = emptyList()
+            unlikeQuestionsSnapshot = emptyList()
+            errorMessageSnapshot = null
+            loadedAtMillis = 0L
+            hasLoadedOnce = false
+
+            return AdminUsersPreloadResult(
+                users = emptyList(),
+                unlikeQuestions = emptyList(),
+                errorMessage = null
+            )
+        }
+
         if (hasFreshData) {
             return AdminUsersPreloadResult(
                 users = usersSnapshot,
@@ -1230,6 +1252,26 @@ object AdminUsersPreloadCache {
     suspend fun refresh(
         isEnglish: Boolean
     ): AdminUsersPreloadResult {
+
+        val isAdmin =
+            runCatching {
+                AdminAccess.isCurrentUserAdmin()
+            }.getOrDefault(false)
+
+        if (!isAdmin) {
+            usersSnapshot = emptyList()
+            unlikeQuestionsSnapshot = emptyList()
+            errorMessageSnapshot = null
+            loadedAtMillis = 0L
+            hasLoadedOnce = false
+
+            return AdminUsersPreloadResult(
+                users = emptyList(),
+                unlikeQuestions = emptyList(),
+                errorMessage = null
+            )
+        }
+
         var errorMsg: String? = null
 
         val loadedUsers =

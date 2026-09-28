@@ -67,28 +67,47 @@ object KmiStartupPreloader {
 
             val adminUsersJob = async {
                 runCatching {
-                    val authUser = FirebaseAuth.getInstance().currentUser
+                    val authUser =
+                        FirebaseAuth.getInstance().currentUser
 
                     Log.d(
                         TAG_PRELOAD,
                         "stage=admin_users_preload_check, hasUser=${authUser != null}, isAnonymous=${authUser?.isAnonymous}, ${authStateForLog()}"
                     )
 
-                    if (authUser == null || authUser.isAnonymous) {
+                    if (
+                        authUser == null ||
+                        authUser.isAnonymous
+                    ) {
                         Log.d(
                             TAG_PRELOAD,
-                            "stage=admin_users_preload_skipped, reason=${if (authUser == null) "no_user" else "anonymous_user"}"
+                            "stage=admin_users_preload_skipped, reason=${
+                                if (authUser == null) {
+                                    "no_user"
+                                } else {
+                                    "anonymous_user"
+                                }
+                            }"
                         )
+
                         return@runCatching
                     }
 
-                    Log.d(TAG_PRELOAD, "stage=admin_users_preload_start")
+                    Log.d(
+                        TAG_PRELOAD,
+                        "stage=admin_users_preload_start"
+                    )
 
                     withTimeoutOrNull(8_000L) {
-                        AdminUsersPreloadCache.preload(isEnglish)
+                        AdminUsersPreloadCache.preload(
+                            isEnglish
+                        )
                     }
 
-                    Log.d(TAG_PRELOAD, "stage=admin_users_preload_finished")
+                    Log.d(
+                        TAG_PRELOAD,
+                        "stage=admin_users_preload_finished"
+                    )
                 }.onFailure { error ->
                     Log.e(
                         TAG_PRELOAD,
@@ -100,46 +119,82 @@ object KmiStartupPreloader {
 
             val firestoreWarmupJob = async {
                 runCatching {
-                    val authUser = FirebaseAuth.getInstance().currentUser
+                    val authUser =
+                        FirebaseAuth.getInstance().currentUser
 
                     Log.d(
                         TAG_PRELOAD,
                         "stage=firestore_warmup_check, hasUser=${authUser != null}, isAnonymous=${authUser?.isAnonymous}, ${authStateForLog()}"
                     )
 
-                    // ✅ לא מחממים Firestore לפני התחברות אמיתית.
-                    // משתמש אנונימי / אין משתמש = לא עושים users.get / assistantFeedback.
-                    if (authUser == null || authUser.isAnonymous) {
+                    if (
+                        authUser == null ||
+                        authUser.isAnonymous
+                    ) {
                         Log.d(
                             TAG_PRELOAD,
-                            "stage=firestore_warmup_skipped, reason=${if (authUser == null) "no_user" else "anonymous_user"}"
+                            "stage=firestore_warmup_skipped, reason=${
+                                if (authUser == null) {
+                                    "no_user"
+                                } else {
+                                    "anonymous_user"
+                                }
+                            }"
                         )
+
                         return@runCatching
                     }
 
                     withTimeoutOrNull(8_000L) {
-                        Log.d(TAG_PRELOAD, "stage=firestore_warmup_users_start")
 
-                        Firebase.firestore
-                            .collection("users")
-                            .get()
-                            .await()
+                        val uid =
+                            authUser.uid
+                                .trim()
 
-                        Log.d(TAG_PRELOAD, "stage=firestore_warmup_users_success")
+                        if (uid.isNotBlank()) {
 
-                        Log.d(TAG_PRELOAD, "stage=firestore_warmup_assistant_feedback_start")
+                            Log.d(
+                                TAG_PRELOAD,
+                                "stage=firestore_warmup_current_user_start"
+                            )
+
+                            Firebase.firestore
+                                .collection("users")
+                                .document(uid)
+                                .get()
+                                .await()
+
+                            Log.d(
+                                TAG_PRELOAD,
+                                "stage=firestore_warmup_current_user_success"
+                            )
+                        }
+
+                        Log.d(
+                            TAG_PRELOAD,
+                            "stage=firestore_warmup_assistant_feedback_start"
+                        )
 
                         Firebase.firestore
                             .collection("assistantFeedback")
-                            .whereEqualTo("liked", false)
+                            .whereEqualTo(
+                                "liked",
+                                false
+                            )
                             .limit(50)
                             .get()
                             .await()
 
-                        Log.d(TAG_PRELOAD, "stage=firestore_warmup_assistant_feedback_success")
+                        Log.d(
+                            TAG_PRELOAD,
+                            "stage=firestore_warmup_assistant_feedback_success"
+                        )
                     }
 
-                    Log.d(TAG_PRELOAD, "stage=firestore_warmup_finished")
+                    Log.d(
+                        TAG_PRELOAD,
+                        "stage=firestore_warmup_finished"
+                    )
                 }.onFailure { error ->
                     Log.e(
                         TAG_PRELOAD,

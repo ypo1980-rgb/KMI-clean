@@ -1247,13 +1247,6 @@ fun ExistingUserTraineeScreen(
                             loginDebugText = null
 
                             scope.launch {
-                                val userSpForLogin =
-                                    appCtx.getSharedPreferences("kmi_user", Context.MODE_PRIVATE)
-
-                                val savedEmail =
-                                    sp.getString("email", null)
-                                        ?: userSpForLogin.getString("email", null)
-                                        ?: ""
 
                                 if (
                                     username.isBlank() ||
@@ -1264,55 +1257,61 @@ fun ExistingUserTraineeScreen(
                                 }
 
                                 val loginEmail =
-                                    when {
+                                    if (
                                         Patterns.EMAIL_ADDRESS
-                                            .matcher(username.trim())
-                                            .matches() -> {
-                                            username.trim()
-                                        }
+                                            .matcher(
+                                                username.trim()
+                                            )
+                                            .matches()
+                                    ) {
+                                        username.trim()
 
-                                        else -> {
-                                            runCatching {
-                                                val db =
-                                                    FirebaseFirestore.getInstance()
+                                    } else {
 
-                                                val fields = listOf(
-                                                    "username",
-                                                    "userName",
-                                                    "loginUsername",
-                                                    "login_name",
-                                                    "user_login"
-                                                )
+                                        runCatching {
 
-                                                fields.firstNotNullOfOrNull { field ->
-                                                    db.collection("users")
-                                                        .whereEqualTo(
-                                                            field,
-                                                            username.trim()
+                                            val result =
+                                                FirebaseFunctions
+                                                    .getInstance()
+                                                    .getHttpsCallable(
+                                                        "resolveUsernameLoginEmail"
+                                                    )
+                                                    .call(
+                                                        mapOf(
+                                                            "username" to
+                                                                    username.trim()
                                                         )
-                                                        .limit(1)
-                                                        .get()
-                                                        .await()
-                                                        .documents
-                                                        .firstOrNull()
-                                                        ?.getString("email")
-                                                        ?.trim()
-                                                        ?.takeIf {
-                                                            Patterns.EMAIL_ADDRESS
-                                                                .matcher(it)
-                                                                .matches()
-                                                        }
-                                                }
-                                            }.getOrNull()
-                                                ?: savedEmail
-                                                    .trim()
-                                                    .takeIf {
-                                                        Patterns.EMAIL_ADDRESS
-                                                            .matcher(it)
-                                                            .matches()
-                                                    }
+                                                    )
+                                                    .await()
+
+                                            val payload =
+                                                result.data as? Map<*, *>
+                                                    ?: return@runCatching ""
+
+                                            val found =
+                                                payload["found"] as? Boolean
+                                                    ?: false
+
+                                            val resolvedEmail =
+                                                payload["loginEmail"]
+                                                    ?.toString()
+                                                    ?.trim()
                                                     .orEmpty()
-                                        }
+
+                                            if (
+                                                found &&
+                                                Patterns.EMAIL_ADDRESS
+                                                    .matcher(
+                                                        resolvedEmail
+                                                    )
+                                                    .matches()
+                                            ) {
+                                                resolvedEmail
+                                            } else {
+                                                ""
+                                            }
+
+                                        }.getOrDefault("")
                                     }
 
                                 if (loginEmail.isBlank()) {

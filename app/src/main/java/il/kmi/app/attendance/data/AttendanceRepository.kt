@@ -7,6 +7,7 @@ import com.google.firebase.firestore.ListenerRegistration
 import com.google.firebase.firestore.Query
 import com.google.firebase.firestore.SetOptions
 import com.google.firebase.firestore.ktx.firestore
+import com.google.firebase.functions.FirebaseFunctions
 import com.google.firebase.ktx.Firebase
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
@@ -1002,65 +1003,81 @@ class AttendanceRepository private constructor(
                     if (unresolvedTraineeUids.isNotEmpty()) {
 
                         launch {
-                            val resolvedNames =
-                                unresolvedTraineeUids
-                                    .mapNotNull { uid ->
 
-                                        val userDocument =
-                                            runCatching {
-                                                firestore
-                                                    .collection("users")
-                                                    .document(uid)
-                                                    .get()
-                                                    .await()
-                                            }
-                                                .getOrNull()
+                            val secureResult =
+                                runCatching {
+
+                                    FirebaseFunctions
+                                        .getInstance()
+                                        .getHttpsCallable(
+                                            "loadSecureCoachTrainees"
+                                        )
+                                        .call(
+                                            mapOf(
+                                                "branch" to
+                                                        cleanBranch,
+                                                "group" to
+                                                        cleanGroup
+                                            )
+                                        )
+                                        .await()
+
+                                }.getOrNull()
+
+                            val payload =
+                                secureResult
+                                    ?.data as? Map<*, *>
+
+                            val rawItems =
+                                payload
+                                    ?.get("items")
+                                        as? List<*>
+                                    ?: emptyList<Any>()
+
+                            val unresolvedSet =
+                                unresolvedTraineeUids
+                                    .toSet()
+
+                            val resolvedNames =
+                                rawItems
+                                    .mapNotNull { rawItem ->
+
+                                        val item =
+                                            rawItem as? Map<*, *>
                                                 ?: return@mapNotNull null
 
-                                        if (!userDocument.exists()) {
+                                        val userDocId =
+                                            item["userDocId"]
+                                                ?.toString()
+                                                ?.trim()
+                                                .orEmpty()
+
+                                        if (
+                                            userDocId.isBlank() ||
+                                            userDocId !in unresolvedSet
+                                        ) {
                                             return@mapNotNull null
                                         }
 
                                         val fullName =
-                                            (
-                                                    userDocument.getString("fullName")
-                                                        ?: userDocument.getString("name")
-                                                        ?: userDocument.getString("displayName")
-                                                    )
+                                            item["fullName"]
+                                                ?.toString()
                                                 ?.trim()
                                                 .orEmpty()
-                                                .ifBlank {
-                                                    listOf(
-                                                        userDocument
-                                                            .getString("firstName")
-                                                            ?.trim()
-                                                            .orEmpty(),
-
-                                                        userDocument
-                                                            .getString("lastName")
-                                                            ?.trim()
-                                                            .orEmpty()
-                                                    )
-                                                        .filter {
-                                                            it.isNotBlank()
-                                                        }
-                                                        .joinToString(" ")
-                                                        .trim()
-                                                }
 
                                         val key =
-                                            fullName
-                                                .nameKey()
+                                            fullName.nameKey()
 
                                         if (key.isBlank()) {
                                             return@mapNotNull null
                                         }
 
-                                        uid to key
+                                        userDocId to key
                                     }
                                     .toMap()
 
                             if (resolvedNames.isNotEmpty()) {
+
                                 userNameKeyByUid =
                                     userNameKeyByUid +
                                             resolvedNames
@@ -1518,10 +1535,20 @@ class AttendanceRepository private constructor(
         val cleanUid =
             authUid.trim()
 
+        val currentAuthUid =
+            FirebaseAuth
+                .getInstance()
+                .currentUser
+                ?.uid
+                ?.trim()
+                .orEmpty()
+
         if (
             cleanBranch.isBlank() ||
             cleanGroup.isBlank() ||
-            cleanUid.isBlank()
+            cleanUid.isBlank() ||
+            currentAuthUid.isBlank() ||
+            cleanUid != currentAuthUid
         ) {
             return null
         }

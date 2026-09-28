@@ -65,10 +65,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.google.firebase.firestore.DocumentSnapshot
-import com.google.firebase.firestore.FieldValue
-import com.google.firebase.firestore.SetOptions
-import com.google.firebase.firestore.ktx.firestore
-import com.google.firebase.ktx.Firebase
+import com.google.firebase.functions.FirebaseFunctions
 import il.kmi.app.ui.KmiPremiumDropdown
 import il.kmi.app.ui.KmiTopBar
 import il.kmi.app.ui.KmiTypography
@@ -87,8 +84,6 @@ import il.kmi.app.ui.pdf.KmiPdfHeader
 import il.kmi.app.ui.pdf.KmiPdfFooter
 import il.yuval.ui.theme.kmiScreenBackgroundBrush
 import il.yuval.ui.theme.kmiSectionHeaderBackground
-import il.yuval.ui.theme.kmiSectionHeaderBrush
-
 
 //=====================================================================
 
@@ -463,119 +458,123 @@ private fun DocumentSnapshot.isPaymentRelevantTrainee(): Boolean {
 }
 
 private suspend fun loadRealPaymentsReportItems(): List<PaymentReportItem> {
-    val db = Firebase.firestore
 
-    val usersDocsRaw = db.collection("users")
-        .get()
-        .await()
-        .documents
-        .filter { it.isPaymentRelevantTrainee() }
-
-    val userBundles = usersDocsRaw
-        .groupBy { it.paymentUserMergeKey() }
-        .values
-        .map { docs ->
-            PaymentUserBundle(
-                primaryDoc = choosePrimaryPaymentUserDoc(docs),
-                allDocs = docs
+    val result =
+        FirebaseFunctions
+            .getInstance()
+            .getHttpsCallable(
+                "loadSecurePaymentsReport"
             )
-        }
+            .call()
+            .await()
 
-    val paymentDocs = db.collection("membershipPayments")
-        .get()
-        .await()
-        .documents
+    val payload =
+        result.data as? Map<*, *>
+            ?: return emptyList()
 
-    val paymentDocsByTraineeId = buildMap<String, DocumentSnapshot> {
-        paymentDocs.forEach { doc ->
-            val keys = listOf(
-                doc.id,
-                doc.getString("traineeId"),
-                doc.getString("userDocId"),
-                doc.getString("uid"),
-                doc.getString("authUid")
-            )
-                .mapNotNull { it?.trim()?.takeIf { key -> key.isNotBlank() } }
-                .distinct()
+    val rawItems =
+        payload["items"] as? List<*>
+            ?: return emptyList()
 
-            keys.forEach { key ->
-                put(key, doc)
+    return rawItems
+        .mapNotNull { rawItem ->
+
+            val item =
+                rawItem as? Map<*, *>
+                    ?: return@mapNotNull null
+
+            val traineeId =
+                item["traineeId"]
+                    ?.toString()
+                    ?.trim()
+                    .orEmpty()
+
+            val fullName =
+                item["fullName"]
+                    ?.toString()
+                    ?.trim()
+                    .orEmpty()
+
+            if (
+                traineeId.isBlank() ||
+                fullName.isBlank()
+            ) {
+                return@mapNotNull null
             }
-        }
-    }
 
-    return userBundles
-        .map { bundle ->
-            val userDoc = bundle.primaryDoc
+            val branchName =
+                item["branchName"]
+                    ?.toString()
+                    ?.trim()
+                    .orEmpty()
 
-            val traineeId = userDoc.getString("uid")
-                ?: userDoc.getString("authUid")
-                ?: userDoc.id
+            val phone =
+                normalizePaymentPhone(
+                    item["phone"]
+                        ?.toString()
+                        .orEmpty()
+                )
 
-            val paymentDoc =
-                bundle.allDocs
-                    .asSequence()
-                    .flatMap { document ->
-                        document
-                            .paymentIdentityKeys()
-                            .asSequence()
+            val requiredAmount =
+                (item["requiredAmount"] as? Number)
+                    ?.toDouble()
+                    ?.takeIf {
+                        it > 0.0
                     }
-                    .firstNotNullOfOrNull { key ->
-                        paymentDocsByTraineeId[key]
+                    ?: DEFAULT_MEMBERSHIP_REQUIRED_AMOUNT
+
+            val paidAmount =
+                (item["paidAmount"] as? Number)
+                    ?.toDouble()
+                    ?.coerceAtLeast(0.0)
+                    ?: 0.0
+
+            val status =
+                runCatching {
+                    PaymentStatus.valueOf(
+                        item["status"]
+                            ?.toString()
+                            ?.trim()
+                            ?.uppercase(Locale.ROOT)
+                            .orEmpty()
+                    )
+                }
+                    .getOrElse {
+                        paymentStatusFromAmount(
+                            paidAmount = paidAmount,
+                            requiredAmount = requiredAmount
+                        )
                     }
-                    ?: paymentDocsByTraineeId[
-                        traineeId
-                    ]
-                    ?: paymentDocsByTraineeId[
-                        userDoc.id
-                    ]
 
-            val requiredAmount = paymentDoc?.paymentRequiredAmountFromAny()
-                ?: userDoc.paymentRequiredAmountFromAny()
+            val paymentMethod =
+                paymentMethodFromString(
+                    item["paymentMethod"]
+                        ?.toString()
+                )
 
-            val paidAmount = paymentDoc?.getDouble("paidAmount")
-                ?: 0.0
+            val paymentDate =
+                item["paymentDate"]
+                    ?.toString()
+                    ?.trim()
+                    .orEmpty()
 
-            val status = paymentStatusFromAmount(
-                paidAmount = paidAmount,
-                requiredAmount = requiredAmount
-            )
-
-            val method = paymentMethodFromString(
-                paymentDoc?.getString("paymentMethod")
-            )
+            val notes =
+                item["notes"]
+                    ?.toString()
+                    ?.trim()
+                    .orEmpty()
 
             PaymentReportItem(
                 traineeId = traineeId,
-                fullName = paymentDoc?.getString("fullName").validDisplayNameOrNull()
-                    ?: paymentDoc?.getString("full_name").validDisplayNameOrNull()
-                    ?: paymentDoc?.getString("traineeName").validDisplayNameOrNull()
-                    ?: paymentDoc?.getString("trainee_name").validDisplayNameOrNull()
-                    ?: userDoc.paymentUserName(),
-                branchName =
-                    paymentDoc
-                        ?.getString("branchName")
-                        .cleanPaymentText()
-                        .ifBlank {
-                            userDoc.paymentUserBranch()
-                        },
-
-                phone =
-                    normalizePaymentPhone(
-                        paymentDoc
-                            ?.getString("phone")
-                            .cleanPaymentText()
-                            .ifBlank {
-                                userDoc.paymentUserPhone()
-                            }
-                    ),
-
+                fullName = fullName,
+                branchName = branchName,
+                phone = phone,
                 requiredAmount = requiredAmount,
                 paidAmount = paidAmount,
                 status = status,
-                paymentMethod = method,
-                paymentDate = paymentDoc?.getString("paymentDate").orEmpty(),
-                notes = paymentDoc?.getString("notes").orEmpty()
+                paymentMethod = paymentMethod,
+                paymentDate = paymentDate,
+                notes = notes
             )
         }
         .filter { item ->
@@ -584,8 +583,12 @@ private suspend fun loadRealPaymentsReportItems(): List<PaymentReportItem> {
                     !item.fullName.looksLikeTechnicalId()
         }
         .sortedWith(
-            compareBy<PaymentReportItem> { it.branchName }
-                .thenBy { it.fullName }
+            compareBy<PaymentReportItem> {
+                it.branchName
+            }
+                .thenBy {
+                    it.fullName
+                }
         )
 }
 
@@ -595,88 +598,157 @@ private suspend fun saveManualMembershipPaymentToFirestore(
     method: PaymentMethod,
     notes: String
 ): PaymentReportItem {
-    val db = Firebase.firestore
 
-    val newPaidAmount = item.paidAmount + amountToAdd
-    val newStatus = paymentStatusFromAmount(
-        paidAmount = newPaidAmount,
-        requiredAmount = item.requiredAmount
-    )
+    val result =
+        FirebaseFunctions
+            .getInstance()
+            .getHttpsCallable(
+                "updateSecureMembershipPayment"
+            )
+            .call(
+                mapOf(
+                    "traineeId" to
+                            item.traineeId,
 
-    val paymentDate =
-        paymentNowDateText()
+                    "amountToAdd" to
+                            amountToAdd,
 
-    val updatedItem =
-        item.copy(
-            paidAmount = newPaidAmount,
-            status = newStatus,
-            paymentMethod = method,
-            paymentDate = paymentDate,
-            notes = notes
+                    "paymentMethod" to
+                            paymentMethodToFirestore(
+                                method
+                            ),
+
+                    "notes" to
+                            notes.trim()
+                )
+            )
+            .await()
+
+    val payload =
+        result.data as? Map<*, *>
+            ?: error(
+                "Invalid payment response"
+            )
+
+    val rawItem =
+        payload["item"] as? Map<*, *>
+            ?: error(
+                "Missing payment item"
+            )
+
+    val traineeId =
+        rawItem["traineeId"]
+            ?.toString()
+            ?.trim()
+            .orEmpty()
+
+    val fullName =
+        rawItem["fullName"]
+            ?.toString()
+            ?.trim()
+            .orEmpty()
+
+    val branchName =
+        rawItem["branchName"]
+            ?.toString()
+            ?.trim()
+            .orEmpty()
+
+    val phone =
+        normalizePaymentPhone(
+            rawItem["phone"]
+                ?.toString()
+                .orEmpty()
         )
 
-    val data = mapOf(
-        "traineeId" to updatedItem.traineeId,
-        "userDocId" to updatedItem.traineeId,
-        "fullName" to updatedItem.fullName,
-        "branchName" to updatedItem.branchName,
-        "phone" to updatedItem.phone,
-        "requiredAmount" to updatedItem.requiredAmount,
-        "paidAmount" to updatedItem.paidAmount,
-        "status" to
-                paymentStatusToFirestore(
-                    updatedItem.status
-                ),
-        "paymentMethod" to
-                paymentMethodToFirestore(
-                    method
-                ),
-        "paymentDate" to updatedItem.paymentDate,
-        "paymentYear" to paymentCurrentYear(),
-        "lastPaymentAmount" to amountToAdd,
-        "notes" to updatedItem.notes,
-        "updatedAt" to FieldValue.serverTimestamp(),
-        "updatedAtMillis" to System.currentTimeMillis(),
-        "source" to "android_payments_report"
+    val requiredAmount =
+        (rawItem["requiredAmount"] as? Number)
+            ?.toDouble()
+            ?.takeIf {
+                it > 0.0
+            }
+            ?: item.requiredAmount
+
+    val paidAmount =
+        (rawItem["paidAmount"] as? Number)
+            ?.toDouble()
+            ?.coerceAtLeast(0.0)
+            ?: item.paidAmount
+
+    val status =
+        runCatching {
+            PaymentStatus.valueOf(
+                rawItem["status"]
+                    ?.toString()
+                    ?.trim()
+                    ?.uppercase(Locale.ROOT)
+                    .orEmpty()
+            )
+        }
+            .getOrElse {
+                paymentStatusFromAmount(
+                    paidAmount = paidAmount,
+                    requiredAmount = requiredAmount
+                )
+            }
+
+    val paymentMethod =
+        paymentMethodFromString(
+            rawItem["paymentMethod"]
+                ?.toString()
+        )
+
+    val paymentDate =
+        rawItem["paymentDate"]
+            ?.toString()
+            ?.trim()
+            .orEmpty()
+
+    val updatedNotes =
+        rawItem["notes"]
+            ?.toString()
+            ?.trim()
+            .orEmpty()
+
+    return item.copy(
+        traineeId =
+            traineeId.ifBlank {
+                item.traineeId
+            },
+
+        fullName =
+            fullName.ifBlank {
+                item.fullName
+            },
+
+        branchName =
+            branchName.ifBlank {
+                item.branchName
+            },
+
+        phone =
+            phone.ifBlank {
+                item.phone
+            },
+
+        requiredAmount =
+            requiredAmount,
+
+        paidAmount =
+            paidAmount,
+
+        status =
+            status,
+
+        paymentMethod =
+            paymentMethod,
+
+        paymentDate =
+            paymentDate,
+
+        notes =
+            updatedNotes
     )
-
-    val paymentDocRef = db.collection("membershipPayments")
-        .document(updatedItem.traineeId)
-
-    paymentDocRef
-        .set(data, SetOptions.merge())
-        .await()
-
-    val historyData = mapOf(
-        "traineeId" to updatedItem.traineeId,
-        "fullName" to updatedItem.fullName,
-        "branchName" to updatedItem.branchName,
-        "amount" to amountToAdd,
-        "paidAmountAfterUpdate" to updatedItem.paidAmount,
-        "requiredAmount" to updatedItem.requiredAmount,
-        "statusAfterUpdate" to
-                paymentStatusToFirestore(
-                    updatedItem.status
-                ),
-        "paymentMethod" to
-                paymentMethodToFirestore(
-                    method
-                ),
-        "paymentDate" to updatedItem.paymentDate,
-        "paymentYear" to paymentCurrentYear(),
-        "notes" to notes,
-        "createdAt" to FieldValue.serverTimestamp(),
-        "createdAtMillis" to System.currentTimeMillis(),
-        "source" to "android_payments_report_history"
-    )
-
-    paymentDocRef
-        .collection("history")
-        .document()
-        .set(historyData)
-        .await()
-
-    return updatedItem
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

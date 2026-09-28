@@ -3,7 +3,7 @@ package il.kmi.app.progress
 import com.google.firebase.Timestamp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
-import com.google.firebase.firestore.Source
+import com.google.firebase.functions.FirebaseFunctions
 import il.kmi.app.KmiViewModel
 import il.kmi.shared.domain.Belt
 import il.kmi.shared.domain.ContentRepo
@@ -403,161 +403,91 @@ object UserProgressRepository {
         beltId: String,
         userKnownPercent: Int
     ): UserProgressComparison? {
-        val currentUid =
+
+        val currentUser =
             FirebaseAuth.getInstance()
                 .currentUser
-                ?.uid
-                .orEmpty()
+                ?: return null
 
-        val cleanBeltId = beltId.trim()
-
-        if (
-            currentUid.isBlank() ||
-            cleanBeltId.isBlank()
-        ) {
+        if (currentUser.isAnonymous) {
             return null
         }
 
-        /*
-         * קוראים את נתוני ההתקדמות האמיתיים של המשתמשים
-         * באותה חגורה. אין תלות במסמך beltStats חיצוני
-         * שאינו מתעדכן מתוך האפליקציה.
-         */
-        /*
-         * נתוני ההשוואה חייבים להגיע מהשרת.
-         *
-         * אחרת מכשיר אחד עלול להשתמש ב-cache שבו
-         * ההתקדמות של המשתמש השני עדיין 0%, למרות
-         * שבמכשיר השני כבר נשמר אחוז חדש.
-         */
-        val snapshot =
-            FirebaseFirestore.getInstance()
-                .collection("userProgress")
-                .whereEqualTo(
-                    "beltId",
-                    cleanBeltId
+        val cleanBeltId =
+            beltId.trim()
+
+        if (cleanBeltId.isBlank()) {
+            return null
+        }
+
+        val result =
+            FirebaseFunctions
+                .getInstance()
+                .getHttpsCallable(
+                    "loadSecureBeltComparison"
                 )
-                .get(Source.DEFAULT)
+                .call(
+                    mapOf(
+                        "beltId" to cleanBeltId
+                    )
+                )
                 .await()
 
-        /*
-   * מאחדים את כל הרשומות של אותה חגורה לפי uid.
-   *
-   * בתקופת המעבר ייתכן שלמשתמש קיימת גם רשומת legacy
-   * וגם רשומת uid__beltId, ולכן תמיד בוחרים את הרשומה
-   * העדכנית ביותר לפי updatedAt.
-   */
-        /*
-         * משתמשים רק במסמכים במבנה החדש:
-         *
-         *     {uid}__{beltId}
-         *
-         * מסמכי legacy בשם uid בלבד אינם משתתפים יותר
-         * בחישוב, כדי שערך ישן לא ידרוס את נתוני החגורה
-         * החדשים של אותו משתמש.
-         */
-        val latestPercentByUid =
-            snapshot.documents
-                .mapNotNull { document ->
-                    val documentUid =
-                        document.getString("uid")
-                            ?.trim()
-                            .orEmpty()
+        val payload =
+            result.data as? Map<*, *>
+                ?: return null
 
-                    val totalCount =
-                        (document.getLong("totalCount") ?: 0L)
-                            .toInt()
-
-                    val knownPercent =
-                        (document.getLong("knownPercent") ?: -1L)
-                            .toInt()
-
-                    val expectedDocumentId =
-                        "${documentUid}__${cleanBeltId}"
-
-                    if (
-                        documentUid.isNotBlank() &&
-                        document.id == expectedDocumentId &&
-                        totalCount > 0 &&
-                        knownPercent in 0..100
-                    ) {
-                        documentUid to knownPercent
-                    } else {
-                        null
-                    }
+        val returnedBeltId =
+            payload["beltId"]
+                ?.toString()
+                ?.trim()
+                ?.takeIf {
+                    it.isNotBlank()
                 }
-                .toMap()
+                ?: cleanBeltId
 
-        val safeUserPercent =
-            userKnownPercent.coerceIn(0, 100)
+        val usersCount =
+            (payload["usersCount"] as? Number)
+                ?.toInt()
+                ?.coerceAtLeast(0)
+                ?: 0
 
-        /*
-         * לצורך "אתה מעל" מוציאים רק את המשתמש הנוכחי.
-         */
-        val otherTraineePercents =
-            latestPercentByUid
-                .filterKeys { uid ->
-                    uid != currentUid
-                }
-                .values
-                .toList()
-
-        if (otherTraineePercents.isEmpty()) {
-            return null
-        }
-
-        /*
-         * הממוצע ומספר המתאמנים הם נתונים גלובליים:
-         * כל המשתמשים בחגורה נלקחים מ-Firestore.
-         *
-         * אם מסמך המשתמש הנוכחי עדיין לא הגיע ל-query,
-         * משתמשים זמנית באחוז המקומי שלו.
-         */
-        val allTraineePercents =
-            if (latestPercentByUid.containsKey(currentUid)) {
-                latestPercentByUid.values.toList()
-            } else {
-                latestPercentByUid.values.toList() +
-                        safeUserPercent
-            }
-
-        val otherUsersCount =
-            otherTraineePercents.size
-
-        val displayedUsersCount =
-            allTraineePercents.size
+        val returnedUserKnownPercent =
+            (payload["userKnownPercent"] as? Number)
+                ?.toInt()
+                ?.coerceIn(0, 100)
+                ?: userKnownPercent.coerceIn(
+                    0,
+                    100
+                )
 
         val averageKnownPercent =
-            allTraineePercents
-                .average()
-                .roundToInt()
-                .coerceIn(0, 100)
-
-        /*
-         * "אתה מעל" עדיין מחושב רק מול מתאמנים אחרים,
-         * כדי שהמשתמש לא ישווה את עצמו לעצמו.
-         */
-        val traineesBelowUser =
-            otherTraineePercents.count { percent ->
-                percent < safeUserPercent
-            }
+            (payload["averageKnownPercent"] as? Number)
+                ?.toInt()
+                ?.coerceIn(0, 100)
+                ?: 0
 
         val percentileAbove =
-            (
-                    traineesBelowUser.toFloat() /
-                            otherUsersCount.toFloat() *
-                            100f
-                    )
-                .roundToInt()
-                .coerceIn(0, 100)
+            (payload["percentileAbove"] as? Number)
+                ?.toInt()
+                ?.coerceIn(0, 100)
+                ?: 0
+
+        val hasEnoughData =
+            payload["hasEnoughData"] as? Boolean
+                ?: false
 
         return UserProgressComparison(
-            beltId = cleanBeltId,
-            usersCount = displayedUsersCount,
-            userKnownPercent = safeUserPercent,
-            averageKnownPercent = averageKnownPercent,
-            percentileAbove = percentileAbove,
-            hasEnoughData = true
+            beltId = returnedBeltId,
+            usersCount = usersCount,
+            userKnownPercent =
+                returnedUserKnownPercent,
+            averageKnownPercent =
+                averageKnownPercent,
+            percentileAbove =
+                percentileAbove,
+            hasEnoughData =
+                hasEnoughData
         )
     }
 
@@ -574,337 +504,78 @@ object UserProgressRepository {
     suspend fun loadCoachGroupsBeltProgress(
         beltId: String
     ): CoachGroupProgressSummary? {
-        val coachUid =
+
+        val currentUser =
             FirebaseAuth.getInstance()
                 .currentUser
-                ?.uid
-                ?.trim()
-                .orEmpty()
+                ?: return null
+
+        if (currentUser.isAnonymous) {
+            return null
+        }
 
         val cleanBeltId =
             beltId.trim()
 
-        if (
-            coachUid.isBlank() ||
-            cleanBeltId.isBlank()
-        ) {
+        if (cleanBeltId.isBlank()) {
             return null
         }
 
-        val firestore =
-            FirebaseFirestore.getInstance()
-
-        /*
-         * נרמול שמות הסניפים והקבוצות.
-         * כך מקף עברי, מקף רגיל ורווחים כפולים
-         * לא גורמים לאיבוד מתאמנים בחישוב.
-         */
-        fun normalizeAssignment(
-            value: String
-        ): String {
-            return value
-                .trim()
-                .replace('־', '-')
-                .replace('–', '-')
-                .replace('—', '-')
-                .replace(Regex("\\s+"), " ")
-                .lowercase()
-        }
-
-        fun readAssignments(
-            document:
-            com.google.firebase.firestore.DocumentSnapshot,
-            listFields: List<String>,
-            singleFields: List<String>,
-            csvFields: List<String>
-        ): Set<String> {
-            val values =
-                mutableListOf<String>()
-
-            listFields.forEach { fieldName ->
-                (document.get(fieldName) as? List<*>)
-                    ?.forEach { item ->
-                        item
-                            ?.toString()
-                            ?.let(values::add)
-                    }
-            }
-
-            singleFields.forEach { fieldName ->
-                document.getString(fieldName)
-                    ?.let(values::add)
-            }
-
-            csvFields.forEach { fieldName ->
-                document.getString(fieldName)
-                    ?.split(",")
-                    ?.let(values::addAll)
-            }
-
-            return values
-                .map(::normalizeAssignment)
-                .filter { value ->
-                    value.isNotBlank()
-                }
-                .toSet()
-        }
-
-        val coachDocument =
-            firestore
-                .collection("users")
-                .document(coachUid)
-                .get(Source.DEFAULT)
+        val result =
+            FirebaseFunctions
+                .getInstance()
+                .getHttpsCallable(
+                    "loadSecureCoachGroupsBeltProgress"
+                )
+                .call(
+                    mapOf(
+                        "beltId" to cleanBeltId
+                    )
+                )
                 .await()
 
-        if (!coachDocument.exists()) {
-            return null
-        }
+        val payload =
+            result.data as? Map<*, *>
+                ?: return null
 
-        val coachBranches =
-            readAssignments(
-                document = coachDocument,
-                listFields = listOf(
-                    "branches",
-                    "selected_branches"
-                ),
-                singleFields = listOf(
-                    "activeBranch",
-                    "active_branch",
-                    "branch",
-                    "coachBranch",
-                    "coach_branch",
-                    "selected_branch",
-                    "current_branch"
-                ),
-                csvFields = listOf(
-                    "branchesCsv",
-                    "branches_csv"
-                )
-            )
-
-        val coachGroups =
-            readAssignments(
-                document = coachDocument,
-                listFields = listOf(
-                    "groups",
-                    "selected_groups"
-                ),
-                singleFields = listOf(
-                    "primaryGroup",
-                    "activeGroup",
-                    "active_group",
-                    "groupKey",
-                    "group_key",
-                    "group",
-                    "age_group",
-                    "coachGroupKey",
-                    "coach_groupKey",
-                    "selected_groupKey",
-                    "current_groupKey"
-                ),
-                csvFields = listOf(
-                    "groupsCsv",
-                    "groups_csv"
-                )
-            )
-
-        /*
-         * ללא שיוך לקבוצה אין דרך בטוחה לדעת
-         * אילו מתאמנים שייכים למאמן.
-         */
-        if (coachGroups.isEmpty()) {
-            return CoachGroupProgressSummary(
-                beltId = cleanBeltId,
-                groupsCount = 0,
-                totalTrainees = 0,
-                traineesWithProgress = 0,
-                averageKnownPercent = 0
-            )
-        }
-
-        val usersSnapshot =
-            firestore
-                .collection("users")
-                .get(Source.DEFAULT)
-                .await()
-
-        val traineeUids =
-            usersSnapshot.documents
-                .mapNotNull { document ->
-                    val role =
-                        document.getString("role")
-                            ?.trim()
-                            ?.lowercase()
-                            .orEmpty()
-
-                    val isTrainee =
-                        role == "trainee" ||
-                                role.contains("trainee") ||
-                                role.contains("מתאמן")
-
-                    if (!isTrainee) {
-                        return@mapNotNull null
-                    }
-
-                    val traineeBranches =
-                        readAssignments(
-                            document = document,
-                            listFields = listOf(
-                                "branches",
-                                "selected_branches"
-                            ),
-                            singleFields = listOf(
-                                "activeBranch",
-                                "active_branch",
-                                "branch",
-                                "selected_branch",
-                                "current_branch"
-                            ),
-                            csvFields = listOf(
-                                "branchesCsv",
-                                "branches_csv"
-                            )
-                        )
-
-                    val traineeGroups =
-                        readAssignments(
-                            document = document,
-                            listFields = listOf(
-                                "groups",
-                                "selected_groups"
-                            ),
-                            singleFields = listOf(
-                                "primaryGroup",
-                                "activeGroup",
-                                "active_group",
-                                "groupKey",
-                                "group_key",
-                                "group",
-                                "age_group",
-                                "selected_groupKey",
-                                "current_groupKey"
-                            ),
-                            csvFields = listOf(
-                                "groupsCsv",
-                                "groups_csv"
-                            )
-                        )
-
-                    val belongsToCoachGroup =
-                        traineeGroups.any { group ->
-                            group in coachGroups
-                        }
-
-                    /*
-                     * כאשר למאמן קיימים סניפים,
-                     * נדרש גם שיוך לסניף משותף.
-                     *
-                     * כאשר אין למאמן סניף שמור,
-                     * השיוך לקבוצה מספיק.
-                     */
-                    val belongsToCoachBranch =
-                        coachBranches.isEmpty() ||
-                                traineeBranches.any { branch ->
-                                    branch in coachBranches
-                                }
-
-                    if (
-                        belongsToCoachGroup &&
-                        belongsToCoachBranch
-                    ) {
-                        document.getString("uid")
-                            ?.trim()
-                            ?.takeIf { uid ->
-                                uid.isNotBlank()
-                            }
-                            ?: document.id
-                                .trim()
-                                .takeIf { uid ->
-                                    uid.isNotBlank()
-                                }
-                    } else {
-                        null
-                    }
+        val returnedBeltId =
+            payload["beltId"]
+                ?.toString()
+                ?.trim()
+                ?.takeIf {
+                    it.isNotBlank()
                 }
-                .filter { uid ->
-                    uid != coachUid
-                }
-                .distinct()
+                ?: cleanBeltId
 
-        if (traineeUids.isEmpty()) {
-            return CoachGroupProgressSummary(
-                beltId = cleanBeltId,
-                groupsCount = coachGroups.size,
-                totalTrainees = 0,
-                traineesWithProgress = 0,
-                averageKnownPercent = 0
-            )
-        }
+        val groupsCount =
+            (payload["groupsCount"] as? Number)
+                ?.toInt()
+                ?.coerceAtLeast(0)
+                ?: 0
 
-        val progressSnapshot =
-            firestore
-                .collection("userProgress")
-                .whereEqualTo(
-                    "beltId",
-                    cleanBeltId
-                )
-                .get(Source.DEFAULT)
-                .await()
+        val totalTrainees =
+            (payload["totalTrainees"] as? Number)
+                ?.toInt()
+                ?.coerceAtLeast(0)
+                ?: 0
 
-        /*
-         * משתמשים רק במסמכים החדשים:
-         *
-         *     {uid}__{beltId}
-         *
-         * מסמכי legacy אינם נכנסים לחישוב.
-         */
-        val progressByUid =
-            progressSnapshot.documents
-                .mapNotNull { document ->
-                    val uid =
-                        document.getString("uid")
-                            ?.trim()
-                            .orEmpty()
-
-                    val totalCount =
-                        (document.getLong("totalCount") ?: 0L)
-                            .toInt()
-
-                    val knownPercent =
-                        (document.getLong("knownPercent") ?: -1L)
-                            .toInt()
-
-                    val expectedDocumentId =
-                        "${uid}__${cleanBeltId}"
-
-                    if (
-                        uid in traineeUids &&
-                        document.id == expectedDocumentId &&
-                        totalCount > 0 &&
-                        knownPercent in 0..100
-                    ) {
-                        uid to knownPercent
-                    } else {
-                        null
-                    }
-                }
-                .toMap()
+        val traineesWithProgress =
+            (payload["traineesWithProgress"] as? Number)
+                ?.toInt()
+                ?.coerceAtLeast(0)
+                ?: 0
 
         val averageKnownPercent =
-            progressByUid.values
-                .takeIf { percentages ->
-                    percentages.isNotEmpty()
-                }
-                ?.average()
-                ?.roundToInt()
+            (payload["averageKnownPercent"] as? Number)
+                ?.toInt()
                 ?.coerceIn(0, 100)
                 ?: 0
 
         return CoachGroupProgressSummary(
-            beltId = cleanBeltId,
-            groupsCount = coachGroups.size,
-            totalTrainees = traineeUids.size,
-            traineesWithProgress = progressByUid.size,
+            beltId = returnedBeltId,
+            groupsCount = groupsCount,
+            totalTrainees = totalTrainees,
+            traineesWithProgress = traineesWithProgress,
             averageKnownPercent = averageKnownPercent
         )
     }

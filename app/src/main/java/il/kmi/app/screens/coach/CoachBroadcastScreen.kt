@@ -40,11 +40,7 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.Timestamp
-import com.google.firebase.firestore.DocumentSnapshot
-import com.google.firebase.firestore.FieldPath
-import com.google.firebase.firestore.FieldValue
-import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.functions.FirebaseFunctions
 import java.util.Date
 import kotlinx.coroutines.launch
 import java.io.File
@@ -65,7 +61,6 @@ import android.graphics.pdf.PdfDocument
 import androidx.compose.foundation.clickable
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.FileProvider
-import com.google.firebase.firestore.SetOptions
 import il.kmi.shared.localization.AppLanguage
 import il.kmi.shared.localization.AppLanguageManager
 import il.kmi.app.privacy.DemoPrivacy
@@ -74,7 +69,6 @@ import il.kmi.app.screens.registration.CoachBranchAssignmentsCodec
 import il.kmi.app.ui.KmiPremiumDropdown
 import il.kmi.app.ui.KmiTypography
 import il.yuval.ui.theme.kmiSectionHeaderBackground
-import il.yuval.ui.theme.kmiSectionHeaderBrush
 
 //======================================================================
 
@@ -200,275 +194,113 @@ fun persistCoachBroadcast(
     branch: String,
     message: String,
     targetUids: List<String>,
-    targetRecipients: List<Map<String, String>> = emptyList(),
     targetGroups: List<String> = emptyList(),
     onResult: (Boolean, Throwable?) -> Unit = { _, _ -> }
 ) {
-    val auth = FirebaseAuth.getInstance()
-    val db = FirebaseFirestore.getInstance()
+    val currentUid =
+        FirebaseAuth
+            .getInstance()
+            .currentUser
+            ?.uid
+            ?.trim()
+            .orEmpty()
 
-    val currentUser = auth.currentUser
-    val currentUid = currentUser?.uid
-
-    if (currentUid.isNullOrBlank()) {
-        onResult(false, IllegalStateException("No logged-in user"))
+    if (currentUid.isBlank()) {
+        onResult(
+            false,
+            IllegalStateException(
+                "No logged-in user"
+            )
+        )
         return
     }
 
-    val cleanRegion = region.trim()
-    val cleanBranch = branch.trim()
-    val cleanMessage = message.trim()
-    val cleanTargetUids = targetUids
-        .map { it.trim() }
-        .filter { it.isNotBlank() }
-        .distinct()
+    val cleanRegion =
+        region.trim()
 
-    val cleanTargetGroups = targetGroups
-        .map { it.trim() }
-        .filter { it.isNotBlank() }
-        .distinct()
+    val cleanBranch =
+        branch.trim()
 
-    val cleanTargetRecipients = targetRecipients
-        .mapNotNull { raw ->
-            val uid = raw["uid"].orEmpty().trim()
-            val name = raw["name"].orEmpty().trim()
-            val phone = raw["phone"].orEmpty().trim()
-            val email = raw["email"].orEmpty().trim()
+    val cleanMessage =
+        message.trim()
 
-            if (uid.isBlank() && phone.isBlank() && email.isBlank()) {
-                null
-            } else {
-                mapOf(
-                    "uid" to uid,
-                    "name" to name,
-                    "phone" to phone,
-                    "email" to email
-                )
+    val cleanTargetUids =
+        targetUids
+            .map {
+                it.trim()
             }
-        }
-        .distinctBy { recipient ->
-            recipient["uid"]?.takeIf { it.isNotBlank() }
-                ?: recipient["phone"]?.takeIf { it.isNotBlank() }
-                ?: recipient["email"].orEmpty()
-        }
+            .filter {
+                it.isNotBlank()
+            }
+            .distinct()
 
-    val cleanTargetPhones = cleanTargetRecipients
-        .mapNotNull { it["phone"]?.trim()?.takeIf { phone -> phone.isNotBlank() } }
-        .distinct()
+    val cleanTargetGroups =
+        targetGroups
+            .map {
+                it.trim()
+            }
+            .filter {
+                it.isNotBlank()
+            }
+            .distinct()
 
-    val cleanTargetNames = cleanTargetRecipients
-        .mapNotNull { it["name"]?.trim()?.takeIf { name -> name.isNotBlank() } }
-        .distinct()
-
-    val cleanTargetEmails = cleanTargetRecipients
-        .mapNotNull { it["email"]?.trim()?.takeIf { email -> email.isNotBlank() } }
-        .distinct()
-
-    if (cleanRegion.isBlank() || cleanBranch.isBlank()) {
-        onResult(false, IllegalStateException("Missing region/branch"))
-        return
-    }
-
-    if (cleanMessage.isBlank()) {
-        onResult(false, IllegalStateException("Missing message"))
+    if (
+        cleanBranch.isBlank() ||
+        cleanMessage.isBlank()
+    ) {
+        onResult(
+            false,
+            IllegalStateException(
+                "Missing branch or message"
+            )
+        )
         return
     }
 
     if (cleanTargetUids.isEmpty()) {
-        onResult(false, IllegalStateException("No selected recipients"))
+        onResult(
+            false,
+            IllegalStateException(
+                "No selected recipients"
+            )
+        )
         return
     }
 
-    val coachName = currentUser.displayName
-        ?.trim()
-        ?.takeIf { it.isNotBlank() }
-        ?: currentUser.email
-            ?.trim()
-            ?.takeIf { it.isNotBlank() }
-        ?: "מאמן"
+    FirebaseFunctions
+        .getInstance()
+        .getHttpsCallable(
+            "createSecureCoachBroadcast"
+        )
+        .call(
+            mapOf(
+                "region" to
+                        cleanRegion,
 
-    val nowMillis = System.currentTimeMillis()
+                "branch" to
+                        cleanBranch,
 
-    val docRef = db.collection("coachBroadcasts").document()
-    val broadcastId = docRef.id
+                "message" to
+                        cleanMessage,
 
-    val data = hashMapOf<String, Any?>(
-        "broadcastId" to broadcastId,
+                "groups" to
+                        cleanTargetGroups,
 
-        // סוג הודעה — חשוב ל־Cloud Function / Android Intent
-        "type" to "coach_broadcast",
-
-        // המאמן שיצר את ההודעה נשמר לצורכי מערכת ובקרה.
-        "authorUid" to currentUid,
-        "coachUid" to currentUid,
-        "coachName" to coachName,
-
-        // זהות השולח — עברית / אנגלית.
-        // senderName נשאר לצורכי תאימות למסכים ישנים.
-        "senderName" to "צוות ק.מ.י",
-        "senderNameHe" to "צוות ק.מ.י",
-        "senderNameEn" to "K.M.I Team",
-
-        // כותרות ברירת מחדל למרכז ההודעות / Push.
-        "titleHe" to "הודעה מצוות ק.מ.י",
-        "titleEn" to "Message from K.M.I Team",
-
-        // מאפייני מרכז ההודעות.
-        "messageType" to "general",
-        "priority" to "normal",
-        "inAppEnabled" to true,
-
-        "region" to cleanRegion,
-        "branch" to cleanBranch,
-
-        // קבוצות יעד — חשוב למסך הבית ולסינון הודעות מאמן
-        "group" to cleanTargetGroups.joinToString(", "),
-        "groupKey" to cleanTargetGroups.joinToString(", "),
-        "groups" to cleanTargetGroups,
-        "targetGroup" to cleanTargetGroups.joinToString(", "),
-        "targetGroups" to cleanTargetGroups,
-        "selectedGroups" to cleanTargetGroups,
-
-        // תאימות למסכים קיימים
-        "text" to cleanMessage,
-        "message" to cleanMessage,
-        "body" to cleanMessage,
-
-        // נמענים אמיתיים
-        "targetUids" to cleanTargetUids,
-        "targetUidCount" to cleanTargetUids.size,
-        "targetCount" to cleanTargetUids.size,
-
-        // Snapshot קריא של הנמענים בזמן השליחה
-        "targetRecipients" to cleanTargetRecipients,
-        "targetPhones" to cleanTargetPhones,
-        "targetNames" to cleanTargetNames,
-        "targetEmails" to cleanTargetEmails,
-        "targetRecipientSnapshotCount" to cleanTargetRecipients.size,
-
-        // הכנה ל־Push
-        "pushEnabled" to true,
-        "pushTarget" to "targetUids",
-        "pushStatus" to "pending",
-        "pushCreatedBy" to "android_coach_broadcast",
-
-        // זמנים
-        "createdAt" to FieldValue.serverTimestamp(),
-        "createdAtMillis" to nowMillis,
-        "sentAtMillis" to nowMillis,
-
-        // ההודעה נשמרת במרכז ההודעות ואינה נמחקת אוטומטית.
-        "source" to "android_coach_broadcast"
-    )
-
-    docRef
-        .set(
-            data.filterValues { it != null },
-            SetOptions.merge()
+                "targetUids" to
+                        cleanTargetUids
+            )
         )
         .addOnSuccessListener {
-
-            /*
-             * לכל נמען נוצרת רשומה אישית.
-             *
-             * מכאן נוכל לבנות:
-             * - נקרא / לא נקרא
-             * - badge של הודעות חדשות
-             * - מחיקה אישית מהתיבה
-             * - תאריך קריאה
-             */
-            val recipientTasks =
-                cleanTargetUids.map { uid ->
-
-                    val recipientSnapshot =
-                        cleanTargetRecipients
-                            .firstOrNull { recipient ->
-                                recipient["uid"]
-                                    .orEmpty()
-                                    .trim() == uid
-                            }
-
-                    val recipientData =
-                        hashMapOf<String, Any?>(
-                            "uid" to uid,
-                            "broadcastId" to broadcastId,
-
-                            // זהות השולח לפי שפת האפליקציה
-                            "senderNameHe" to "צוות ק.מ.י",
-                            "senderNameEn" to "K.M.I Team",
-
-                            // כותרת ההודעה לפי שפה
-                            "titleHe" to "הודעה מצוות ק.מ.י",
-                            "titleEn" to "Message from K.M.I Team",
-
-                            // תוכן ההודעה
-                            "message" to cleanMessage,
-                            "text" to cleanMessage,
-                            "body" to cleanMessage,
-
-                            // סיווג
-                            "messageType" to "general",
-                            "priority" to "normal",
-
-                            // שיוך
-                            "region" to cleanRegion,
-                            "branch" to cleanBranch,
-                            "groups" to cleanTargetGroups,
-
-                            // Snapshot של הנמען עצמו בלבד
-                            "name" to
-                                    recipientSnapshot
-                                        ?.get("name")
-                                        .orEmpty(),
-
-                            "email" to
-                                    recipientSnapshot
-                                        ?.get("email")
-                                        .orEmpty(),
-
-                            "phone" to
-                                    recipientSnapshot
-                                        ?.get("phone")
-                                        .orEmpty(),
-
-                            // מצב אישי בתיבת ההודעות
-                            "read" to false,
-                            "readAt" to null,
-
-                            "deleted" to false,
-                            "deletedAt" to null,
-
-                            // זמנים
-                            "createdAt" to
-                                    FieldValue.serverTimestamp(),
-
-                            "createdAtMillis" to nowMillis
-                        )
-
-                    docRef
-                        .collection("recipients")
-                        .document(uid)
-                        .set(
-                            recipientData,
-                            SetOptions.merge()
-                        )
-                }
-
-            if (recipientTasks.isEmpty()) {
-                onResult(true, null)
-            } else {
-                com.google.android.gms.tasks.Tasks
-                    .whenAll(recipientTasks)
-                    .addOnSuccessListener {
-                        onResult(true, null)
-                    }
-                    .addOnFailureListener { error ->
-                        onResult(false, error)
-                    }
-            }
+            onResult(
+                true,
+                null
+            )
         }
         .addOnFailureListener { error ->
-            onResult(false, error)
+            onResult(
+                false,
+                error
+            )
         }
 }
 
@@ -1541,13 +1373,11 @@ fun CoachBroadcastScreen(
         mutableStateOf(false)
     }
 
-    val db = remember { FirebaseFirestore.getInstance() }
-
     // Snackbar לפידבק
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
 
-    // ===== טעינת חברי הקבוצה מה- Firestore לפי אזור + סניף + קבוצה =====
+    // ===== טעינת נמענים מאובטחת דרך Cloud Function =====
     LaunchedEffect(
         region,
         branch,
@@ -1557,543 +1387,288 @@ fun CoachBroadcastScreen(
         coachBranchAssignments,
         assignedGroupsForSelectedBranch
     ) {
-        fun String.norm(): String {
-            return trim()
-                .replace('־', '-')
-                .replace('–', '-')
-                .replace('—', '-')
-                .replace(Regex("\\s+"), " ")
-                .trim()
-        }
+        val cleanRegion =
+            region.trim()
 
-        fun String.pickPrimaryBranch(): String {
-            return split(",", "•", "|")
-                .map { it.trim() }
-                .firstOrNull { it.isNotBlank() }
-                ?: trim()
-        }
+        val cleanBranch =
+            branch.trim()
 
-        fun splitTokensNorm(raw: String?): List<String> {
-            if (raw.isNullOrBlank()) return emptyList()
-
-            return raw
-                .replace(" • ", ",")
-                .replace("|", ",")
-                .replace("\n", ",")
-                .split(',', ';', '；')
-                .map { it.norm() }
-                .filter { it.isNotBlank() }
-                .distinct()
-        }
-
-        fun normalizePhoneKey(raw: String): String {
-            return raw
-                .trim()
-                .replace(" ", "")
-                .replace("-", "")
-                .replace("(", "")
-                .replace(")", "")
-                .replace(".", "")
-        }
-
-        fun expandGroupAliases(raw: String): List<String> {
-            val n = raw.norm()
-
-            // ✅ התאמת קבוצות חייבת להיות מדויקת.
-            // לא מפרקים "נוער + בוגרים" ל-"נוער" ו-"בוגרים",
-            // כדי שלא יתערבבו רשימות מתאמנים בין קבוצות שונות.
-            return buildList {
-                add(n)
-                addAll(splitTokensNorm(n))
-
-                when (n.lowercase()) {
-                    "children", "kids" -> add("ילדים")
-                    "youth" -> add("נוער")
-                    "adults", "adult" -> add("בוגרים")
-                }
-            }
-                .map { it.norm() }
-                .filter { it.isNotBlank() }
-                .distinct()
-        }
-
-        fun DocumentSnapshot.roleText(): String {
-            return (
-                    getString("role")
-                        ?: getString("userType")
-                        ?: getString("type")
-                        ?: ""
-                    )
-                .trim()
-                .lowercase()
-        }
-
-        fun DocumentSnapshot.isActiveUser(): Boolean {
-            val activeBoolean = getBoolean("isActive")
-            val activeText = (
-                    getString("status")
-                        ?: getString("active")
-                        ?: ""
-                    ).trim().lowercase()
-
-            return activeBoolean != false &&
-                    activeText != "inactive" &&
-                    activeText != "disabled" &&
-                    activeText != "blocked" &&
-                    activeText != "לא פעיל"
-        }
-
-        fun DocumentSnapshot.isTraineeRole(): Boolean {
-            val role = roleText()
-
-            return role.isBlank() ||
-                    role == "trainee" ||
-                    role.contains("trainee") ||
-                    role.contains("student") ||
-                    role.contains("מתאמן") ||
-                    role.contains("חניך")
-        }
-
-        fun DocumentSnapshot.branchTokensNorm(): List<String> {
-            val branchesList = (get("branches") as? List<*>)
-                ?.mapNotNull { it?.toString()?.trim() }
-                .orEmpty()
-
-            return buildList {
-                addAll(branchesList.map { it.norm() })
-                addAll(splitTokensNorm(getString("branchesCsv")))
-                addAll(splitTokensNorm(getString("branch")))
-                addAll(splitTokensNorm(getString("activeBranch")))
-                addAll(splitTokensNorm(getString("active_branch")))
-            }
-                .filter { it.isNotBlank() }
-                .distinct()
-        }
-
-        fun DocumentSnapshot.groupTokensNorm(): List<String> {
-            val groupsList = (get("groups") as? List<*>)
-                ?.mapNotNull { it?.toString()?.trim() }
-                ?.flatMap { expandGroupAliases(it) }
-                .orEmpty()
-
-            return buildList {
-                addAll(groupsList)
-                addAll(splitTokensNorm(getString("primaryGroup")).flatMap { expandGroupAliases(it) })
-                addAll(splitTokensNorm(getString("activeGroup")).flatMap { expandGroupAliases(it) })
-                addAll(splitTokensNorm(getString("active_group")).flatMap { expandGroupAliases(it) })
-                addAll(splitTokensNorm(getString("groupKey")).flatMap { expandGroupAliases(it) })
-                addAll(splitTokensNorm(getString("group_key")).flatMap { expandGroupAliases(it) })
-                addAll(splitTokensNorm(getString("group")).flatMap { expandGroupAliases(it) })
-                addAll(splitTokensNorm(getString("groupName")).flatMap { expandGroupAliases(it) })
-                addAll(splitTokensNorm(getString("groupsCsv")).flatMap { expandGroupAliases(it) })
-                addAll(splitTokensNorm(getString("groupCsv")).flatMap { expandGroupAliases(it) })
-                addAll(splitTokensNorm(getString("age_group")).flatMap { expandGroupAliases(it) })
-            }
-                .filter { it.isNotBlank() }
-                .distinct()
-        }
-
-        fun DocumentSnapshot.groupDisplayTokens(): List<String> {
-            val groupsList = (get("groups") as? List<*>)
-                ?.mapNotNull { it?.toString()?.trim() }
-                .orEmpty()
-
-            return buildList {
-                addAll(groupsList)
-                addAll(splitTokensNorm(getString("primaryGroup")))
-                addAll(splitTokensNorm(getString("activeGroup")))
-                addAll(splitTokensNorm(getString("active_group")))
-                addAll(splitTokensNorm(getString("groupKey")))
-                addAll(splitTokensNorm(getString("group_key")))
-                addAll(splitTokensNorm(getString("group")))
-                addAll(splitTokensNorm(getString("groupName")))
-                addAll(splitTokensNorm(getString("groupsCsv")))
-                addAll(splitTokensNorm(getString("groupCsv")))
-                addAll(splitTokensNorm(getString("age_group")))
-            }
-                .map { it.norm() }
-                .filter { it.isNotBlank() }
-                .distinct()
-        }
-
-        fun matchesAnyToken(tokens: List<String>, candidates: Set<String>): Boolean {
-            if (tokens.isEmpty() || candidates.isEmpty()) return false
-
-            return tokens.any { token ->
-                token in candidates ||
-                        candidates.any { candidate ->
-                            candidate.length >= 2 &&
-                                    token.length >= 2 &&
-                                    (token.contains(candidate) || candidate.contains(token))
-                        }
-            }
-        }
-
-        fun matchesExactGroupToken(tokens: List<String>, candidates: Set<String>): Boolean {
-            if (tokens.isEmpty() || candidates.isEmpty()) return false
-
-            val cleanTokens = tokens
-                .map { it.norm() }
-                .filter { it.isNotBlank() }
-                .toSet()
-
-            val cleanCandidates = candidates
-                .map { it.norm() }
-                .filter { it.isNotBlank() }
-                .toSet()
-
-            return cleanTokens.any { token ->
-                token in cleanCandidates
-            }
-        }
-
-        fun DocumentSnapshot.displayNameOrPhone(phone: String): String {
-            return getString("fullName")?.takeIf { it.isNotBlank() }
-                ?: getString("name")?.takeIf { it.isNotBlank() }
-                ?: getString("displayName")?.takeIf { it.isNotBlank() }
-                ?: getString("email")?.takeIf { it.isNotBlank() }
-                ?: phone
-        }
-
-        val regionNorm = region.norm()
-
-        val branchNames = splitTokensNorm(branch)
-            .ifEmpty {
-                listOf(branch.norm().pickPrimaryBranch())
-            }
-            .map { it.pickPrimaryBranch().norm() }
-            .filter { it.isNotBlank() }
-            .distinct()
-
-        val selectedGroupNames = effectiveGroupKeys.map { it.norm() }
-
-        if (regionNorm.isBlank() || branchNames.isEmpty()) {
+        if (
+            cleanRegion.isBlank() ||
+            cleanBranch.isBlank()
+        ) {
             availableBranchGroups = emptyList()
             availableBranchGroupCounts = emptyMap()
             selectedTargetGroups = emptySet()
-            isRecipientsLoading = false
             recipients = emptyList()
+            isRecipientsLoading = false
+
             return@LaunchedEffect
         }
 
-        // ✅ לא מאפסים כאן selectedTargetGroups.
-        // הסיבה: שינוי בחירת קבוצה מפעיל מחדש את LaunchedEffect,
-        // ואם נאפס כאן — הקבוצה לא תישאר מסומנת והמתאמנים לא ייטענו.
-        recipients = emptyList()
         isRecipientsLoading = true
 
-        val branchCandidates = branchNames
-            .flatMap { branchName ->
-                listOf(
-                    branchName,
-                    branchName.replace("-", "–"),
-                    branchName.replace("-", "—"),
-                    branchName.replace("-", "־"),
-                    branchName.replace("–", "-"),
-                    branchName.replace("—", "-"),
-                    branchName.replace("־", "-")
-                )
-            }
-            .map { it.trim() }
-            .filter { it.isNotBlank() }
-            .distinct()
-
-        val branchCandidateSet = branchCandidates
-            .map { it.norm() }
-            .toSet()
-
-        val groupCandidateSet = selectedGroupNames
-            .flatMap { expandGroupAliases(it) }
-            .toSet()
-
-        fun docsToRecipients(docs: List<DocumentSnapshot>): List<CoachRecipient> {
-            val currentSelectionByUid = recipients.associate { it.uid to it.selected }
-            val currentSelectionByPhone = recipients.associate { it.phone to it.selected }
-
-            return docs
-                .asSequence()
-                .filter { it.isActiveUser() }
-                .filter { it.isTraineeRole() }
-                .filter { matchesAnyToken(it.branchTokensNorm(), branchCandidateSet) }
-                .filter {
-                    // ✅ במצב קבוצות — התאמה מדויקת בלבד.
-                    // "בוגרים" לא ימשוך "נוער + בוגרים", ולהפך.
-                    if (sendScope == "branch") {
-                        true
-                    } else {
-                        groupCandidateSet.isNotEmpty() &&
-                                matchesExactGroupToken(it.groupTokensNorm(), groupCandidateSet)
-                    }
-                }
-                .mapNotNull { doc ->
-                    val phone = (
-                            doc.getString("phone")
-                                ?: doc.getString("phoneNumber")
-                                ?: doc.getString("phone_number")
-                                ?: ""
-                            ).trim()
-
-                    val uid = (
-                            doc.getString("uid")
-                                ?: doc.getString("authUid")
-                                ?: doc.id
-                            ).trim()
-
-                    val email = doc.getString("email")
-                        ?.trim()
-                        .orEmpty()
-
-                    val resolvedUid = uid.ifBlank { doc.id }
-                    val name = doc.displayNameOrPhone(phone).trim()
-
-                    if (resolvedUid.isBlank() && phone.isBlank() && email.isBlank()) {
-                        return@mapNotNull null
-                    }
-
-                    CoachRecipient(
-                        uid = resolvedUid,
-                        name = name,
-                        phone = phone,
-                        email = email,
-                        selected = currentSelectionByUid[resolvedUid]
-                            ?: currentSelectionByPhone[phone]
-                            ?: true,
-                        canReceiveSms = phone.isNotBlank()
-                    )
-                }
-                .distinctBy { recipient ->
-                    val phoneKey = normalizePhoneKey(recipient.phone)
-                    val emailKey = recipient.email.trim().lowercase()
-                    val nameKey = recipient.name.trim().lowercase()
-
-                    when {
-                        phoneKey.isNotBlank() -> "phone:$phoneKey"
-                        emailKey.isNotBlank() -> "email:$emailKey"
-                        recipient.uid.isNotBlank() -> "uid:${recipient.uid}"
-                        else -> "name:$nameKey"
-                    }
-                }
-                .sortedBy { it.name }
-                .toList()
-        }
-
-        suspend fun fetchCandidateDocs(): List<DocumentSnapshot> {
-            val col = db.collection("users")
-            val out = mutableListOf<DocumentSnapshot>()
-
-            for (candidate in branchCandidates) {
-                runCatching {
-                    out.addAll(
-                        col.whereArrayContains("branches", candidate)
-                            .get()
-                            .await()
-                            .documents
-                    )
-                }
-
-                runCatching {
-                    out.addAll(
-                        col.whereEqualTo("branchesCsv", candidate)
-                            .get()
-                            .await()
-                            .documents
-                    )
-                }
-
-                runCatching {
-                    out.addAll(
-                        col.whereEqualTo("branch", candidate)
-                            .get()
-                            .await()
-                            .documents
-                    )
-                }
-
-                runCatching {
-                    out.addAll(
-                        col.whereEqualTo("activeBranch", candidate)
-                            .get()
-                            .await()
-                            .documents
-                    )
-                }
-
-                runCatching {
-                    out.addAll(
-                        col.whereEqualTo("active_branch", candidate)
-                            .get()
-                            .await()
-                            .documents
-                    )
-                }
+        /*
+         * שומרים את מצב הבחירה הנוכחי כדי שרענון
+         * מהשרת לא יאפס checkbox שכבר שונה ע"י המאמן.
+         */
+        val currentSelectionByUid =
+            recipients.associate {
+                it.uid to it.selected
             }
 
-            val distinct = out.distinctBy { it.id }
-
-            if (distinct.isNotEmpty()) {
-                return distinct
+        val currentSelectionByPhone =
+            recipients.associate {
+                it.phone to it.selected
             }
 
-            // fallback זהיר: רק אם אין שום תוצאה ישירה.
-            // מוגבל ל־3000 כדי לא להעמיס בפרויקטים גדולים.
-            val all = mutableListOf<DocumentSnapshot>()
-            var last: DocumentSnapshot? = null
-
-            while (true) {
-                var q = col
-                    .orderBy(FieldPath.documentId())
-                    .limit(1000)
-
-                last?.let { lastDocument ->
-                    q = q.startAfter(lastDocument)
-                }
-
-                val snap = q.get().await()
-                val page = snap.documents
-
-                if (page.isEmpty()) break
-
-                all.addAll(page)
-                last = page.last()
-
-                if (all.size >= 3000) break
-            }
-
-            return all.distinctBy { it.id }
-        }
-
-        try {
-            val docs = fetchCandidateDocs()
-
-            val branchMatchedDocs = docs
-                .asSequence()
-                .filter { it.isActiveUser() }
-                .filter { it.isTraineeRole() }
-                .filter { matchesAnyToken(it.branchTokensNorm(), branchCandidateSet) }
-                .toList()
-
-            val discoveredBranchGroups =
-                branchMatchedDocs
-                    .asSequence()
-                    .flatMap {
-                        it.groupDisplayTokens()
-                            .asSequence()
-                    }
+        val requestedGroups =
+            if (sendScope == "branch") {
+                emptyList()
+            } else {
+                selectedTargetGroups
                     .map {
-                        it.norm()
+                        it.trim()
                     }
                     .filter {
                         it.isNotBlank()
                     }
                     .distinct()
-                    .sorted()
-                    .toList()
-
-            /*
-             * המבנה החדש הוא מקור האמת.
-             *
-             * אם קיימות קבוצות משויכות לסניף,
-             * מציגים רק אותן — גם אם קיימים
-             * במסד מתאמנים מקבוצות אחרות.
-             *
-             * כאשר אין עדיין מבנה חדש, משתמשים
-             * זמנית בקבוצות שהתגלו מהמסמכים.
-             */
-            val branchGroups =
-                if (
-                    coachBranchAssignments
-                        .isNotEmpty()
-                ) {
-                    assignedGroupsForSelectedBranch
-                        .map {
-                            it.norm()
-                        }
-                        .filter {
-                            it.isNotBlank()
-                        }
-                        .distinct()
-                        .sorted()
-                } else {
-                    discoveredBranchGroups
-                }
-
-            val groupCounts =
-                branchGroups.associateWith { groupName ->
-                val groupCandidates = expandGroupAliases(groupName).toSet()
-
-                branchMatchedDocs
-                    .asSequence()
-                    .filter { doc ->
-                        matchesExactGroupToken(
-                            tokens = doc.groupTokensNorm(),
-                            candidates = groupCandidates
-                        )
-                    }
-                    .mapNotNull { doc ->
-                        val phone = (
-                                doc.getString("phone")
-                                    ?: doc.getString("phoneNumber")
-                                    ?: doc.getString("phone_number")
-                                    ?: ""
-                                ).trim()
-
-                        val uid = (
-                                doc.getString("uid")
-                                    ?: doc.getString("authUid")
-                                    ?: doc.id
-                                ).trim()
-
-                        val email = doc.getString("email")
-                            ?.trim()
-                            .orEmpty()
-
-                        val name = doc.displayNameOrPhone(phone).trim()
-
-                        val phoneKey = normalizePhoneKey(phone)
-                        val emailKey = email.lowercase()
-                        val nameKey = name.lowercase()
-
-                        when {
-                            phoneKey.isNotBlank() -> "phone:$phoneKey"
-                            emailKey.isNotBlank() -> "email:$emailKey"
-                            uid.isNotBlank() -> "uid:$uid"
-                            nameKey.isNotBlank() -> "name:$nameKey"
-                            else -> null
-                        }
-                    }
-                    .distinct()
-                    .count()
             }
 
-            availableBranchGroups = branchGroups
-            availableBranchGroupCounts = groupCounts
+        try {
 
-            if (sendScope != "branch" && branchGroups.isNotEmpty()) {
-                val normalizedSelectedGroups = selectedTargetGroups
-                    .map { it.norm() }
-                    .toSet()
+            val result =
+                FirebaseFunctions
+                    .getInstance()
+                    .getHttpsCallable(
+                        "loadSecureCoachBroadcastRecipients"
+                    )
+                    .call(
+                        mapOf(
+                            "branch" to
+                                    cleanBranch,
+                            "groups" to
+                                    requestedGroups
+                        )
+                    )
+                    .await()
 
-                val selectedStillValid = normalizedSelectedGroups
-                    .filter { it in branchGroups }
-                    .toSet()
+            val payload =
+                result.data as? Map<*, *>
 
-                if (selectedStillValid != normalizedSelectedGroups) {
-                    selectedTargetGroups = selectedStillValid
-                    recipients = emptyList()
-                    isRecipientsLoading = false
+            /*
+             * קבוצות מורשות בסניף.
+             */
+            val serverGroups =
+                (
+                        payload
+                            ?.get("availableGroups")
+                                as? List<*>
+                        )
+                    ?.mapNotNull { rawGroup ->
+                        rawGroup
+                            ?.toString()
+                            ?.trim()
+                            ?.takeIf {
+                                it.isNotBlank()
+                            }
+                    }
+                    ?.distinct()
+                    .orEmpty()
+
+            /*
+             * מספר מתאמנים בכל קבוצה.
+             */
+            val rawGroupCounts =
+                payload
+                    ?.get("groupCounts")
+                        as? Map<*, *>
+
+            val serverGroupCounts =
+                rawGroupCounts
+                    ?.mapNotNull { entry ->
+
+                        val groupName =
+                            entry.key
+                                ?.toString()
+                                ?.trim()
+                                .orEmpty()
+
+                        val count =
+                            when (
+                                val rawValue =
+                                    entry.value
+                            ) {
+                                is Number ->
+                                    rawValue.toInt()
+
+                                else ->
+                                    rawValue
+                                        ?.toString()
+                                        ?.toIntOrNull()
+                            }
+                                ?: 0
+
+                        if (groupName.isBlank()) {
+                            null
+                        } else {
+                            groupName to count
+                        }
+                    }
+                    ?.toMap()
+                    .orEmpty()
+
+            availableBranchGroups =
+                serverGroups
+
+            availableBranchGroupCounts =
+                serverGroupCounts
+
+            /*
+             * אם קבוצה שסומנה כבר אינה מורשית/קיימת,
+             * מסירים אותה מהבחירה.
+             */
+            if (
+                sendScope != "branch" &&
+                selectedTargetGroups.isNotEmpty()
+            ) {
+
+                val validSelectedGroups =
+                    selectedTargetGroups
+                        .filter {
+                            it in serverGroups
+                        }
+                        .toSet()
+
+                if (
+                    validSelectedGroups !=
+                    selectedTargetGroups
+                ) {
+                    selectedTargetGroups =
+                        validSelectedGroups
+
+                    recipients =
+                        emptyList()
+
+                    isRecipientsLoading =
+                        false
+
                     return@LaunchedEffect
                 }
             }
 
-            val finalRecipients = docsToRecipients(docs)
+            val rawRecipients =
+                payload
+                    ?.get("recipients")
+                        as? List<*>
+                    ?: emptyList<Any>()
 
-            recipients = finalRecipients
-            isRecipientsLoading = false
+            val serverRecipients =
+                rawRecipients
+                    .mapNotNull { rawRecipient ->
+
+                        val recipientMap =
+                            rawRecipient as? Map<*, *>
+                                ?: return@mapNotNull null
+
+                        val uid =
+                            recipientMap["uid"]
+                                ?.toString()
+                                ?.trim()
+                                .orEmpty()
+
+                        val name =
+                            recipientMap["name"]
+                                ?.toString()
+                                ?.trim()
+                                .orEmpty()
+
+                        val phone =
+                            recipientMap["phone"]
+                                ?.toString()
+                                ?.trim()
+                                .orEmpty()
+
+                        val email =
+                            recipientMap["email"]
+                                ?.toString()
+                                ?.trim()
+                                .orEmpty()
+
+                        if (
+                            uid.isBlank()
+                        ) {
+                            return@mapNotNull null
+                        }
+
+                        CoachRecipient(
+                            uid = uid,
+
+                            name =
+                                name.ifBlank {
+                                    email.ifBlank {
+                                        phone
+                                    }
+                                },
+
+                            phone =
+                                phone,
+
+                            email =
+                                email,
+
+                            selected =
+                                currentSelectionByUid[uid]
+                                    ?: currentSelectionByPhone[
+                                        phone
+                                    ]
+                                    ?: true,
+
+                            canReceiveSms =
+                                phone.isNotBlank()
+                        )
+                    }
+                    .distinctBy {
+                        it.uid
+                    }
+                    .sortedBy {
+                        it.name
+                    }
+
+            /*
+             * במצב קבוצות, כל עוד המאמן עדיין
+             * לא סימן אף קבוצה — מציגים רק את
+             * רשימת הקבוצות, לא את כל המתאמנים.
+             *
+             * במצב branch אפשר להציג את כל נמעני הסניף.
+             */
+            recipients =
+                if (
+                    sendScope == "branch" ||
+                    requestedGroups.isNotEmpty()
+                ) {
+                    serverRecipients
+                } else {
+                    emptyList()
+                }
+
+            isRecipientsLoading =
+                false
+
         } catch (_: Exception) {
-            availableBranchGroups = emptyList()
-            availableBranchGroupCounts = emptyMap()
-            recipients = emptyList()
-            isRecipientsLoading = false
+
+            availableBranchGroups =
+                emptyList()
+
+            availableBranchGroupCounts =
+                emptyMap()
+
+            recipients =
+                emptyList()
+
+            isRecipientsLoading =
+                false
         }
     }
 
@@ -2176,15 +1751,6 @@ fun CoachBroadcastScreen(
         .filter { it.isNotBlank() }
         .distinct()
 
-    val selectedRecipientSnapshots = selectedRecipients.map { recipient ->
-        mapOf(
-            "uid" to recipient.uid,
-            "name" to recipient.name,
-            "phone" to recipient.phone,
-            "email" to recipient.email
-        )
-    }
-
     val allSelected = recipients.isNotEmpty() && recipients.all { it.selected }
 
     val sendButtonText = when {
@@ -2226,7 +1792,6 @@ fun CoachBroadcastScreen(
             branch = cleanBranch,
             message = cleanMessage,
             targetUids = selectedUids,
-            targetRecipients = selectedRecipientSnapshots,
             targetGroups = effectiveGroupKeys,
             onResult = { ok, error ->
                 if (ok) {

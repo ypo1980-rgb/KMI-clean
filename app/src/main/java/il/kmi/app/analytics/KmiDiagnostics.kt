@@ -1,8 +1,6 @@
 package il.kmi.app.analytics
 
 import android.content.Context
-import android.os.Build
-import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.SetOptions
 import com.google.firebase.firestore.ktx.firestore
@@ -17,18 +15,6 @@ object KmiDiagnostics {
         }.getOrDefault("")
     }
 
-    private fun userRole(context: Context): String {
-        val userSp = context.getSharedPreferences("kmi_user", Context.MODE_PRIVATE)
-        val defaultSp = context.getSharedPreferences(
-            context.packageName + "_preferences",
-            Context.MODE_PRIVATE
-        )
-
-        return userSp.getString("user_role", null)
-            ?: defaultSp.getString("user_role", null)
-            ?: "unknown"
-    }
-
     private fun safeDocId(raw: String): String {
         return raw
             .trim()
@@ -40,37 +26,6 @@ object KmiDiagnostics {
             .take(120)
     }
 
-    private fun markCurrentUserUsage(context: Context) {
-        val user = FirebaseAuth.getInstance().currentUser ?: return
-        val uid = user.uid
-        if (uid.isBlank()) return
-
-        val now = System.currentTimeMillis()
-
-        val payload = mutableMapOf<String, Any>(
-            "uid" to uid,
-            "appOpenCount" to FieldValue.increment(1),
-            "lastSeenAtMillis" to now,
-            "lastSeenAt" to FieldValue.serverTimestamp(),
-            "lastUsageSource" to "trackScreen",
-            "appVersion" to appVersion(context),
-            "deviceModel" to "${Build.MANUFACTURER} ${Build.MODEL}"
-        )
-
-        user.email?.trim()?.takeIf { it.isNotBlank() }?.let {
-            payload["email"] = it
-        }
-
-        user.displayName?.trim()?.takeIf { it.isNotBlank() }?.let {
-            payload["displayName"] = it
-        }
-
-        Firebase.firestore
-            .collection("users")
-            .document(uid)
-            .set(payload, SetOptions.merge())
-    }
-
     fun logEvent(
         context: Context,
         type: String,
@@ -80,24 +35,16 @@ object KmiDiagnostics {
         severity: String = "info",
         extra: Map<String, Any?> = emptyMap()
     ) {
-        val uid = FirebaseAuth.getInstance().currentUser?.uid
-
         val payload = mutableMapOf<String, Any>(
             "type" to type,
             "title" to title,
             "message" to message,
             "area" to area,
             "severity" to severity,
-            "userRole" to userRole(context),
             "appVersion" to appVersion(context),
-            "deviceModel" to "${Build.MANUFACTURER} ${Build.MODEL}",
             "language" to java.util.Locale.getDefault().language,
             "createdAt" to FieldValue.serverTimestamp()
         )
-
-        if (!uid.isNullOrBlank()) {
-            payload["uid"] = uid
-        }
 
         extra.forEach { (key, value) ->
             if (value != null) {
@@ -115,9 +62,6 @@ object KmiDiagnostics {
         screenName: String,
         route: String = screenName
     ) {
-        markCurrentUserUsage(context)
-
-        val uid = FirebaseAuth.getInstance().currentUser?.uid
         val docId = safeDocId(screenName)
 
         val screenPayload = mutableMapOf<String, Any>(
@@ -127,14 +71,13 @@ object KmiDiagnostics {
             "updatedAt" to FieldValue.serverTimestamp()
         )
 
-        if (!uid.isNullOrBlank()) {
-            screenPayload["lastUid"] = uid
-        }
-
         Firebase.firestore
             .collection("screen_views")
             .document(docId)
-            .set(screenPayload, SetOptions.merge())
+            .set(
+                screenPayload,
+                SetOptions.merge()
+            )
 
         logEvent(
             context = context,
@@ -155,18 +98,38 @@ object KmiDiagnostics {
         query: String,
         resultCount: Int
     ) {
-        val cleanQuery = query.trim()
-        if (cleanQuery.length < 2) return
+        val cleanQuery =
+            query.trim()
+
+        if (cleanQuery.length < 2) {
+            return
+        }
 
         logEvent(
             context = context,
-            type = if (resultCount == 0) "search_no_results" else "search_results",
-            title = if (resultCount == 0) "חיפוש ללא תוצאה" else "חיפוש באפליקציה",
-            message = "query=$cleanQuery, results=$resultCount",
+            type =
+                if (resultCount == 0) {
+                    "search_no_results"
+                } else {
+                    "search_results"
+                },
+            title =
+                if (resultCount == 0) {
+                    "חיפוש ללא תוצאה"
+                } else {
+                    "חיפוש באפליקציה"
+                },
+            message =
+                "queryLength=${cleanQuery.length}, results=$resultCount",
             area = "search",
-            severity = if (resultCount == 0) "warning" else "info",
+            severity =
+                if (resultCount == 0) {
+                    "warning"
+                } else {
+                    "info"
+                },
             extra = mapOf(
-                "query" to cleanQuery,
+                "queryLength" to cleanQuery.length,
                 "resultCount" to resultCount
             )
         )
