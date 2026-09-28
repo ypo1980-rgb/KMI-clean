@@ -112,16 +112,92 @@ function canManageInternalExams() {
     }
 
     // מי רשאי לנהל נוכחות בסניף
-    // בשלב הזה לא בודקים התאמת סניף מדויקת בגלל הבדלי מקפים:
-    // "-" / "–" / "—" / "־"
-    // לכן ניהול נוכחות מותר רק ל-Admin או Coach/Manager.
+    // Admin רשאי לכל הסניפים.
+    // מאמן רשאי רק לסניפים שנשמרו עבורו
+    // במקור האמת המאובטח authorizedCoaches/{uid}.
 function canManageAttendanceBranch(branch) {
   return isAdmin()
     || (
       isAuthorizedCoach()
+
+      && branch is string
+      && branch.size() > 0
+
       && get(
         /databases/$(database)/documents/authorizedCoaches/$(request.auth.uid)
       ).data.canManageAttendance == true
+
+      && get(
+        /databases/$(database)/documents/authorizedCoaches/$(request.auth.uid)
+      ).data.authorizedBranches is list
+
+      && branch in get(
+        /databases/$(database)/documents/authorizedCoaches/$(request.auth.uid)
+      ).data.authorizedBranches
+    );
+}
+
+function canManageAttendanceBranchGroup(branch, groupKey) {
+  return isAdmin()
+    || (
+      isAuthorizedCoach()
+
+      && branch is string
+      && branch.size() > 0
+
+      && groupKey is string
+      && groupKey.size() > 0
+
+      && get(
+        /databases/$(database)/documents/authorizedCoaches/$(request.auth.uid)
+      ).data.canManageAttendance == true
+
+      && get(
+        /databases/$(database)/documents/authorizedCoaches/$(request.auth.uid)
+      ).data.authorizedBranchGroups is list
+
+      && (
+        branch + "||" + groupKey
+      ) in get(
+        /databases/$(database)/documents/authorizedCoaches/$(request.auth.uid)
+      ).data.authorizedBranchGroups
+    );
+}
+
+function canViewAttendanceBranchGroup(branch, groupKey) {
+  return isAdmin()
+    || (
+      isAuthorizedCoach()
+
+      && branch is string
+      && branch.size() > 0
+
+      && groupKey is string
+      && groupKey.size() > 0
+
+      && (
+        get(
+          /databases/$(database)/documents/authorizedCoaches/$(request.auth.uid)
+        ).data.canViewTrainees == true
+        ||
+        get(
+          /databases/$(database)/documents/authorizedCoaches/$(request.auth.uid)
+        ).data.canManageTrainees == true
+        ||
+        get(
+          /databases/$(database)/documents/authorizedCoaches/$(request.auth.uid)
+        ).data.canManageAttendance == true
+      )
+
+      && get(
+        /databases/$(database)/documents/authorizedCoaches/$(request.auth.uid)
+      ).data.authorizedBranchGroups is list
+
+      && (
+        branch + "||" + groupKey
+      ) in get(
+        /databases/$(database)/documents/authorizedCoaches/$(request.auth.uid)
+      ).data.authorizedBranchGroups
     );
 }
 
@@ -133,16 +209,36 @@ function canViewAttendance() {
 
     // בדיקה לפי מסמך session אב עבור records
     function attendanceSessionExists(groupId, sessionId) {
-      return exists(/databases/$(database)/documents/attendanceGroups/$(groupId)/sessions/$(sessionId));
+      return exists(
+        /databases/$(database)/documents/attendanceGroups/$(groupId)/sessions/$(sessionId)
+      );
     }
 
-    function attendanceSessionBranch(groupId, sessionId) {
-      return get(/databases/$(database)/documents/attendanceGroups/$(groupId)/sessions/$(sessionId)).data.branch;
+    function attendanceParentGroupExists(groupId) {
+      return exists(
+        /databases/$(database)/documents/attendanceGroups/$(groupId)
+      );
     }
 
-      function canManageAttendanceSession(groupId, sessionId) {
+    function attendanceParentGroupBranch(groupId) {
+      return get(
+        /databases/$(database)/documents/attendanceGroups/$(groupId)
+      ).data.branch;
+    }
+
+    function attendanceParentGroupKey(groupId) {
+      return get(
+        /databases/$(database)/documents/attendanceGroups/$(groupId)
+      ).data.groupKey;
+    }
+
+    function canManageAttendanceSession(groupId, sessionId) {
       return attendanceSessionExists(groupId, sessionId)
-        && canManageAttendanceBranch(attendanceSessionBranch(groupId, sessionId));
+        && attendanceParentGroupExists(groupId)
+        && canManageAttendanceBranchGroup(
+          attendanceParentGroupBranch(groupId),
+          attendanceParentGroupKey(groupId)
+        );
     }
 
     // מאמן / מנהל / אדמין רשאי לעדכן רק שדות מקצועיים של מתאמן
@@ -716,31 +812,32 @@ match /trainingOccurrences/{occurrenceId} {
       // תאריכי חגורות, השתלמויות, מחנות, הסמכות והערות מאמן.
    allow update: if (
 
-    // =========================================
-    // עדכון עצמי רגיל:
-    // אסור לשנות שדות זהות / הרשאה / שיוך רגיש.
-    // =========================================
-    (
-      isSelf(uid)
-      && !request.resource.data
-          .diff(resource.data)
-          .affectedKeys()
-          .hasAny([
-            "uid",
-            "role",
-            "user_role",
-            "userType",
-            "isCoach",
-            "roleLockedBy",
-            "role_locked_by",
-            "coachAuthorized",
-            "coach_authorized",
-            "branch",
-            "activeBranch",
-            "active_branch",
-            "branches"
-          ])
-    )
+       // =========================================
+       // עדכון עצמי רגיל:
+       // אסור לשנות שדות זהות / הרשאה / שיוך רגיש.
+       // =========================================
+     (
+       isSelf(uid)
+       && !request.resource.data
+           .diff(resource.data)
+           .affectedKeys()
+           .hasAny([
+             "uid",
+             "role",
+             "user_role",
+             "userType",
+             "isCoach",
+             "roleLockedBy",
+             "role_locked_by",
+             "coachAuthorized",
+             "coach_authorized",
+             "branch",
+             "activeBranch",
+             "active_branch",
+             "branches",
+             "coachBranchAssignments"
+           ])
+     )
 
     ||
 
@@ -766,38 +863,16 @@ match /trainingOccurrences/{occurrenceId} {
       && request.resource.data.registrationSchemaVersion is int
       && request.resource.data.registrationSchemaVersion >= 3
 
-    // החריגה מותרת רק כאשר המסמך עדיין
-// לא סומן קודם כרישום מלא,
-// גם לפי הדגלים החדשים וגם לפי הדגלים הישנים.
-&& !(
-  (
-    resource.data.keys().hasAny([
-      "registrationFormCompleted"
-    ])
-    && resource.data.registrationFormCompleted == true
-  )
-  ||
-  (
-    resource.data.keys().hasAny([
-      "registration_form_completed"
-    ])
-    && resource.data.registration_form_completed == true
-  )
-  ||
-  (
-    resource.data.keys().hasAny([
-      "registrationComplete"
-    ])
-    && resource.data.registrationComplete == true
-  )
-  ||
-  (
-    resource.data.keys().hasAny([
-      "registration_complete"
-    ])
-    && resource.data.registration_complete == true
-  )
-)
+      /*
+       * משתמש מחובר רשאי להשלים או לרענן
+       * את פרטי הרישום של עצמו גם אם קיים
+       * מסמך ישן שסומן בעבר כרישום שהושלם.
+       *
+       * האבטחה נשמרת:
+       * uid חייב להיות שלו,
+       * role ו-user_role חייבים להישאר trainee,
+       * ורק שדות הרישום המותרים ניתנים לשינוי.
+       */
 
       // ניתן לשנות רק שדות ששייכים לטופס הרישום.
       && request.resource.data
@@ -1266,25 +1341,53 @@ match /used_numbers/{phone} {
   }
 
   function attendanceGroupBranch() {
-    return get(/databases/$(database)/documents/attendanceGroups/$(groupId)).data.branch;
+    return get(
+      /databases/$(database)/documents/attendanceGroups/$(groupId)
+    ).data.branch;
+  }
+
+  function attendanceGroupKey() {
+    return get(
+      /databases/$(database)/documents/attendanceGroups/$(groupId)
+    ).data.groupKey;
   }
 
   function canManageThisAttendanceGroup() {
     return attendanceGroupExists()
-      && canManageAttendanceBranch(attendanceGroupBranch());
+      && canManageAttendanceBranchGroup(
+        attendanceGroupBranch(),
+        attendanceGroupKey()
+      );
   }
 
- // מסמך הקבוצה עצמו
-allow read: if canViewAttendance();
+  // מסמך הקבוצה עצמו
+  // מאמן רואה רק קבוצה ששויכה אליו במקור האמת המאובטח.
+  allow read: if
+    attendanceGroupExists()
+    && canViewAttendanceBranchGroup(
+         attendanceGroupBranch(),
+         attendanceGroupKey()
+       );
 
-allow create: if isSignedIn()
-  && request.resource.data.branch is string
-  && canManageAttendanceBranch(request.resource.data.branch);
+  allow create: if isSignedIn()
+    && request.resource.data.branch is string
+    && request.resource.data.groupKey is string
+    && canManageAttendanceBranchGroup(
+         request.resource.data.branch,
+         request.resource.data.groupKey
+       );
 
   allow update: if isSignedIn()
     && resource.data.branch is string
-    && request.resource.data.branch == resource.data.branch
-    && canManageAttendanceBranch(resource.data.branch);
+    && resource.data.groupKey is string
+    && request.resource.data.branch ==
+       resource.data.branch
+    && request.resource.data.groupKey ==
+       resource.data.groupKey
+    && canManageAttendanceBranchGroup(
+         resource.data.branch,
+         resource.data.groupKey
+       );
 
   allow delete: if isAdmin();
 
@@ -1292,13 +1395,20 @@ allow create: if isSignedIn()
 match /members/{memberId} {
 
   /*
-   * מאמן / אדמין רשאים לקרוא את כל חברי הקבוצה.
+   * מאמן / אדמין רשאים לקרוא חברים
+   * רק בקבוצה המורשית המדויקת.
    *
    * מתאמן רשאי לקרוא רק את מסמך ה-member
    * שמקושר ל-Firebase UID שלו.
    */
   allow read: if
-    canViewAttendance()
+    (
+      attendanceGroupExists()
+      && canViewAttendanceBranchGroup(
+           attendanceGroupBranch(),
+           attendanceGroupKey()
+         )
+    )
     || (
       isSignedIn()
       && resource.data.authUid == request.auth.uid
@@ -1315,19 +1425,30 @@ match /members/{memberId} {
 
 // שיעורי נוכחות
 match /sessions/{sessionId} {
-  allow read: if canViewAttendance();
+
+  allow read: if
+    attendanceGroupExists()
+    && canViewAttendanceBranchGroup(
+         attendanceGroupBranch(),
+         attendanceGroupKey()
+       );
 
   allow create: if isSignedIn()
     && request.resource.data.branch is string
-    && canManageAttendanceBranch(request.resource.data.branch);
+    && canManageThisAttendanceGroup()
+    && request.resource.data.branch ==
+       attendanceGroupBranch();
 
-    allow update: if isSignedIn()
-      && resource.data.branch is string
-      && request.resource.data.branch == resource.data.branch
-      && canManageAttendanceBranch(resource.data.branch);
+  allow update: if isSignedIn()
+    && resource.data.branch is string
+    && request.resource.data.branch ==
+       resource.data.branch
+    && request.resource.data.branch ==
+       attendanceGroupBranch()
+    && canManageThisAttendanceGroup();
 
-    allow delete: if isSignedIn()
-      && canManageThisAttendanceGroup();
+  allow delete: if isSignedIn()
+    && canManageThisAttendanceGroup();
 
 // סימוני נוכחות לכל מתאמן בשיעור
 match /records/{recordId} {
@@ -1460,7 +1581,13 @@ function isValidTraineeAttendanceData() {
    * מתאמן רואה רק את הרשומה שלו.
    */
   allow read: if
-    canViewAttendance()
+    (
+      attendanceGroupExists()
+      && canViewAttendanceBranchGroup(
+           attendanceGroupBranch(),
+           attendanceGroupKey()
+         )
+    )
     || isOwnAttendanceRecord();
 
    /*
@@ -1600,7 +1727,12 @@ function isValidTraineeAttendanceData() {
 
  // דוחות נוכחות שמורים
 match /reports/{reportId} {
-  allow read: if canViewAttendance();
+  allow read: if
+    attendanceGroupExists()
+    && canViewAttendanceBranchGroup(
+         attendanceGroupBranch(),
+         attendanceGroupKey()
+       );
 
   allow create, update, delete: if isSignedIn()
     && canManageThisAttendanceGroup();

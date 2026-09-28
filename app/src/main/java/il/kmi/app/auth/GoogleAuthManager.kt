@@ -23,11 +23,18 @@ object GoogleAuthManager {
 
     private const val TAG = "KMI_GOOGLE_AUTH"
 
+    enum class RegistrationState {
+        COMPLETE,
+        INCOMPLETE,
+        UNKNOWN
+    }
+
     data class GoogleAuthUser(
         val uid: String,
         val email: String?,
         val displayName: String?,
-        val photoUrl: String?
+        val photoUrl: String?,
+        val registrationState: RegistrationState = RegistrationState.UNKNOWN
     )
 
     private fun safeString(block: () -> String): String {
@@ -446,17 +453,60 @@ object GoogleAuthManager {
                     IllegalStateException("FIREBASE_USER_NULL")
                 )
 
+            val registrationState =
+                try {
+                    val userDoc =
+                        FirebaseFirestore.getInstance()
+                            .collection("users")
+                            .document(firebaseUser.uid)
+                            .get()
+                            .await()
+
+                    if (!userDoc.exists()) {
+                        RegistrationState.INCOMPLETE
+                    } else {
+                        val registrationComplete =
+                            userDoc.getBoolean("registrationComplete") == true ||
+                                    userDoc.getBoolean("registration_complete") == true ||
+                                    userDoc.getBoolean("registrationFormCompleted") == true ||
+                                    userDoc.getBoolean("registration_form_completed") == true ||
+                                    userDoc.getBoolean("profileCompleted") == true ||
+                                    userDoc.getBoolean("profile_completed") == true
+
+                        if (registrationComplete) {
+                            RegistrationState.COMPLETE
+                        } else {
+                            RegistrationState.INCOMPLETE
+                        }
+                    }
+                } catch (e: Exception) {
+                    logStage(
+                        context = context,
+                        stage = "firebase_existing_registration_check_failure",
+                        message = "source=$source, uid=${firebaseUser.uid}",
+                        error = e
+                    )
+
+                    RegistrationState.UNKNOWN
+                }
+
             val resultUser = GoogleAuthUser(
                 uid = firebaseUser.uid,
                 email = firebaseUser.email,
                 displayName = firebaseUser.displayName,
-                photoUrl = firebaseUser.photoUrl?.toString()
+                photoUrl = firebaseUser.photoUrl?.toString(),
+                registrationState = registrationState
             )
 
             logStage(
                 context = context,
                 stage = "firebase_result_user_ready",
-                message = "source=$source, uid=${resultUser.uid}, email=${resultUser.email.orEmpty()}, displayNameBlank=${resultUser.displayName.isNullOrBlank()}"
+                message =
+                    "source=$source, " +
+                            "uid=${resultUser.uid}, " +
+                            "email=${resultUser.email.orEmpty()}, " +
+                            "displayNameBlank=${resultUser.displayName.isNullOrBlank()}, " +
+                            "registrationState=${resultUser.registrationState}"
             )
 
             Result.success(resultUser)

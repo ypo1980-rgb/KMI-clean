@@ -15,6 +15,7 @@ import il.kmi.app.stretching.ui.StretchingExerciseScreen
 import il.kmi.app.stretching.ui.StretchingScreen
 import il.kmi.shared.localization.AppLanguage
 import il.kmi.shared.localization.AppLanguageManager
+import il.kmi.shared.stretching.StretchingCatalog
 import il.kmi.shared.stretching.StretchingCategory
 
 object StretchingRoute {
@@ -28,11 +29,16 @@ object StretchingRoute {
     private const val EXERCISE_ARGUMENT =
         "exerciseId"
 
+    private const val AUTO_START_ARGUMENT =
+        "autoStart"
+
     const val CATEGORY =
         "$ROOT/category/{$CATEGORY_ARGUMENT}"
 
     const val EXERCISE =
-        "$ROOT/exercise/{$EXERCISE_ARGUMENT}"
+        "$ROOT/exercise/{$EXERCISE_ARGUMENT}" +
+                "?$AUTO_START_ARGUMENT=" +
+                "{$AUTO_START_ARGUMENT}"
 
     fun category(
         categoryId: String
@@ -40,9 +46,11 @@ object StretchingRoute {
         "$ROOT/category/${Uri.encode(categoryId)}"
 
     fun exercise(
-        exerciseId: String
+        exerciseId: String,
+        autoStart: Boolean = false
     ): String =
-        "$ROOT/exercise/${Uri.encode(exerciseId)}"
+        "$ROOT/exercise/${Uri.encode(exerciseId)}" +
+                "?$AUTO_START_ARGUMENT=$autoStart"
 }
 
 fun NavGraphBuilder.stretchingNavGraph(
@@ -125,6 +133,10 @@ fun NavGraphBuilder.stretchingNavGraph(
             listOf(
                 navArgument("exerciseId") {
                     type = NavType.StringType
+                },
+                navArgument("autoStart") {
+                    type = NavType.BoolType
+                    defaultValue = false
                 }
             )
     ) { backStackEntry ->
@@ -135,6 +147,36 @@ fun NavGraphBuilder.stretchingNavGraph(
                     ?.getString("exerciseId")
                     .orEmpty()
             )
+
+        val currentExercise =
+            StretchingCatalog.exerciseById(
+                exerciseId = exerciseId
+            )
+
+        val categoryExercises =
+            currentExercise
+                ?.let { exercise ->
+                    StretchingCatalog.exercisesFor(
+                        category = exercise.category
+                    )
+                }
+                .orEmpty()
+
+        val currentExerciseIndex =
+            categoryExercises.indexOfFirst { exercise ->
+                exercise.id == exerciseId
+            }
+
+        val nextExercise =
+            categoryExercises.getOrNull(
+                currentExerciseIndex + 1
+            )
+
+        val autoStart =
+            backStackEntry
+                .arguments
+                ?.getBoolean("autoStart")
+                ?: false
 
         val isEnglish =
             currentStretchingLanguageIsEnglish()
@@ -147,6 +189,47 @@ fun NavGraphBuilder.stretchingNavGraph(
             },
             onHome = {
                 nav.navigateToStretchingHome()
+            },
+            startAutomatically = autoStart,
+            onNavigateToExercise = {
+                    targetExerciseId ->
+
+                nav.navigate(
+                    StretchingRoute.exercise(
+                        exerciseId =
+                            targetExerciseId,
+                        autoStart = true
+                    )
+                ) {
+                    launchSingleTop = true
+
+                    popUpTo(
+                        backStackEntry.destination.id
+                    ) {
+                        inclusive = true
+                    }
+                }
+            },
+            onExerciseCompleted = {
+                if (nextExercise != null) {
+                    nav.navigate(
+                        StretchingRoute.exercise(
+                            exerciseId =
+                                nextExercise.id,
+                            autoStart = true
+                        )
+                    ) {
+                        launchSingleTop = true
+
+                        popUpTo(
+                            backStackEntry.destination.id
+                        ) {
+                            inclusive = true
+                        }
+                    }
+                } else {
+                    nav.popBackStack()
+                }
             }
         )
     }

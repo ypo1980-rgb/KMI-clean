@@ -8,17 +8,14 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -41,6 +38,7 @@ import androidx.compose.ui.unit.dp
 import il.kmi.app.R
 import il.kmi.app.ui.KmiTopBar
 import il.kmi.app.ui.KmiTypography
+import il.kmi.app.ui.LocalAppIconScale
 import il.kmi.shared.stretching.StretchingCatalog
 import il.kmi.shared.stretching.StretchingCategory
 import il.yuval.ui.theme.kmiScreenBackgroundBrush
@@ -59,6 +57,9 @@ fun StretchingScreen(
         } else {
             LayoutDirection.Rtl
         }
+
+    val useSingleColumn =
+        LocalAppIconScale.current > 1f
 
     val categories =
         remember {
@@ -120,8 +121,13 @@ fun StretchingScreen(
 
                 LazyVerticalGrid(
                     columns =
-                        GridCells.Adaptive(
-                            minSize = 154.dp
+                        GridCells.Fixed(
+                            count =
+                                if (useSingleColumn) {
+                                    1
+                                } else {
+                                    2
+                                }
                         ),
                     modifier = Modifier.fillMaxSize(),
                     contentPadding =
@@ -378,27 +384,35 @@ private fun StretchingCategoryCard(
                 modifier = Modifier.height(8.dp)
             )
 
-            Text(
-                text =
-                    category.displayTitle(
-                        isEnglish = isEnglish
-                    ),
-                modifier = Modifier.fillMaxWidth(),
-                style = KmiTypography.body,
-                color =
-                    if (isAvailable) {
-                        MaterialTheme.colorScheme.onSurface
-                    } else {
-                        MaterialTheme
-                            .colorScheme
-                            .onSurfaceVariant
-                            .copy(alpha = 0.66f)
-                    },
-                fontWeight = FontWeight.Bold,
-                textAlign = TextAlign.Center,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis
-            )
+            Box(
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .height(56.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text =
+                        category.displayTitle(
+                            isEnglish = isEnglish
+                        ),
+                    modifier = Modifier.fillMaxWidth(),
+                    style = KmiTypography.body,
+                    color =
+                        if (isAvailable) {
+                            MaterialTheme.colorScheme.onSurface
+                        } else {
+                            MaterialTheme
+                                .colorScheme
+                                .onSurfaceVariant
+                                .copy(alpha = 0.66f)
+                        },
+                    fontWeight = FontWeight.Bold,
+                    textAlign = TextAlign.Center,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
 
             Spacer(
                 modifier = Modifier.height(5.dp)
@@ -507,14 +521,20 @@ private fun StretchingSafetyCard(
                     fontWeight = FontWeight.Bold,
                     textAlign =
                         if (isEnglish) {
-                            TextAlign.Start
+                            TextAlign.Left
                         } else {
-                            TextAlign.End
+                            TextAlign.Right
                         }
                 )
             }
 
-            Row(
+            Text(
+                text =
+                    if (isEnglish) {
+                        "Move gently and stop if you feel sharp pain, dizziness, numbness or unusual discomfort."
+                    } else {
+                        "יש לבצע את התנועות בעדינות ולעצור במקרה של כאב חד, סחרחורת, נימול או תחושה חריגה."
+                    },
                 modifier =
                     Modifier
                         .fillMaxWidth()
@@ -522,38 +542,18 @@ private fun StretchingSafetyCard(
                             horizontal = 14.dp,
                             vertical = 10.dp
                         ),
-                horizontalArrangement =
-                    Arrangement.spacedBy(9.dp),
-                verticalAlignment = Alignment.Top
-            ) {
-                Surface(
-                    modifier = Modifier.size(9.dp),
-                    shape = CircleShape,
-                    color = MaterialTheme.colorScheme.tertiary,
-                    shadowElevation = 0.dp
-                ) {}
-
-                Text(
-                    text =
-                        if (isEnglish) {
-                            "Move gently and stop if you feel sharp pain, dizziness, numbness or unusual discomfort."
-                        } else {
-                            "יש לבצע את התנועות בעדינות ולעצור במקרה של כאב חד, סחרחורת, נימול או תחושה חריגה."
-                        },
-                    modifier = Modifier.weight(1f),
-                    style = KmiTypography.caption,
-                    color =
-                        MaterialTheme
-                            .colorScheme
-                            .onSurfaceVariant,
-                    textAlign =
-                        if (isEnglish) {
-                            TextAlign.Start
-                        } else {
-                            TextAlign.End
-                        }
-                )
-            }
+                style = KmiTypography.caption,
+                color =
+                    MaterialTheme
+                        .colorScheme
+                        .onSurfaceVariant,
+                textAlign =
+                    if (isEnglish) {
+                        TextAlign.Left
+                    } else {
+                        TextAlign.Right
+                    }
+            )
         }
     }
 }

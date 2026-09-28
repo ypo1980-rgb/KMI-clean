@@ -27,11 +27,14 @@ import androidx.compose.material.icons.filled.AccessibilityNew
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Replay
+import androidx.compose.material.icons.filled.SkipNext
+import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material.icons.filled.VolumeOff
 import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
@@ -48,6 +51,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -67,13 +71,18 @@ import il.kmi.shared.stretching.StretchingStepType
 import il.yuval.ui.theme.kmiScreenBackgroundBrush
 import il.yuval.ui.theme.kmiSectionHeaderBackground
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlin.coroutines.resume
 
 @Composable
 fun StretchingExerciseScreen(
     exerciseId: String,
     isEnglish: Boolean,
     onBack: () -> Unit,
-    onHome: () -> Unit
+    onHome: () -> Unit,
+    startAutomatically: Boolean = false,
+    onNavigateToExercise: (String) -> Unit = {},
+    onExerciseCompleted: () -> Unit = {}
 ) {
     val exercise =
         StretchingCatalog.exerciseById(exerciseId)
@@ -138,7 +147,13 @@ fun StretchingExerciseScreen(
                 } else {
                     StretchingExerciseContent(
                         exercise = exercise,
-                        isEnglish = isEnglish
+                        isEnglish = isEnglish,
+                        startAutomatically =
+                            startAutomatically,
+                        onNavigateToExercise =
+                            onNavigateToExercise,
+                        onExerciseCompleted =
+                            onExerciseCompleted
                     )
                 }
             }
@@ -149,11 +164,38 @@ fun StretchingExerciseScreen(
 @Composable
 private fun StretchingExerciseContent(
     exercise: StretchingExercise,
-    isEnglish: Boolean
+    isEnglish: Boolean,
+    startAutomatically: Boolean,
+    onNavigateToExercise: (String) -> Unit,
+    onExerciseCompleted: () -> Unit
 ) {
     val context = LocalContext.current
     val visualSteps = exercise.visualSteps
     val hasVisualSteps = visualSteps.isNotEmpty()
+
+    val categoryExercises =
+        StretchingCatalog.exercisesFor(
+            category = exercise.category
+        )
+
+    val exerciseIndex =
+        categoryExercises.indexOfFirst { item ->
+            item.id == exercise.id
+        }.coerceAtLeast(0)
+
+    val isLastExerciseInCategory =
+        exerciseIndex ==
+                categoryExercises.lastIndex
+
+    val previousExercise =
+        categoryExercises.getOrNull(
+            exerciseIndex - 1
+        )
+
+    val nextExercise =
+        categoryExercises.getOrNull(
+            exerciseIndex + 1
+        )
 
     var isMuted by rememberSaveable {
         mutableStateOf(false)
@@ -196,11 +238,20 @@ private fun StretchingExerciseContent(
         mutableStateOf(false)
     }
 
-    var isVoiceCueCompleted by rememberSaveable(exercise.id) {
+    var hasHandledCompletion by
+    rememberSaveable(exercise.id) {
         mutableStateOf(false)
     }
 
-    LaunchedEffect(exercise.id) {
+    var lastSpokenCountdownSecond by
+    rememberSaveable(exercise.id) {
+        mutableIntStateOf(-1)
+    }
+
+    LaunchedEffect(
+        exercise.id,
+        startAutomatically
+    ) {
         currentStepIndex = 0
         currentRepetition = 1
         remainingSeconds =
@@ -208,26 +259,31 @@ private fun StretchingExerciseContent(
                 .firstOrNull()
                 ?.durationSeconds
                 ?: exercise.durationSeconds
-        isVoiceCueCompleted = false
+        lastSpokenCountdownSecond = -1
+        hasHandledCompletion = false
         isRunning = false
+
+        if (startAutomatically) {
+            delay(600L)
+            isRunning = true
+        }
+    }
+
+    LaunchedEffect(
+        currentStepIndex,
+        currentRepetition,
+        exercise.id
+    ) {
+        lastSpokenCountdownSecond = -1
     }
 
     LaunchedEffect(
         isRunning,
-        isVoiceCueCompleted,
         currentStepIndex,
         currentRepetition,
-        exercise.id,
-        isEnglish
+        exercise.id
     ) {
         if (!isRunning) return@LaunchedEffect
-
-        if (
-            hasVisualSteps &&
-            !isVoiceCueCompleted
-        ) {
-            return@LaunchedEffect
-        }
 
         while (
             isRunning &&
@@ -254,7 +310,6 @@ private fun StretchingExerciseContent(
                 hasVisualSteps &&
                 nextStepIndex < visualSteps.size
             ) {
-                isVoiceCueCompleted = false
                 currentStepIndex = nextStepIndex
                 remainingSeconds =
                     visualSteps[
@@ -264,7 +319,6 @@ private fun StretchingExerciseContent(
                 hasVisualSteps &&
                 currentRepetition < totalRepetitions
             ) {
-                isVoiceCueCompleted = false
                 currentRepetition += 1
                 currentStepIndex = 0
                 remainingSeconds =
@@ -279,34 +333,101 @@ private fun StretchingExerciseContent(
 
     LaunchedEffect(
         isRunning,
+        remainingSeconds,
+        currentStepIndex,
+        currentRepetition,
+        exercise.id,
+        isEnglish,
+        isMuted
+    ) {
+        val shouldSpeakCountdown =
+            isRunning &&
+                    !isMuted &&
+                    currentDurationSeconds >= 6 &&
+                    currentStep?.type !=
+                    StretchingStepType.PREPARE &&
+                    remainingSeconds == 3 &&
+                    lastSpokenCountdownSecond != 3
+
+        if (!shouldSpeakCountdown) {
+            return@LaunchedEffect
+        }
+
+        lastSpokenCountdownSecond = 3
+
+        KmiTtsManager.speak(
+            if (isEnglish) {
+                "Three. Two. One."
+            } else {
+                "שלוש. שתיים. אחת."
+            }
+        )
+    }
+
+    LaunchedEffect(
+        isRunning,
         currentStepIndex,
         currentRepetition,
         exercise.id,
         isEnglish
     ) {
         if (!hasVisualSteps) {
-            isVoiceCueCompleted = true
             KmiTtsManager.stop()
             return@LaunchedEffect
         }
 
         if (!isRunning) {
             KmiTtsManager.stop()
-            isVoiceCueCompleted = false
 
             val exerciseCompleted =
                 remainingSeconds <= 0 &&
                         currentStepIndex == visualSteps.lastIndex &&
                         currentRepetition >= totalRepetitions
 
-            if (exerciseCompleted) {
-                KmiTtsManager.speak(
-                    if (isEnglish) {
-                        "Exercise completed"
+            if (
+                exerciseCompleted &&
+                !hasHandledCompletion
+            ) {
+                hasHandledCompletion = true
+
+                val completionMessage =
+                    if (isLastExerciseInCategory) {
+                        if (isEnglish) {
+                            "Excellent. You completed the stretching series"
+                        } else {
+                            "כל הכבוד. סיימתם את סדרת המתיחות"
+                        }
                     } else {
-                        "התרגיל הסתיים."
+                        if (isEnglish) {
+                            "Well done. Moving to the next exercise"
+                        } else {
+                            "מצוין. נעבור לתרגיל הבא"
+                        }
                     }
-                )
+
+                suspendCancellableCoroutine<Unit> {
+                        continuation ->
+
+                    KmiTtsManager
+                        .setOnSpeechCompletedListener {
+                            if (continuation.isActive) {
+                                continuation.resume(Unit)
+                            }
+                        }
+
+                    continuation.invokeOnCancellation {
+                        KmiTtsManager
+                            .setOnSpeechCompletedListener(null)
+                    }
+
+                    KmiTtsManager.speak(
+                        completionMessage
+                    )
+                }
+
+                delay(250L)
+
+                onExerciseCompleted()
             }
 
             return@LaunchedEffect
@@ -316,58 +437,157 @@ private fun StretchingExerciseContent(
             visualSteps.getOrNull(currentStepIndex)
                 ?: return@LaunchedEffect
 
-        isVoiceCueCompleted = false
+        val previousStep =
+            visualSteps.getOrNull(
+                currentStepIndex - 1
+            )
+
+        val previousImageKey =
+            previousStep
+                ?.imageKey
+                .orEmpty()
+
+        val activeImageKey =
+            activeStep.imageKey
+
+        val isChangingSide =
+            (
+                    previousImageKey.endsWith("_left") &&
+                            activeImageKey.endsWith("_right")
+                    ) ||
+                    (
+                            previousImageKey.endsWith("_right") &&
+                                    activeImageKey.endsWith("_left")
+                            )
+
+        val cueVariationIndex =
+            (
+                    currentStepIndex +
+                            currentRepetition -
+                            1
+                    ) % 3
 
         val voiceCue =
             if (currentStepIndex == 0) {
                 if (currentRepetition == 1) {
                     if (isEnglish) {
-                        "Start"
+                        "Let's begin"
                     } else {
                         "מתחילים"
                     }
+                } else if (
+                    currentRepetition ==
+                    totalRepetitions
+                ) {
+                    if (isEnglish) {
+                        "Moving to the final round"
+                    } else {
+                        "נעבור לסבב האחרון"
+                    }
                 } else {
                     if (isEnglish) {
-                        "Next round"
+                        when (currentRepetition) {
+                            2 -> "Moving to the second round"
+                            3 -> "Moving to the third round"
+                            4 -> "Moving to the fourth round"
+                            5 -> "Moving to the fifth round"
+                            else -> "Moving to the next round"
+                        }
                     } else {
-                        "נעבור לסבב הבא"
+                        when (currentRepetition) {
+                            2 -> "נעבור לסבב השני"
+                            3 -> "נעבור לסבב השלישי"
+                            4 -> "נעבור לסבב הרביעי"
+                            5 -> "נעבור לסבב החמישי"
+                            else -> "נעבור לסבב הבא"
+                        }
                     }
+                }
+            } else if (isChangingSide) {
+                if (isEnglish) {
+                    "Other side"
+                } else {
+                    "צד שני"
                 }
             } else {
                 when (activeStep.type) {
-                    StretchingStepType.PREPARE ->
-                        if (isEnglish) {
-                            "Get ready"
-                        } else {
-                            "להתכונן"
-                        }
+                    StretchingStepType.PREPARE -> {
+                        val cues =
+                            if (isEnglish) {
+                                listOf(
+                                    "Get ready",
+                                    "Prepare",
+                                    "Ready for the next movement"
+                                )
+                            } else {
+                                listOf(
+                                    "מתכוננים",
+                                    "מוכנים",
+                                    "מתכוננים לתנועה הבאה"
+                                )
+                            }
 
-                    StretchingStepType.MOVE ->
-                        if (isEnglish) {
-                            "Move"
-                        } else {
-                            "לבצע"
-                        }
+                        cues[cueVariationIndex]
+                    }
 
-                    StretchingStepType.HOLD ->
-                        if (isEnglish) {
-                            "Hold"
-                        } else {
-                            "להחזיק"
-                        }
+                    StretchingStepType.MOVE -> {
+                        val cues =
+                            if (isEnglish) {
+                                listOf(
+                                    "Move gently",
+                                    "Continue the movement",
+                                    "Once more, gently"
+                                )
+                            } else {
+                                listOf(
+                                    "מבצעים בעדינות",
+                                    "ממשיכים בתנועה",
+                                    "עוד פעם, בעדינות"
+                                )
+                            }
 
-                    StretchingStepType.RELEASE ->
-                        if (isEnglish) {
-                            "Release"
-                        } else {
-                            "לשחרר"
-                        }
+                        cues[cueVariationIndex]
+                    }
+
+                    StretchingStepType.HOLD -> {
+                        val cues =
+                            if (isEnglish) {
+                                listOf(
+                                    "Hold",
+                                    "Stay in position",
+                                    "Keep holding"
+                                )
+                            } else {
+                                listOf(
+                                    "מחזיקים",
+                                    "נשארים בתנוחה",
+                                    "ממשיכים להחזיק"
+                                )
+                            }
+
+                        cues[cueVariationIndex]
+                    }
+
+                    StretchingStepType.RELEASE -> {
+                        val cues =
+                            if (isEnglish) {
+                                listOf(
+                                    "Release slowly",
+                                    "Relax",
+                                    "Return gently"
+                                )
+                            } else {
+                                listOf(
+                                    "משחררים לאט",
+                                    "מרפים",
+                                    "חוזרים בעדינות"
+                                )
+                            }
+
+                        cues[cueVariationIndex]
+                    }
                 }
             }
-
-        KmiTtsManager.setOnSpeechCompletedListener {
-            isVoiceCueCompleted = true
-        }
 
         KmiTtsManager.speak(voiceCue)
     }
@@ -384,67 +604,182 @@ private fun StretchingExerciseContent(
     val stepPositionText =
         if (hasVisualSteps) {
             if (isEnglish) {
-                "Step ${currentStepIndex + 1} of ${visualSteps.size} · " +
-                        "Repetition $currentRepetition of $totalRepetitions"
+                "Repetition $currentRepetition of $totalRepetitions"
             } else {
-                "שלב ${currentStepIndex + 1} מתוך ${visualSteps.size} · " +
-                        "חזרה $currentRepetition מתוך $totalRepetitions"
+                "חזרה $currentRepetition מתוך $totalRepetitions"
             }
         } else {
             null
         }
+
+    val currentStepProgress =
+        if (currentDurationSeconds > 0) {
+            (
+                    1f -
+                            remainingSeconds.toFloat() /
+                            currentDurationSeconds.toFloat()
+                    ).coerceIn(0f, 1f)
+        } else {
+            1f
+        }
+
+    val exerciseProgress =
+        if (hasVisualSteps) {
+            val totalStepCount =
+                visualSteps.size * totalRepetitions
+
+            val completedStepCount =
+                (currentRepetition - 1) *
+                        visualSteps.size +
+                        currentStepIndex
+
+            (
+                    (
+                            completedStepCount.toFloat() +
+                                    currentStepProgress
+                            ) /
+                            totalStepCount.toFloat()
+                    ).coerceIn(0f, 1f)
+        } else {
+            currentStepProgress
+        }
+
+    val exerciseNumber =
+        exerciseIndex + 1
+
+    val totalExerciseCount =
+        categoryExercises.size.coerceAtLeast(1)
+
+    val seriesProgress =
+        (
+                exerciseIndex.toFloat() +
+                        exerciseProgress
+                ) /
+                totalExerciseCount.toFloat()
 
     Column(
         modifier = Modifier.fillMaxSize()
     ) {
         StretchingExerciseChapterHeader(
             exercise = exercise,
-            isEnglish = isEnglish
+            isEnglish = isEnglish,
+            exerciseNumber = exerciseNumber,
+            totalExerciseCount = totalExerciseCount,
+            seriesProgress = seriesProgress
         )
 
         Column(
-            modifier =
-                Modifier
-                    .fillMaxWidth()
-                    .weight(1f)
-                    .verticalScroll(
-                        state = rememberScrollState()
-                    )
-                    .navigationBarsPadding()
-                    .padding(
-                        start = 14.dp,
-                        top = 10.dp,
-                        end = 14.dp,
-                        bottom = 24.dp
-                    ),
-            verticalArrangement =
-                Arrangement.spacedBy(10.dp)
-        ) {
-            StretchingExerciseHeroCard(
-            exercise = exercise,
-            isEnglish = isEnglish,
-            imageKey = displayedImageKey,
-            remainingSeconds = remainingSeconds,
-            stepInstruction = stepInstruction,
-            stepPositionText = stepPositionText
-        )
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .weight(1f)
+                        .verticalScroll(
+                            state = rememberScrollState()
+                        )
+                        .padding(
+                            start = 14.dp,
+                            top = 10.dp,
+                            end = 14.dp,
+                            bottom = 14.dp
+                        ),
+                verticalArrangement =
+                    Arrangement.spacedBy(10.dp)
+            ) {
+                StretchingExerciseHeroCard(
+                    exercise = exercise,
+                    isEnglish = isEnglish,
+                    imageKey = displayedImageKey,
+                    remainingSeconds = remainingSeconds,
+                    stepInstruction = stepInstruction,
+                    stepPositionText = stepPositionText,
+                    nextExercise =
+                        if (
+                            currentRepetition ==
+                            totalRepetitions
+                        ) {
+                            nextExercise
+                        } else {
+                            null
+                        }
+                )
 
-        StretchingTimerCard(
-            remainingSeconds = remainingSeconds,
-            totalSeconds = currentDurationSeconds,
-            isRunning = isRunning,
-            isMuted = isMuted,
-            isEnglish = isEnglish,
-            onToggleRunning = {
-                val isExerciseCompleted =
-                    remainingSeconds <= 0 &&
-                            (
-                                    !hasVisualSteps ||
-                                            currentStepIndex ==
-                                            visualSteps.lastIndex
-                                    )
+                StretchingTimerCard(
+                    remainingSeconds = remainingSeconds,
+                    totalSeconds = currentDurationSeconds,
+                    exerciseProgress = exerciseProgress,
+                    isRunning = isRunning,
+                    isEnglish = isEnglish
+                )
 
-                if (isExerciseCompleted) {
+                StretchingInstructionsCard(
+                    exercise = exercise,
+                    isEnglish = isEnglish
+                )
+
+                StretchingSafetyCard(
+                    exercise = exercise,
+                    isEnglish = isEnglish
+                )
+            }
+
+            StretchingBottomActionBar(
+                isRunning = isRunning,
+                isMuted = isMuted,
+                isEnglish = isEnglish,
+                canGoPrevious = previousExercise != null,
+                canGoNext = nextExercise != null,
+                onPrevious = {
+                    previousExercise?.let { target ->
+                        KmiTtsManager.stop()
+                        isRunning = false
+
+                        onNavigateToExercise(
+                            target.id
+                        )
+                    }
+                },
+                onNext = {
+                    nextExercise?.let { target ->
+                        KmiTtsManager.stop()
+                        isRunning = false
+
+                        onNavigateToExercise(
+                            target.id
+                        )
+                    }
+                },
+                onToggleRunning = {
+                    val isExerciseCompleted =
+                        remainingSeconds <= 0 &&
+                                (
+                                        !hasVisualSteps ||
+                                                currentStepIndex ==
+                                                visualSteps.lastIndex
+                                        )
+
+                    if (isExerciseCompleted) {
+                        currentStepIndex = 0
+                        currentRepetition = 1
+                        remainingSeconds =
+                            visualSteps
+                                .firstOrNull()
+                                ?.durationSeconds
+                                ?: exercise.durationSeconds
+                        lastSpokenCountdownSecond = -1
+                        hasHandledCompletion = false
+                    }
+
+                    isRunning = !isRunning
+                },
+                onToggleMuted = {
+                    isMuted =
+                        KmiTtsManager.toggleMuted()
+                },
+                onReset = {
+                    KmiTtsManager.stop()
+                    isRunning = false
+                    lastSpokenCountdownSecond = -1
+                    hasHandledCompletion = false
                     currentStepIndex = 0
                     currentRepetition = 1
                     remainingSeconds =
@@ -453,48 +788,17 @@ private fun StretchingExerciseContent(
                             ?.durationSeconds
                             ?: exercise.durationSeconds
                 }
-
-                if (!isRunning) {
-                    isVoiceCueCompleted = false
-                }
-
-                isRunning = !isRunning
-            },
-            onToggleMuted = {
-                isMuted =
-                    KmiTtsManager.toggleMuted()
-            },
-            onReset = {
-                KmiTtsManager.stop()
-                isVoiceCueCompleted = false
-                isRunning = false
-                currentStepIndex = 0
-                currentRepetition = 1
-                remainingSeconds =
-                    visualSteps
-                        .firstOrNull()
-                        ?.durationSeconds
-                        ?: exercise.durationSeconds
-            }
-        )
-
-        StretchingInstructionsCard(
-            exercise = exercise,
-            isEnglish = isEnglish
-        )
-
-            StretchingSafetyCard(
-                exercise = exercise,
-                isEnglish = isEnglish
             )
-        }
     }
 }
 
 @Composable
 private fun StretchingExerciseChapterHeader(
     exercise: StretchingExercise,
-    isEnglish: Boolean
+    isEnglish: Boolean,
+    exerciseNumber: Int,
+    totalExerciseCount: Int,
+    seriesProgress: Float
 ) {
     val categoryTitle =
         exercise.category.displayTitle(
@@ -516,14 +820,16 @@ private fun StretchingExerciseChapterHeader(
             modifier = Modifier.fillMaxWidth(),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement =
-                Arrangement.spacedBy(1.dp)
+                Arrangement.spacedBy(3.dp)
         ) {
             Text(
                 text =
                     if (isEnglish) {
-                        "$categoryTitle stretches"
+                        "$categoryTitle stretches · " +
+                                "$exerciseNumber/$totalExerciseCount"
                     } else {
-                        "מתיחות $categoryTitle"
+                        "מתיחות $categoryTitle · " +
+                                "תרגיל $exerciseNumber מתוך $totalExerciseCount"
                     },
                 modifier = Modifier.fillMaxWidth(),
                 style = KmiTypography.action,
@@ -546,6 +852,22 @@ private fun StretchingExerciseChapterHeader(
                 textAlign = TextAlign.Center,
                 maxLines = 1
             )
+
+            LinearProgressIndicator(
+                progress = {
+                    seriesProgress.coerceIn(0f, 1f)
+                },
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .height(3.dp)
+                        .clip(
+                            RoundedCornerShape(50)
+                        ),
+                color = Color.White,
+                trackColor =
+                    Color.White.copy(alpha = 0.24f)
+            )
         }
     }
 }
@@ -557,7 +879,8 @@ private fun StretchingExerciseHeroCard(
     imageKey: String,
     remainingSeconds: Int,
     stepInstruction: String?,
-    stepPositionText: String?
+    stepPositionText: String?,
+    nextExercise: StretchingExercise?
 ) {
     val imageResource =
         stretchingImageResource(
@@ -746,6 +1069,17 @@ private fun StretchingExerciseHeroCard(
                 }
             }
 
+            nextExercise?.let { upcomingExercise ->
+                Spacer(
+                    modifier = Modifier.height(7.dp)
+                )
+
+                NextStretchingExercisePreview(
+                    exercise = upcomingExercise,
+                    isEnglish = isEnglish
+                )
+            }
+
             if (
                 stepPositionText != null &&
                 stepInstruction != null
@@ -831,6 +1165,171 @@ private fun StretchingExerciseHeroCard(
 }
 
 @Composable
+private fun NextStretchingExercisePreview(
+    exercise: StretchingExercise,
+    isEnglish: Boolean,
+    modifier: Modifier = Modifier
+) {
+    val previewImageKey =
+        exercise.visualSteps
+            .firstOrNull()
+            ?.imageKey
+            ?: exercise.imageKey
+
+    val previewImageResource =
+        stretchingImageResource(
+            imageKey = previewImageKey
+        )
+
+    Surface(
+        modifier =
+            modifier
+                .fillMaxWidth(),
+        shape = RoundedCornerShape(18.dp),
+        color =
+            MaterialTheme
+                .colorScheme
+                .primaryContainer
+                .copy(alpha = 0.42f),
+        border =
+            BorderStroke(
+                width = 1.dp,
+                color =
+                    MaterialTheme
+                        .colorScheme
+                        .primary
+                        .copy(alpha = 0.38f)
+            ),
+        shadowElevation = 0.dp,
+        tonalElevation = 1.dp
+    ) {
+        Row(
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .padding(
+                        horizontal = 10.dp,
+                        vertical = 6.dp
+                    ),
+            verticalAlignment =
+                Alignment.CenterVertically,
+            horizontalArrangement =
+                Arrangement.spacedBy(10.dp)
+        ) {
+            Surface(
+                modifier = Modifier.size(54.dp),
+                shape = CircleShape,
+                color =
+                    MaterialTheme
+                        .colorScheme
+                        .surface
+                        .copy(alpha = 0.96f),
+                border =
+                    BorderStroke(
+                        width = 2.dp,
+                        color =
+                            MaterialTheme
+                                .colorScheme
+                                .primary
+                                .copy(alpha = 0.72f)
+                    ),
+                shadowElevation = 0.dp
+            ) {
+                if (previewImageResource != null) {
+                    Image(
+                        painter =
+                            painterResource(
+                                id = previewImageResource
+                            ),
+                        contentDescription =
+                            exerciseTitle(
+                                exercise = exercise,
+                                isEnglish = isEnglish
+                            ),
+                        modifier =
+                            Modifier
+                                .fillMaxSize()
+                                .clip(CircleShape)
+                                .padding(3.dp),
+                        contentScale = ContentScale.Fit
+                    )
+                } else {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector =
+                                Icons.Filled.AccessibilityNew,
+                            contentDescription = null,
+                            modifier =
+                                Modifier.size(
+                                    KmiIconSize.medium
+                                ),
+                            tint =
+                                MaterialTheme
+                                    .colorScheme
+                                    .primary
+                        )
+                    }
+                }
+            }
+
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement =
+                    Arrangement.spacedBy(1.dp)
+            ) {
+                Text(
+                    text =
+                        if (isEnglish) {
+                            "Next exercise"
+                        } else {
+                            "התרגיל הבא"
+                        },
+                    modifier = Modifier.fillMaxWidth(),
+                    style = KmiTypography.caption,
+                    color =
+                        MaterialTheme
+                            .colorScheme
+                            .primary,
+                    fontWeight = FontWeight.Bold,
+                    textAlign =
+                        if (isEnglish) {
+                            TextAlign.Start
+                        } else {
+                            TextAlign.End
+                        },
+                    maxLines = 1
+                )
+
+                Text(
+                    text =
+                        exerciseTitle(
+                            exercise = exercise,
+                            isEnglish = isEnglish
+                        ),
+                    modifier = Modifier.fillMaxWidth(),
+                    style = KmiTypography.body,
+                    color =
+                        MaterialTheme
+                            .colorScheme
+                            .onSurface,
+                    fontWeight = FontWeight.Bold,
+                    textAlign =
+                        if (isEnglish) {
+                            TextAlign.Start
+                        } else {
+                            TextAlign.End
+                        },
+                    maxLines = 2
+                )
+            }
+        }
+    }
+}
+
+@Composable
 private fun ExerciseInformationBadge(
     text: String
 ) {
@@ -873,12 +1372,9 @@ private fun ExerciseInformationBadge(
 private fun StretchingTimerCard(
     remainingSeconds: Int,
     totalSeconds: Int,
+    exerciseProgress: Float,
     isRunning: Boolean,
-    isMuted: Boolean,
-    isEnglish: Boolean,
-    onToggleRunning: () -> Unit,
-    onToggleMuted: () -> Unit,
-    onReset: () -> Unit
+    isEnglish: Boolean
 ) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
@@ -957,147 +1453,262 @@ private fun StretchingTimerCard(
                 maxLines = 1
             )
 
+            LinearProgressIndicator(
+                progress = {
+                    exerciseProgress.coerceIn(0f, 1f)
+                },
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .height(5.dp)
+                        .clip(
+                            RoundedCornerShape(50)
+                        ),
+                color =
+                    MaterialTheme
+                        .colorScheme
+                        .primary,
+                trackColor =
+                    MaterialTheme
+                        .colorScheme
+                        .primary
+                        .copy(alpha = 0.14f)
+            )
+        }
+    }
+}
+
+@Composable
+private fun StretchingBottomActionBar(
+    isRunning: Boolean,
+    isMuted: Boolean,
+    isEnglish: Boolean,
+    canGoPrevious: Boolean,
+    canGoNext: Boolean,
+    onPrevious: () -> Unit,
+    onNext: () -> Unit,
+    onToggleRunning: () -> Unit,
+    onToggleMuted: () -> Unit,
+    onReset: () -> Unit
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape =
+            RoundedCornerShape(
+                topStart = 18.dp,
+                topEnd = 18.dp
+            ),
+        color =
+            MaterialTheme
+                .colorScheme
+                .surface
+                .copy(alpha = 0.98f),
+        border =
+            BorderStroke(
+                width = 1.dp,
+                color =
+                    MaterialTheme
+                        .colorScheme
+                        .outlineVariant
+            ),
+        shadowElevation = 0.dp,
+        tonalElevation = 2.dp
+    ) {
+        CompositionLocalProvider(
+            LocalLayoutDirection provides
+                    LayoutDirection.Ltr
+        ) {
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .navigationBarsPadding()
+                        .padding(
+                            horizontal = 7.dp,
+                            vertical = 7.dp
+                        ),
                 horizontalArrangement =
-                    Arrangement.spacedBy(7.dp),
+                    Arrangement.spacedBy(4.dp),
                 verticalAlignment =
                     Alignment.CenterVertically
             ) {
+                StretchingBottomAction(
+                    icon = Icons.Filled.Replay,
+                    label =
+                        if (isEnglish) {
+                            "Reset"
+                        } else {
+                            "איפוס"
+                        },
+                    onClick = onReset,
+                    modifier = Modifier.weight(1f)
+                )
+
+                StretchingBottomAction(
+                    icon = Icons.Filled.SkipPrevious,
+                    label =
+                        if (isEnglish) {
+                            "Previous"
+                        } else {
+                            "הקודם"
+                        },
+                    onClick = onPrevious,
+                    enabled = canGoPrevious,
+                    modifier = Modifier.weight(1f)
+                )
+
                 Button(
                     onClick = onToggleRunning,
                     modifier =
                         Modifier
-                            .weight(1f)
-                            .height(42.dp),
-                    shape = RoundedCornerShape(13.dp),
+                            .weight(1.18f)
+                            .height(54.dp),
+                    shape = RoundedCornerShape(15.dp),
                     contentPadding =
                         PaddingValues(
-                            horizontal = 12.dp,
+                            horizontal = 4.dp,
                             vertical = 4.dp
-                        ),
-                    colors =
-                        ButtonDefaults.buttonColors(
-                            containerColor =
-                                MaterialTheme
-                                    .colorScheme
-                                    .primary,
-                            contentColor =
-                                MaterialTheme
-                                    .colorScheme
-                                    .onPrimary
                         )
                 ) {
-                    Icon(
-                        imageVector =
-                            if (isRunning) {
-                                Icons.Filled.Pause
-                            } else {
-                                Icons.Filled.PlayArrow
-                            },
-                        contentDescription = null,
-                        modifier =
-                            Modifier.size(
-                                KmiIconSize.small
-                            )
-                    )
-
-                    Spacer(
-                        modifier = Modifier.width(5.dp)
-                    )
-
-                    Text(
-                        text =
-                            if (isRunning) {
-                                if (isEnglish) {
-                                    "Pause"
+                    Column(
+                        horizontalAlignment =
+                            Alignment.CenterHorizontally,
+                        verticalArrangement =
+                            Arrangement.spacedBy(1.dp)
+                    ) {
+                        Icon(
+                            imageVector =
+                                if (isRunning) {
+                                    Icons.Filled.Pause
                                 } else {
-                                    "השהה"
-                                }
-                            } else {
-                                if (isEnglish) {
-                                    "Start"
+                                    Icons.Filled.PlayArrow
+                                },
+                            contentDescription = null,
+                            modifier =
+                                Modifier.size(
+                                    KmiIconSize.small
+                                )
+                        )
+
+                        Text(
+                            text =
+                                if (isRunning) {
+                                    if (isEnglish) {
+                                        "Pause"
+                                    } else {
+                                        "השהה"
+                                    }
                                 } else {
-                                    "התחל"
-                                }
-                            },
-                        style = KmiTypography.caption,
-                        fontWeight = FontWeight.Bold,
-                        maxLines = 1,
-                        softWrap = false
-                    )
+                                    if (isEnglish) {
+                                        "Start"
+                                    } else {
+                                        "התחל"
+                                    }
+                                },
+                            style = KmiTypography.caption,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            softWrap = false
+                        )
+                    }
                 }
 
-                OutlinedButton(
-                    onClick = onToggleMuted,
-                    modifier =
-                        Modifier.size(42.dp),
-                    shape = RoundedCornerShape(13.dp),
-                    contentPadding =
-                        PaddingValues(0.dp)
-                ) {
-                    Icon(
-                        imageVector =
-                            if (isMuted) {
-                                Icons.Filled.VolumeOff
-                            } else {
-                                Icons.Filled.VolumeUp
-                            },
-                        contentDescription =
-                            if (isMuted) {
-                                if (isEnglish) {
-                                    "Enable voice guidance"
-                                } else {
-                                    "הפעלת ההנחיה הקולית"
-                                }
-                            } else {
-                                if (isEnglish) {
-                                    "Mute voice guidance"
-                                } else {
-                                    "השתקת ההנחיה הקולית"
-                                }
-                            },
-                        modifier =
-                            Modifier.size(
-                                KmiIconSize.small
-                            ),
-                        tint =
-                            if (isMuted) {
-                                MaterialTheme
-                                    .colorScheme
-                                    .error
-                            } else {
-                                MaterialTheme
-                                    .colorScheme
-                                    .primary
-                            }
-                    )
-                }
+                StretchingBottomAction(
+                    icon = Icons.Filled.SkipNext,
+                    label =
+                        if (isEnglish) {
+                            "Next"
+                        } else {
+                            "הבא"
+                        },
+                    onClick = onNext,
+                    enabled = canGoNext,
+                    modifier = Modifier.weight(1f)
+                )
 
-                OutlinedButton(
-                    onClick = onReset,
-                    modifier =
-                        Modifier.size(42.dp),
-                    shape = RoundedCornerShape(13.dp),
-                    contentPadding =
-                        PaddingValues(0.dp)
-                ) {
-                    Icon(
-                        imageVector =
-                            Icons.Filled.Replay,
-                        contentDescription =
+                StretchingBottomAction(
+                    icon =
+                        if (isMuted) {
+                            Icons.Filled.VolumeOff
+                        } else {
+                            Icons.Filled.VolumeUp
+                        },
+                    label =
+                        if (isMuted) {
                             if (isEnglish) {
-                                "Reset timer"
+                                "Muted"
                             } else {
-                                "איפוס הטיימר"
-                            },
-                        modifier =
-                            Modifier.size(
-                                KmiIconSize.small
-                            )
-                    )
-                }
+                                "מושתק"
+                            }
+                        } else {
+                            if (isEnglish) {
+                                "Sound"
+                            } else {
+                                "שמע"
+                            }
+                        },
+                    onClick = onToggleMuted,
+                    accentError = isMuted,
+                    modifier = Modifier.weight(1f)
+                )
             }
+        }
+    }
+}
+
+@Composable
+private fun StretchingBottomAction(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    accentError: Boolean = false
+) {
+    OutlinedButton(
+        onClick = onClick,
+        enabled = enabled,
+        modifier =
+            modifier.height(54.dp),
+        shape = RoundedCornerShape(15.dp),
+        contentPadding =
+            PaddingValues(
+                horizontal = 2.dp,
+                vertical = 4.dp
+            )
+    ) {
+        Column(
+            horizontalAlignment =
+                Alignment.CenterHorizontally,
+            verticalArrangement =
+                Arrangement.spacedBy(1.dp)
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = label,
+                modifier =
+                    Modifier.size(
+                        KmiIconSize.small
+                    ),
+                tint =
+                    if (accentError) {
+                        MaterialTheme
+                            .colorScheme
+                            .error
+                    } else {
+                        MaterialTheme
+                            .colorScheme
+                            .primary
+                    }
+            )
+
+            Text(
+                text = label,
+                style = KmiTypography.caption,
+                fontWeight = FontWeight.Bold,
+                maxLines = 1,
+                softWrap = false
+            )
         }
     }
 }

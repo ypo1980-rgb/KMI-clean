@@ -499,7 +499,60 @@ exports.verifyCoachInvite = functions.https.onCall(async (data, context) => {
     canSendBroadcasts: invite.canSendBroadcasts === true,
   };
 
-  const fullName = String(invite.fullName || "").trim();
+  const userRef =
+    db.collection("users").doc(uid);
+
+  const userSnap =
+    await userRef.get();
+
+  const userData =
+    userSnap.exists
+      ? userSnap.data() || {}
+      : {};
+
+  const coachBranchAssignments =
+    Array.isArray(userData.coachBranchAssignments)
+      ? userData.coachBranchAssignments
+          .map((assignment) => {
+            const branch =
+              String(
+                assignment &&
+                assignment.branch ||
+                ""
+              ).trim();
+
+            const groups =
+              Array.isArray(
+                assignment &&
+                assignment.groups
+              )
+                ? [
+                    ...new Set(
+                      assignment.groups
+                        .map((group) =>
+                          String(group || "").trim()
+                        )
+                        .filter(Boolean)
+                    ),
+                  ]
+                : [];
+
+            return {
+              branch,
+              groups,
+            };
+          })
+          .filter((assignment) =>
+            assignment.branch.length > 0
+          )
+      : [];
+
+  const fullName =
+    String(
+      invite.fullName ||
+      userData.fullName ||
+      ""
+    ).trim();
 
   const coachPayload = {
     active: true,
@@ -511,6 +564,9 @@ exports.verifyCoachInvite = functions.https.onCall(async (data, context) => {
     linkedFromInvite: phoneDigits,
     linkedAt: admin.firestore.FieldValue.serverTimestamp(),
     linkedAtMillis: Date.now(),
+
+    coachBranchAssignments,
+
     ...permissions,
   };
 
@@ -551,6 +607,167 @@ exports.verifyCoachInvite = functions.https.onCall(async (data, context) => {
     permissions,
   };
 });
+
+/**
+ * ====================================================
+ * סנכרון שיוכי סניפים וקבוצות של מאמן
+ *
+ * users/{uid}.coachBranchAssignments
+ *                  ↓
+ * authorizedCoaches/{uid}.coachBranchAssignments
+ *
+ * הסנכרון מתבצע רק אם אותו UID כבר קיים
+ * כמאמן פעיל ומורשה ב-authorizedCoaches.
+ * ====================================================
+ */
+exports.syncAuthorizedCoachBranchAssignments =
+  functions.firestore
+    .document("users/{uid}")
+    .onWrite(async (change, context) => {
+
+      if (!change.after.exists) {
+        return null;
+      }
+
+      const uid =
+        String(
+          context.params.uid || ""
+        ).trim();
+
+      if (!uid) {
+        return null;
+      }
+
+      const user =
+        change.after.data() || {};
+
+      const coachBranchAssignments =
+        Array.isArray(user.coachBranchAssignments)
+          ? user.coachBranchAssignments
+              .map((assignment) => {
+                const branch =
+                  String(
+                    assignment &&
+                    assignment.branch ||
+                    ""
+                  ).trim();
+
+                const groups =
+                  Array.isArray(
+                    assignment &&
+                    assignment.groups
+                  )
+                    ? [
+                        ...new Set(
+                          assignment.groups
+                            .map((group) =>
+                              String(group || "").trim()
+                            )
+                            .filter(Boolean)
+                        ),
+                      ]
+                    : [];
+
+                return {
+                  branch,
+                  groups,
+                };
+              })
+              .filter((assignment) =>
+                assignment.branch.length > 0
+              )
+          : [];
+
+      /*
+       * רשימות שטוחות ומדויקות עבור Firestore Rules.
+       *
+       * authorizedBranches:
+       *   ["סניף א", "סניף ב"]
+       *
+       * authorizedBranchGroups:
+       *   ["סניף א||קבוצה 1", "סניף א||קבוצה 2"]
+       *
+       * כך אין ערבוב בין קבוצות בעלות שם דומה
+       * בסניפים שונים.
+       */
+      const authorizedBranches =
+        [
+          ...new Set(
+            coachBranchAssignments
+              .map((assignment) =>
+                assignment.branch
+              )
+              .filter(Boolean)
+          ),
+        ];
+
+      const authorizedBranchGroups =
+        [
+          ...new Set(
+            coachBranchAssignments
+              .flatMap((assignment) =>
+                assignment.groups.map((group) =>
+                  `${assignment.branch}||${group}`
+                )
+              )
+              .filter(Boolean)
+          ),
+        ];
+
+      const authorizedCoachRef =
+        db.collection("authorizedCoaches")
+          .doc(uid);
+
+      const authorizedCoachSnap =
+        await authorizedCoachRef.get();
+
+      if (!authorizedCoachSnap.exists) {
+        return null;
+      }
+
+      const authorizedCoach =
+        authorizedCoachSnap.data() || {};
+
+      if (
+        authorizedCoach.active !== true ||
+        String(
+          authorizedCoach.role || ""
+        )
+          .trim()
+          .toLowerCase() !== "coach"
+      ) {
+        return null;
+      }
+
+      await authorizedCoachRef.set(
+        {
+          coachBranchAssignments,
+          authorizedBranches,
+          authorizedBranchGroups,
+
+          branchAssignmentsSyncedAt:
+            admin.firestore.FieldValue
+              .serverTimestamp(),
+
+          branchAssignmentsSyncedAtMillis:
+            Date.now(),
+        },
+        {
+          merge: true,
+        }
+      );
+
+      console.log(
+        "Coach branch assignments synchronized:",
+        {
+          uid,
+          branchCount:
+            coachBranchAssignments.length,
+        }
+      );
+
+      return null;
+    });
 
 /**
  * ====================================================

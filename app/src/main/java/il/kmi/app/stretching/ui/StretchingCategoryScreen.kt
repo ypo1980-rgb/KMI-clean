@@ -1192,5 +1192,95 @@ internal fun stretchingImageResource(
         "knees_ankles_toe_raises_down" ->
             R.drawable.stretching_knees_ankles_toe_raises_down
 
+        "full_body_standing_reach_start" ->
+            R.drawable.stretching_full_body_standing_reach_start
+
+        "full_body_standing_reach_up" ->
+            R.drawable.stretching_full_body_standing_reach_up
+
+        "full_body_standing_reach_release" ->
+            R.drawable.stretching_full_body_standing_reach_release
+
+        "full_body_side_reach_start" ->
+            R.drawable.stretching_full_body_side_reach_start
+
+        "full_body_side_reach_left" ->
+            R.drawable.stretching_full_body_side_reach_left
+
+        "full_body_side_reach_right" ->
+            R.drawable.stretching_full_body_side_reach_right
+
+        "full_body_standing_rotation_start" ->
+            R.drawable.stretching_full_body_standing_rotation_start
+
+        "full_body_standing_rotation_left" ->
+            R.drawable.stretching_full_body_standing_rotation_left
+
+        "full_body_standing_rotation_right" ->
+            R.drawable.stretching_full_body_standing_rotation_right
+
+        "full_body_squat_reach_start" ->
+            R.drawable.stretching_full_body_squat_reach_start
+
+        "full_body_squat_reach_down" ->
+            R.drawable.stretching_full_body_squat_reach_down
+
+        "full_body_squat_reach_up" ->
+            R.drawable.stretching_full_body_squat_reach_up
+
+        "full_body_reverse_lunge_reach_start" ->
+            R.drawable.stretching_full_body_reverse_lunge_reach_start
+
+        "full_body_reverse_lunge_reach_left" ->
+            R.drawable.stretching_full_body_reverse_lunge_reach_left
+
+        "full_body_reverse_lunge_reach_right" ->
+            R.drawable.stretching_full_body_reverse_lunge_reach_right
+
+        "full_body_cat_cow_start" ->
+            R.drawable.stretching_full_body_cat_cow_start
+
+        "full_body_cat_cow_round" ->
+            R.drawable.stretching_full_body_cat_cow_round
+
+        "full_body_cat_cow_extend" ->
+            R.drawable.stretching_full_body_cat_cow_extend
+
+        "full_body_child_pose_start" ->
+            R.drawable.stretching_full_body_child_pose_start
+
+        "full_body_child_pose_reach" ->
+            R.drawable.stretching_full_body_child_pose_reach
+
+        "full_body_child_pose_return" ->
+            R.drawable.stretching_full_body_child_pose_return
+
+        "full_body_thread_needle_start" ->
+            R.drawable.stretching_full_body_thread_needle_start
+
+        "full_body_thread_needle_left" ->
+            R.drawable.stretching_full_body_thread_needle_left
+
+        "full_body_thread_needle_right" ->
+            R.drawable.stretching_full_body_thread_needle_right
+
+        "full_body_supine_lengthening_start" ->
+            R.drawable.stretching_full_body_supine_lengthening_start
+
+        "full_body_supine_lengthening_reach" ->
+            R.drawable.stretching_full_body_supine_lengthening_reach
+
+        "full_body_supine_lengthening_release" ->
+            R.drawable.stretching_full_body_supine_lengthening_release
+
+        "full_body_marching_reach_start" ->
+            R.drawable.stretching_full_body_marching_reach_start
+
+        "full_body_marching_reach_left" ->
+            R.drawable.stretching_full_body_marching_reach_left
+
+        "full_body_marching_reach_right" ->
+            R.drawable.stretching_full_body_marching_reach_right
+
         else -> null
     }

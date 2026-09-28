@@ -1874,11 +1874,22 @@ fun RegistrationFormScreen(
                 showTopSearch = false,
 
                 onHome = {
-                    onOpenHome()
+                    if (startAtProfile) {
+                        onOpenHome()
+                    }
                 },
 
-                lockHome = false,
-                lockSearch = false
+// במסך השלמת רישום האייקונים נשארים מוצגים
+// אך אינם מאפשרים לעקוף את השלמת הפרטים.
+// בעריכת פרופיל, לאחר שהמשתמש כבר רשום,
+// ההתנהגות נשארת רגילה.
+                lockHome = !startAtProfile,
+                lockSearch = !startAtProfile,
+
+// במסך השלמת הרישום כל האייקונים נשארים מוצגים,
+// אך שום פעולה אינה זמינה עד להשלמת הרישום.
+// בעריכת פרופיל הם חוזרים לפעול כרגיל.
+                lockAllActions = !startAtProfile
             )
         },
         containerColor = Color.Transparent,
