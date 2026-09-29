@@ -1,8 +1,9 @@
-// שימוש ב־v1 compat של Firebase Functions (Node 20)
+// שימוש ב־v1 compat של Firebase Functions (Node 22)
 const functions = require("firebase-functions/v1");
 const admin = require("firebase-admin");
 const fs = require("fs");
 const path = require("path");
+const crypto = require("crypto");
 
 const {
   GoogleAuth,
@@ -345,6 +346,145 @@ function replaceTemplateValue(
   );
 }
 
+async function allowPublicAction(
+  purpose,
+  identity,
+  limit,
+  windowMs
+) {
+  const cleanPurpose =
+    String(purpose || "")
+      .trim()
+      .slice(0, 80);
+
+  const cleanIdentity =
+    String(identity || "")
+      .trim()
+      .toLowerCase()
+      .slice(0, 300);
+
+  if (
+    !cleanPurpose ||
+    !cleanIdentity ||
+    !Number.isFinite(limit) ||
+    limit < 1 ||
+    !Number.isFinite(windowMs) ||
+    windowMs < 1000
+  ) {
+    return false;
+  }
+
+  const keyHash =
+    crypto
+      .createHash("sha256")
+      .update(
+        cleanPurpose +
+        ":" +
+        cleanIdentity
+      )
+      .digest("hex");
+
+  const rateLimitRef =
+    db
+      .collection(
+        "publicActionRateLimits"
+      )
+      .doc(keyHash);
+
+  const nowMillis =
+    Date.now();
+
+  return db.runTransaction(
+    async (transaction) => {
+
+      const snapshot =
+        await transaction.get(
+          rateLimitRef
+        );
+
+      const current =
+        snapshot.exists
+          ? snapshot.data() || {}
+          : {};
+
+      const previousWindowStart =
+        Number(
+          current.windowStartedAtMillis ||
+          0
+        );
+
+      const previousCount =
+        Math.max(
+          0,
+          Number(
+            current.count ||
+            0
+          )
+        );
+
+      const sameWindow =
+        Number.isFinite(
+          previousWindowStart
+        ) &&
+        previousWindowStart > 0 &&
+        nowMillis >=
+          previousWindowStart &&
+        nowMillis -
+          previousWindowStart <
+          windowMs;
+
+      if (
+        sameWindow &&
+        previousCount >= limit
+      ) {
+        return false;
+      }
+
+      const nextWindowStart =
+        sameWindow
+          ? previousWindowStart
+          : nowMillis;
+
+      const nextCount =
+        sameWindow
+          ? previousCount + 1
+          : 1;
+
+      transaction.set(
+        rateLimitRef,
+        {
+          purpose:
+            cleanPurpose,
+
+          count:
+            nextCount,
+
+          windowStartedAtMillis:
+            nextWindowStart,
+
+          updatedAtMillis:
+            nowMillis,
+
+          updatedAt:
+            admin.firestore
+              .FieldValue
+              .serverTimestamp(),
+
+          expiresAtMillis:
+            nowMillis +
+            windowMs * 2,
+        },
+        {
+          merge:
+            true,
+        }
+      );
+
+      return true;
+    }
+  );
+}
+
 /**
  * ====================================================
  * שחזור שם משתמש לפי אימייל
@@ -368,11 +508,23 @@ exports.recoverUsername = functions.https.onCall(async (data, context) => {
     );
   }
 
-  const genericResult = {
-    accepted: true,
-  };
+ const genericResult = {
+   accepted: true,
+ };
 
-  try {
+ const recoveryAllowed =
+   await allowPublicAction(
+     "recover_username",
+     emailLower,
+     5,
+     60 * 60 * 1000
+   );
+
+ if (!recoveryAllowed) {
+   return genericResult;
+ }
+
+ try {
     /*
      * קודם מחפשים לפי emailLower.
      */
@@ -504,10 +656,17 @@ exports.recoverUsername = functions.https.onCall(async (data, context) => {
 
     return genericResult;
   } catch (error) {
-    console.error(
-      "recoverUsername failed:",
-      error
-    );
+   console.error(
+     "recoverUsername failed:",
+     {
+       errorCode:
+         String(
+           error &&
+           error.code ||
+           "unknown"
+         ),
+     }
+   );
 
     throw new functions.https.HttpsError(
       "internal",
@@ -549,6 +708,21 @@ exports.resolveUsernameLoginEmail =
           loginEmail: "",
         };
       }
+
+const lookupAllowed =
+  await allowPublicAction(
+    "resolve_username",
+    username,
+    10,
+    15 * 60 * 1000
+  );
+
+if (!lookupAllowed) {
+  return {
+    found: false,
+    loginEmail: "",
+  };
+}
 
       const usernameFields = [
         "username",
@@ -616,13 +790,17 @@ exports.resolveUsernameLoginEmail =
         };
 
       } catch (error) {
-        console.error(
-          "resolveUsernameLoginEmail failed:",
-          {
-            error:
-              String(error),
-          }
-        );
+       console.error(
+         "resolveUsernameLoginEmail failed:",
+         {
+           errorCode:
+             String(
+               error &&
+               error.code ||
+               "unknown"
+             ),
+         }
+       );
 
         throw new functions.https.HttpsError(
           "internal",
@@ -662,11 +840,23 @@ exports.recoverPassword = functions.https.onCall(async (data, context) => {
     );
   }
 
-  const genericResult = {
-    accepted: true,
-  };
+ const genericResult = {
+   accepted: true,
+ };
 
-  try {
+ const recoveryAllowed =
+   await allowPublicAction(
+     "recover_password",
+     emailLower,
+     5,
+     60 * 60 * 1000
+   );
+
+ if (!recoveryAllowed) {
+   return genericResult;
+ }
+
+ try {
     /*
      * לא חושפים ללקוח אם המשתמש קיים או לא.
      */
@@ -770,10 +960,17 @@ exports.recoverPassword = functions.https.onCall(async (data, context) => {
     return genericResult;
 
   } catch (error) {
-    console.error(
-      "recoverPassword failed:",
-      error
-    );
+   console.error(
+     "recoverPassword failed:",
+     {
+       errorCode:
+         String(
+           error &&
+           error.code ||
+           "unknown"
+         ),
+     }
+   );
 
     throw new functions.https.HttpsError(
       "internal",
@@ -1040,39 +1237,6 @@ exports.verifyCoachInvite = functions.https.onCall(async (data, context) => {
   };
 });
 
-/**
- * ====================================================
- * סנכרון שיוכי סניפים וקבוצות של מאמן
- *
- * users/{uid}.coachBranchAssignments
- *                  ↓
- * authorizedCoaches/{uid}.coachBranchAssignments
- *
- * הסנכרון מתבצע רק אם אותו UID כבר קיים
- * כמאמן פעיל ומורשה ב-authorizedCoaches.
- * ====================================================
- */
-/*
- * SECURITY:
- * users/{uid}.coachBranchAssignments אינו מקור הרשאה.
- *
- * בעבר הפונקציה הזאת העתיקה שיוכים מתוך users
- * אל authorizedCoaches, ולכן משתמש שהיה יכול להשפיע
- * על מסמך המשתמש שלו היה עלול להשפיע בעקיפין
- * על תחום הרשאות המאמן.
- *
- * כרגע משאירים trigger ניטרלי כדי לא לבצע
- * שינוי deployment נוסף באותו שלב.
- *
- * בהמשך, לאחר מעבר מלא למקור אדמיניסטרטיבי,
- * ניתן למחוק את הפונקציה לחלוטין.
- */
-exports.syncAuthorizedCoachBranchAssignments =
-  functions.firestore
-    .document("users/{uid}")
-    .onWrite(async () => {
-      return null;
-    });
 
 /**
  * ====================================================
@@ -2205,9 +2369,6 @@ exports.updateSecureMembershipPayment =
 
   const matchedDocument =
     primaryIdentityEntry.document;
-
-  const matchedUser =
-    primaryIdentityEntry.user || {};
 
    const isCoachTarget =
      matchedIdentityEntries.some(
@@ -3731,10 +3892,6 @@ exports.loadSecureCoachTrainees =
       function cleanCoachText(value) {
         return String(value || "")
           .trim();
-      }
-
-      function normalizeCoachEmail(value) {
-        return normalizeEmail(value);
       }
 
       function normalizeCoachPhone(value) {
@@ -9972,13 +10129,23 @@ const coachItems =
         return null;
       }
 
-      return {
-        uid:
-          coachUid,
+     return {
+       uid:
+         coachUid,
 
-        name:
-          coachName,
-      };
+       name:
+         coachName,
+
+       email:
+         globalUserEmail(
+           coach
+         ),
+
+       phone:
+         globalUserPhone(
+           coach
+         ),
+     };
     })
     .filter(Boolean);
 
@@ -10081,13 +10248,35 @@ const coachItems =
               return null;
             }
 
-            return {
-              uid:
-                participantUid,
+           return {
+             uid:
+               participantUid,
 
-              name:
-                participantName,
-            };
+             name:
+               participantName,
+
+             email:
+               entries
+                 .map(
+                   (entry) =>
+                     globalUserEmail(
+                       entry.user || {}
+                     )
+                 )
+                 .find(Boolean) ||
+                 "",
+
+             phone:
+               entries
+                 .map(
+                   (entry) =>
+                     globalUserPhone(
+                       entry.user || {}
+                     )
+                 )
+                 .find(Boolean) ||
+                 "",
+           };
           })
           .filter(Boolean)
           .sort(
@@ -10102,36 +10291,132 @@ const coachItems =
               )
           );
 
-     const mergedItems =
-       Array.from(
-         new Map(
-           items
-             .concat(coachItems)
-             .map((item) => [
-               String(
-                 item.uid || ""
-               ).trim(),
-               item,
-             ])
-         ).values()
-       )
-         .filter(
-           (item) =>
-             item &&
-             item.uid &&
-             item.name
-         )
-         .sort(
-           (a, b) =>
-             String(
-               a.name || ""
-             ).localeCompare(
-               String(
-                 b.name || ""
-               ),
-               "he"
-             )
-         );
+  const forumParticipantIdentityGroups =
+    groupUsersByIdentity(
+      items
+        .concat(coachItems)
+        .map((item) => ({
+          id:
+            String(
+              item.uid || ""
+            ).trim(),
+
+          user: {
+            uid:
+              String(
+                item.uid || ""
+              ).trim(),
+
+            email:
+              normalizeEmail(
+                item.email || ""
+              ),
+
+            phone:
+              normalizeUserPhone(
+                item.phone || ""
+              ),
+
+            fullName:
+              String(
+                item.name || ""
+              ).trim(),
+          },
+
+          item,
+        }))
+    );
+
+  const mergedItems =
+    forumParticipantIdentityGroups
+      .map((entries) => {
+
+        if (
+          !Array.isArray(entries) ||
+          entries.length === 0
+        ) {
+          return null;
+        }
+
+        const currentUserEntry =
+          entries.find(
+            (entry) =>
+              String(
+                entry &&
+                entry.item &&
+                entry.item.uid ||
+                ""
+              ).trim() === uid
+          );
+
+        const primary =
+          currentUserEntry ||
+          entries.find(
+            (entry) =>
+              String(
+                entry &&
+                entry.item &&
+                entry.item.name ||
+                ""
+              ).trim().length > 0
+          ) ||
+          entries[0];
+
+        if (
+          !primary ||
+          !primary.item
+        ) {
+          return null;
+        }
+
+        const participantUid =
+          currentUserEntry
+            ? uid
+            : String(
+                primary.item.uid || ""
+              ).trim();
+
+        const participantName =
+          entries
+            .map(
+              (entry) =>
+                String(
+                  entry &&
+                  entry.item &&
+                  entry.item.name ||
+                  ""
+                ).trim()
+            )
+            .find(Boolean) ||
+          "";
+
+        if (
+          !participantUid ||
+          !participantName
+        ) {
+          return null;
+        }
+
+        return {
+          uid:
+            participantUid,
+
+          name:
+            participantName,
+        };
+      })
+      .filter(Boolean)
+      .sort(
+        (a, b) =>
+          String(
+            a.name || ""
+          ).localeCompare(
+            String(
+              b.name || ""
+            ),
+            "he"
+          )
+      );
 
      return {
        success:
@@ -12114,10 +12399,6 @@ function safeNumber(value, fallback = 0) {
   return Number.isFinite(n) ? n : fallback;
 }
 
-function safePercent(value) {
-  return Math.max(0, Math.min(100, Math.round(safeNumber(value, 0))));
-}
-
 function bucketFieldForBucket(bucketValue) {
   const bucket = safeNumber(bucketValue, 0);
 
@@ -12463,7 +12744,7 @@ exports.onUserProgressWritten =
 const textToSpeech = require("@google-cloud/text-to-speech");
 const ttsClient = new textToSpeech.TextToSpeechClient();
 
-const KMI_TTS_VERSION = "tts-chirp3-he-v5";
+const KMI_TTS_VERSION = "tts-chirp3-he-v5-node22";
 
 function extractFcmTokensFromUser(user) {
   const tokens = [];
@@ -12502,6 +12783,100 @@ return Array.from(
     tokens
   )
 );
+}
+
+async function sendFcmMulticastInBatches(
+  message
+) {
+  const rawTokens =
+    Array.isArray(
+      message &&
+      message.tokens
+    )
+      ? message.tokens
+      : [];
+
+  const tokens =
+    Array.from(
+      new Set(
+        rawTokens
+          .map((token) =>
+            String(token || "")
+              .trim()
+          )
+          .filter(Boolean)
+      )
+    );
+
+  if (tokens.length === 0) {
+    return {
+      responses: [],
+      successCount: 0,
+      failureCount: 0,
+    };
+  }
+
+  let responses = [];
+  let successCount = 0;
+  let failureCount = 0;
+
+  for (
+    let startIndex = 0;
+    startIndex < tokens.length;
+    startIndex += 500
+  ) {
+    const batchTokens =
+      tokens.slice(
+        startIndex,
+        startIndex + 500
+      );
+
+    const batchMessage =
+      Object.assign(
+        {},
+        message,
+        {
+          tokens:
+            batchTokens,
+        }
+      );
+
+    const batchResponse =
+      await admin
+        .messaging()
+        .sendEachForMulticast(
+          batchMessage
+        );
+
+    successCount +=
+      Number(
+        batchResponse.successCount ||
+        0
+      );
+
+    failureCount +=
+      Number(
+        batchResponse.failureCount ||
+        0
+      );
+
+    if (
+      Array.isArray(
+        batchResponse.responses
+      )
+    ) {
+      responses =
+        responses.concat(
+          batchResponse.responses
+        );
+    }
+  }
+
+  return {
+    responses,
+    successCount,
+    failureCount,
+  };
 }
 
 /**
@@ -13066,7 +13441,10 @@ const tokens =
     };
 
     try {
-      const res = await admin.messaging().sendEachForMulticast(multicastMessage);
+     const res =
+       await sendFcmMulticastInBatches(
+         multicastMessage
+       );
 
       console.log("Forum room push sent:", {
         branchId,
@@ -13086,7 +13464,17 @@ const tokens =
         pushFailureCount: res.failureCount,
         pushSentAt: admin.firestore.FieldValue.serverTimestamp(),
       }).catch((e) => {
-        console.error("Failed updating forum message push status", e);
+       console.error(
+         "Failed updating forum message push status",
+         {
+           errorCode:
+             String(
+               e &&
+               e.code ||
+               "forum_status_update_failed"
+             ),
+         }
+       );
       });
 
       await roomRef.set(
@@ -13105,25 +13493,51 @@ const tokens =
         },
         { merge: true }
       ).catch((e) => {
-        console.error("Failed updating forum room push fields", e);
+    console.error(
+      "Failed updating forum room push fields",
+      {
+        errorCode:
+          String(
+            e &&
+            e.code ||
+            "forum_room_update_failed"
+          ),
+      }
+    );
       });
 
       res.responses.forEach((r, index) => {
         if (!r.success) {
-          console.error("Forum push token failed:", {
-            branchId,
-            roomId,
-            messageId,
-            tokenIndex: index,
-            errorCode: r.error && r.error.code,
-            errorMessage: r.error && r.error.message,
-          });
+         console.error(
+           "Forum push token failed:",
+           {
+             branchId,
+             roomId,
+             messageId,
+             tokenIndex:
+               index,
+
+             errorCode:
+               r.error &&
+               r.error.code,
+           }
+         );
         }
       });
 
       return null;
     } catch (e) {
-      console.error("Failed to send forum room FCM:", e);
+     console.error(
+       "Failed to send forum room FCM:",
+       {
+         errorCode:
+           String(
+             e &&
+             e.code ||
+             "forum_push_failed"
+           ),
+       }
+     );
 
      await snap.ref.update({
        pushStatus:
@@ -13479,76 +13893,82 @@ const authorUid = (
      : text;
 
   try {
-    const res =
-      await admin.messaging()
-        .sendEachForMulticast({
-          tokens,
+  const coachBroadcastMessage = {
+    tokens,
 
-          /*
-           * שולחים גם את פרטי ההודעה בתוך data.
-           *
-           * כך Android יכול:
-           * - לזהות שמדובר בהודעת צוות
-           * - לפתוח בעתיד את ההודעה מתוך מרכז ההודעות
-           * - לשמור senderName אחיד
-           * - לקבל את הטקסט גם אם notification אינו זמין
-           */
-          data: {
-            type: "coach_broadcast",
+    data: {
+      type:
+        "coach_broadcast",
 
-            broadcastId:
-              String(broadcastId || ""),
+      broadcastId:
+        String(
+          broadcastId || ""
+        ),
 
-           senderNameHe:
-             senderNameHe,
+      senderNameHe,
 
-           senderNameEn:
-             senderNameEn,
+      senderNameEn,
 
-           sender_name_he:
-             senderNameHe,
+      sender_name_he:
+        senderNameHe,
 
-           sender_name_en:
-             senderNameEn,
+      sender_name_en:
+        senderNameEn,
 
-           titleHe:
-             senderNameHe,
+      titleHe:
+        senderNameHe,
 
-           titleEn:
-             senderNameEn,
+      titleEn:
+        senderNameEn,
 
-            body:
-              text,
+      body:
+        text,
 
-            text:
-              text,
+      text,
 
-            message:
-              text,
+      message:
+        text,
 
-            region:
-              String(region || ""),
+      region:
+        String(
+          region || ""
+        ),
 
-            branch:
-              String(branch || ""),
+      branch:
+        String(
+          branch || ""
+        ),
 
-            groupKey:
-              String(groupKey || ""),
+      groupKey:
+        String(
+          groupKey || ""
+        ),
 
-            click_action:
-              "OPEN_HOME",
-          },
+      click_action:
+        "OPEN_HOME",
+    },
 
-          android: {
-            priority: "high",
+    android: {
+      priority:
+        "high",
 
-            notification: {
-              channelId: "coach_broadcasts",
-              sound: "default",
-              clickAction: "OPEN_HOME",
-            },
-          },
-        });
+      notification: {
+        channelId:
+          "coach_broadcasts",
+
+        sound:
+          "default",
+
+        clickAction:
+          "OPEN_HOME",
+      },
+    },
+  };
+
+  const res =
+    await sendFcmMulticastInBatches(
+      coachBroadcastMessage
+    );
 
       console.log("Coach broadcast push sent:", {
         broadcastId,
@@ -13564,23 +13984,50 @@ const authorUid = (
         pushFailureCount: res.failureCount,
         pushSentAt: admin.firestore.FieldValue.serverTimestamp(),
       }).catch((e) => {
-        console.error("Failed updating push status", e);
+       console.error(
+         "Failed updating push status",
+         {
+           errorCode:
+             String(
+               e &&
+               e.code ||
+               "coach_push_status_update_failed"
+             ),
+         }
+       );
       });
 
       res.responses.forEach((r, index) => {
         if (!r.success) {
-          console.error("Coach broadcast token failed:", {
+        console.error(
+          "Coach broadcast token failed:",
+          {
             broadcastId,
-            tokenIndex: index,
-            errorCode: r.error && r.error.code,
-            errorMessage: r.error && r.error.message,
-          });
+
+            tokenIndex:
+              index,
+
+            errorCode:
+              r.error &&
+              r.error.code,
+          }
+        );
         }
       });
 
       return null;
     } catch (e) {
-      console.error("Failed to send coach broadcast FCM:", e);
+     console.error(
+       "Failed to send coach broadcast FCM:",
+       {
+         errorCode:
+           String(
+             e &&
+             e.code ||
+             "coach_broadcast_push_failed"
+           ),
+       }
+     );
 
      await snap.ref.update({
        pushStatus:
@@ -13692,81 +14139,6 @@ function parseUserTargetValues(user, keys) {
        .filter(Boolean)
    )
  );
-}
-
-function userMatchesTrainingOverride(user, branch, group) {
-  const wantedBranch = normalizeTrainingTargetText(branch);
-  const wantedGroup = normalizeTrainingTargetText(group);
-
-  if (!wantedBranch || !wantedGroup) {
-    return false;
-  }
-
-  const userBranches = parseUserTargetValues(
-    user,
-    [
-      "branch",
-      "branches",
-      "branches_json",
-      "branchesCsv",
-      "selected_branches",
-      "selectedBranches",
-      "active_branch",
-      "activeBranch",
-      "branchName",
-      "branch2",
-      "branch3",
-    ]
-  );
-
-  const userGroups = parseUserTargetValues(
-    user,
-    [
-      "group",
-      "groups",
-      "groups_json",
-      "groupsCsv",
-      "selected_groups",
-      "selectedGroups",
-      "active_group",
-      "activeGroup",
-      "age_group",
-      "age_groups",
-      "primaryGroup",
-      "groupKey",
-    ]
-  );
-
-  const branchMatches =
-    userBranches.some((value) => value === wantedBranch);
-
-  const groupMatches =
-    userGroups.some((value) => {
-      if (value === wantedGroup) {
-        return true;
-      }
-
-      /*
-       * תמיכה בקבוצה משולבת "נוער + בוגרים".
-       */
-      const combinedYouthAdults =
-        value.includes("נוער") &&
-        value.includes("בוגרים");
-
-      if (
-        combinedYouthAdults &&
-        (
-          wantedGroup === normalizeTrainingTargetText("נוער") ||
-          wantedGroup === normalizeTrainingTargetText("בוגרים")
-        )
-      ) {
-        return true;
-      }
-
-      return false;
-    });
-
-  return branchMatches && groupMatches;
 }
 
 function formatTrainingDateTime(millis) {
@@ -14168,13 +14540,17 @@ const tokenResults =
               }
             );
           } catch (error) {
-          console.error(
-            "Failed extracting training target tokens:",
-            {
-              error:
-                String(error),
-            }
-          );
+         console.error(
+           "Failed extracting training target tokens:",
+           {
+             errorCode:
+               String(
+                 error &&
+                 error.code ||
+                 "token_extract_failed"
+               ),
+           }
+         );
           }
         }
       );
@@ -14372,9 +14748,10 @@ const tokens =
     };
 
     try {
-      const response =
-        await admin.messaging()
-          .sendEachForMulticast(message);
+    const response =
+      await sendFcmMulticastInBatches(
+        message
+      );
 
       await change.after.ref.set(
         {
@@ -14413,38 +14790,48 @@ const tokens =
       response.responses.forEach(
         (result, index) => {
           if (!result.success) {
-            console.error(
-              "Training override token failed:",
-              {
-                overrideId,
-                tokenIndex: index,
-                errorCode:
-                  result.error &&
-                  result.error.code,
-                errorMessage:
-                  result.error &&
-                  result.error.message,
-              }
-            );
+       console.error(
+         "Training override token failed:",
+         {
+           overrideId,
+
+           tokenIndex:
+             index,
+
+           errorCode:
+             result.error &&
+             result.error.code,
+         }
+       );
           }
         }
       );
 
       return null;
     } catch (error) {
-      console.error(
-        "Failed sending training override push:",
-        error
-      );
+     console.error(
+       "Failed sending training override push:",
+       {
+         errorCode:
+           String(
+             error &&
+             error.code ||
+             "training_notification_failed"
+           ),
+       }
+     );
 
       await change.after.ref.set(
         {
           notificationRequested: false,
-          notificationStatus: "failed",
-          notificationError:
-            String(error),
-          notificationTargetCount:
-            targetUsers.length,
+        notificationStatus:
+          "failed",
+
+        notificationError:
+          "training_notification_failed",
+
+        notificationTargetCount:
+          targetUsers.length,
           notificationTokenCount:
             tokens.length,
           notificationFailedAt:
@@ -14575,10 +14962,19 @@ async function synthesizeHumanVoice({ text, lang, preferredHumanVoice }) {
       usedEngine: "chirp3-hd",
     };
   } catch (err) {
-    console.error("Chirp 3 HD failed:", {
-      preferredHumanVoice,
-      message: String(err),
-    });
+   console.error(
+     "Chirp 3 HD failed:",
+     {
+       preferredHumanVoice,
+
+       errorCode:
+         String(
+           err &&
+           err.code ||
+           "chirp3_failed"
+         ),
+     }
+   );
 
     return null;
   }
@@ -14701,10 +15097,20 @@ async function synthesizeWithVoiceFallback({
       };
     } catch (err) {
       lastError = err;
-      console.error("kmiTts voice failed, trying next fallback:", {
-        attemptedVoice: voiceName,
-        message: String(err),
-      });
+     console.error(
+       "kmiTts voice failed, trying next fallback:",
+       {
+         attemptedVoice:
+           voiceName,
+
+         errorCode:
+           String(
+             err &&
+             err.code ||
+             "voice_fallback_failed"
+           ),
+       }
+     );
     }
   }
 
@@ -14786,13 +15192,17 @@ try {
       .trim();
 
 } catch (error) {
-  console.error(
-    "kmiTts invalid Firebase token:",
-    {
-      error:
-        String(error),
-    }
-  );
+ console.error(
+   "kmiTts invalid Firebase token:",
+   {
+     errorCode:
+       String(
+         error &&
+         error.code ||
+         "invalid_token"
+       ),
+   }
+ );
 
   return res
     .status(401)
@@ -14981,7 +15391,17 @@ const {
   res.set("Content-Type", "audio/mpeg");
   return res.status(200).send(audioContent);
     } catch (err) {
-    console.error("kmiTts error:", err);
+    console.error(
+      "kmiTts error:",
+      {
+        errorCode:
+          String(
+            err &&
+            err.code ||
+            "tts_failed"
+          ),
+      }
+    );
    return res
      .status(500)
      .json({
@@ -15012,8 +15432,6 @@ function escapeXml(s) {
  * - אותו טוקן רכישה לא יכול לשמש שני משתמשים שונים.
  * ====================================================
  */
-
-const crypto = require("crypto");
 
 const KMI_ANDROID_PACKAGE_NAME =
   "il.kmi.training";
@@ -15153,14 +15571,16 @@ async function readGooglePlaySubscription(
   }
 
   if (!response.ok) {
-    console.error(
-      "Google Play subscription verification failed:",
-      {
-        status: response.status,
-        statusText: response.statusText,
-        responseData,
-      }
-    );
+  console.error(
+    "Google Play subscription verification failed:",
+    {
+      status:
+        response.status,
+
+      statusText:
+        response.statusText,
+    }
+  );
 
     if (response.status === 404) {
       throw new functions.https.HttpsError(
@@ -16258,20 +16678,16 @@ async function callKmiOpenAi({
   }
 
   if (!response.ok) {
-    console.error(
-      "OpenAI Responses API failed:",
-      {
-        status:
-          response.status,
+  console.error(
+    "OpenAI Responses API failed:",
+    {
+      status:
+        response.status,
 
-        statusText:
-          response.statusText,
-
-        error:
-          responseData &&
-          responseData.error,
-      }
-    );
+      statusText:
+        response.statusText,
+    }
+  );
 
     throw new Error(
       "OpenAI request failed with status " +
@@ -16603,15 +17019,21 @@ exports.kmiAiAssistant =
             },
           };
         } catch (error) {
-         console.error(
-           "KMI AI assistant failed:",
-           {
-             monthKey,
-             openAiCompleted,
-             error:
-               String(error),
-           }
-         );
+       console.error(
+         "KMI AI assistant failed:",
+         {
+           monthKey,
+
+           openAiCompleted,
+
+           errorCode:
+             String(
+               error &&
+               error.code ||
+               "ai_assistant_failed"
+             ),
+         }
+       );
 
           /*
            * אם OpenAI כבר החזיר תשובה אבל הייתה תקלה
@@ -16625,10 +17047,17 @@ exports.kmiAiAssistant =
           )
             .catch(
               (releaseError) => {
-                console.error(
-                  "Failed releasing AI reservation:",
-                  releaseError
-                );
+               console.error(
+                 "Failed releasing AI reservation:",
+                 {
+                   errorCode:
+                     String(
+                       releaseError &&
+                       releaseError.code ||
+                       "release_failed"
+                     ),
+                 }
+               );
               }
             );
 

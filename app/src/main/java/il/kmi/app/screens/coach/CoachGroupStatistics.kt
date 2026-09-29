@@ -112,7 +112,7 @@ internal fun CoachGroupStatsPremiumScreen(
                 // גם התצוגה הארצית נמצאת מתחת
                 // לאותו KmiTopBar חיצוני.
                 .padding(
-                    top = 72.dp,
+                    top = 68.dp,
                     bottom = 12.dp
                 )
         ) {
@@ -124,10 +124,6 @@ internal fun CoachGroupStatsPremiumScreen(
                     showNationalStatistics = false
                 },
                 onNationalClick = {}
-            )
-
-            Spacer(
-                Modifier.height(10.dp)
             )
 
             NationalStatisticsScreen(
@@ -229,7 +225,7 @@ internal fun CoachGroupStatsPremiumScreen(
                 // המסך מוצג מתחת ל־KmiTopBar חיצוני.
                 // כותרת המשנה עצמה נשארת מקצה לקצה.
                 .padding(
-                    top = 72.dp,
+                    top = 68.dp,
                     bottom = 12.dp
                 )
         ) {
@@ -242,10 +238,6 @@ internal fun CoachGroupStatsPremiumScreen(
                 }
             )
 
-            Spacer(
-                Modifier.height(10.dp)
-            )
-
             Column(
                 modifier = Modifier
                     .weight(1f)
@@ -256,6 +248,7 @@ internal fun CoachGroupStatsPremiumScreen(
                     .padding(
                         start = 14.dp,
                         end = 14.dp,
+                        top = 8.dp,
                         bottom = 12.dp
                     ),
                 verticalArrangement = Arrangement.spacedBy(9.dp)
@@ -319,7 +312,7 @@ internal fun CoachGroupStatsPremiumScreen(
                                     ),
                                     modifier = Modifier
                                         .weight(1f)
-                                        .heightIn(min = 132.dp)
+                                        .heightIn(min = 108.dp)
                                 ) {
                                     Column(
                                         modifier = Modifier
@@ -347,7 +340,7 @@ internal fun CoachGroupStatsPremiumScreen(
                                                     )
                                                 )
                                             )
-                                            .padding(horizontal = 12.dp, vertical = 12.dp),
+                                            .padding(horizontal = 12.dp, vertical = 8.dp),
                                         horizontalAlignment = statsHorizontalAlignment,
                                         verticalArrangement = Arrangement.Center
                                     ) {
@@ -422,7 +415,7 @@ internal fun CoachGroupStatsPremiumScreen(
                                     ),
                                     modifier = Modifier
                                         .weight(1f)
-                                        .heightIn(min = 132.dp)
+                                        .heightIn(min = 108.dp)
                                 ) {
                                     Column(
                                         modifier = Modifier
@@ -450,16 +443,16 @@ internal fun CoachGroupStatsPremiumScreen(
                                                     )
                                                 )
                                             )
-                                            .padding(horizontal = 12.dp, vertical = 12.dp),
+                                            .padding(horizontal = 12.dp, vertical = 8.dp),
                                         horizontalAlignment = Alignment.CenterHorizontally,
                                         verticalArrangement = Arrangement.Center
                                     ) {
                                         AttendanceRing(
                                             percent = animatedAvgAttendance.toInt(),
-                                            modifier = Modifier.size(82.dp)
+                                            modifier = Modifier.size(68.dp)
                                         )
 
-                                        Spacer(Modifier.height(6.dp))
+                                        Spacer(Modifier.height(4.dp))
 
                                         Text(
                                             text = coachTr(
@@ -914,23 +907,31 @@ private fun StatisticsTabsSelector(
                 .kmiSectionHeaderBackground()
         ) {
 
-            // קו מפריד בין שני הטאבים
+            // קו לבן מפריד במרכז — זהה למסך התקין
             Box(
                 modifier = Modifier
                     .align(Alignment.Center)
                     .width(1.dp)
                     .height(28.dp)
                     .background(
-                        Color.White.copy(alpha = 0.65f)
+                        Color.White.copy(
+                            alpha = 0.65f
+                        )
                     )
             )
 
+            /*
+             * מיקום פיזי קבוע:
+             * שמאל = סטטיסטיקה ארצית
+             * ימין = סטטיסטיקת הקבוצה
+             */
             CompositionLocalProvider(
                 LocalLayoutDirection provides LayoutDirection.Ltr
             ) {
                 Row(
                     modifier = Modifier.fillMaxSize(),
-                    verticalAlignment = Alignment.CenterVertically
+                    verticalAlignment =
+                        Alignment.CenterVertically
                 ) {
 
                     // שמאל — סטטיסטיקה ארצית
@@ -941,7 +942,8 @@ private fun StatisticsTabsSelector(
                             .clickable {
                                 onNationalClick()
                             },
-                        contentAlignment = Alignment.Center
+                        contentAlignment =
+                            Alignment.Center
                     ) {
                         Text(
                             text =
@@ -950,31 +952,47 @@ private fun StatisticsTabsSelector(
                                     "סטטיסטיקה\nארצית",
                                     "National\nstatistics"
                                 ),
-                            style = KmiTypography.caption.copy(
-                                fontWeight =
-                                    if (nationalSelected) {
-                                        FontWeight.ExtraBold
-                                    } else {
-                                        FontWeight.Bold
-                                    }
+                            modifier = Modifier.offset(
+                                x = 18.dp,
+                                y = (-6).dp
                             ),
+                            style =
+                                KmiTypography.caption.copy(
+                                    fontWeight =
+                                        if (nationalSelected) {
+                                            FontWeight.ExtraBold
+                                        } else {
+                                            FontWeight.Bold
+                                        }
+                                ),
                             color =
                                 if (nationalSelected) {
                                     Color.White
                                 } else {
-                                    Color.White.copy(alpha = 0.90f)
+                                    Color.White.copy(
+                                        alpha = 0.90f
+                                    )
                                 },
-                            textAlign = TextAlign.Center,
+                            textAlign =
+                                TextAlign.Center,
                             maxLines = 2
                         )
 
                         if (nationalSelected) {
                             Box(
                                 modifier = Modifier
-                                    .align(Alignment.BottomCenter)
-                                    .width(88.dp)
+                                    .align(
+                                        Alignment.BottomCenter
+                                    )
+                                    .offset(
+                                        x = 18.dp,
+                                        y = (-8).dp
+                                    )
+                                    .width(76.dp)
                                     .height(3.dp)
-                                    .background(Color.White)
+                                    .background(
+                                        Color.White
+                                    )
                             )
                         }
                     }
@@ -987,7 +1005,8 @@ private fun StatisticsTabsSelector(
                             .clickable {
                                 onGroupClick()
                             },
-                        contentAlignment = Alignment.Center
+                        contentAlignment =
+                            Alignment.Center
                     ) {
                         Text(
                             text =
@@ -996,31 +1015,47 @@ private fun StatisticsTabsSelector(
                                     "סטטיסטיקת\nהקבוצה",
                                     "Group\nstatistics"
                                 ),
-                            style = KmiTypography.caption.copy(
-                                fontWeight =
-                                    if (!nationalSelected) {
-                                        FontWeight.ExtraBold
-                                    } else {
-                                        FontWeight.Bold
-                                    }
+                            modifier = Modifier.offset(
+                                x = (-18).dp,
+                                y = (-6).dp
                             ),
+                            style =
+                                KmiTypography.caption.copy(
+                                    fontWeight =
+                                        if (!nationalSelected) {
+                                            FontWeight.ExtraBold
+                                        } else {
+                                            FontWeight.Bold
+                                        }
+                                ),
                             color =
                                 if (!nationalSelected) {
                                     Color.White
                                 } else {
-                                    Color.White.copy(alpha = 0.90f)
+                                    Color.White.copy(
+                                        alpha = 0.90f
+                                    )
                                 },
-                            textAlign = TextAlign.Center,
+                            textAlign =
+                                TextAlign.Center,
                             maxLines = 2
                         )
 
                         if (!nationalSelected) {
                             Box(
                                 modifier = Modifier
-                                    .align(Alignment.BottomCenter)
-                                    .width(88.dp)
+                                    .align(
+                                        Alignment.BottomCenter
+                                    )
+                                    .offset(
+                                        x = (-18).dp,
+                                        y = (-8).dp
+                                    )
+                                    .width(76.dp)
                                     .height(3.dp)
-                                    .background(Color.White)
+                                    .background(
+                                        Color.White
+                                    )
                             )
                         }
                     }
@@ -1540,7 +1575,7 @@ private fun PremiumMiniPill(
             color = accent.copy(alpha = 0.24f)
         ),
         modifier = modifier
-            .heightIn(min = 78.dp)
+            .height(86.dp)
             .graphicsLayer {
                 scaleX = scale
                 scaleY = scale

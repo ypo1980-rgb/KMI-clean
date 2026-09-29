@@ -33,10 +33,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
@@ -70,6 +67,7 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import il.kmi.app.ui.DrawerBridge
 import il.kmi.app.ui.KmiIconSize
+import il.kmi.app.ui.KmiPremiumMultiSelectDropdown
 import il.kmi.app.ui.KmiTopBar
 import il.kmi.app.ui.KmiTypography
 import il.kmi.app.ui.loading.KmiLoadingRings
@@ -308,7 +306,7 @@ fun NationalStatisticsScreen(
                             contentPadding = PaddingValues(
                                 start = 14.dp,
                                 end = 14.dp,
-                                top = 14.dp,
+                                top = 8.dp,
                                 bottom = 32.dp
                             ),
                             verticalArrangement =
@@ -559,9 +557,9 @@ private fun NationalStatisticsHero(
                 )
                 .padding(
                     horizontal = 18.dp,
-                    vertical = 14.dp
+                    vertical = 8.dp
                 ),
-            verticalArrangement = Arrangement.spacedBy(6.dp)
+            verticalArrangement = Arrangement.spacedBy(3.dp)
         ) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -659,7 +657,7 @@ private fun HeroPill(
         Column(
             modifier = Modifier.padding(
                 horizontal = 7.dp,
-                vertical = 7.dp
+                vertical = 4.dp
             ),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
@@ -692,16 +690,23 @@ private fun NationalStatisticsSearch(
     OutlinedTextField(
         value = query,
         onValueChange = onQueryChange,
-        modifier = Modifier.fillMaxWidth(),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .height(56.dp),
         singleLine = true,
-        shape = RoundedCornerShape(20.dp),
+        shape = RoundedCornerShape(18.dp),
         placeholder = {
             Text(
-                tr(
-                    isEnglish,
-                    "חיפוש מתאמן, סניף, קבוצה או חגורה",
-                    "Search trainee, branch, group or belt"
-                )
+                text =
+                    tr(
+                        isEnglish,
+                        "חיפוש מתאמן, סניף או קבוצה",
+                        "Search trainee, branch or group"
+                    ),
+                style = KmiTypography.secondary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
             )
         },
         leadingIcon = {
@@ -1042,48 +1047,136 @@ private fun NationalPremiumFiltersCard(
             )
 
             // =====================================================
-            // פעילים בלבד + איפוס
-            // =====================================================
+// פעילים בלבד + איפוס
+// =====================================================
 
             Row(
                 modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement =
+                    Arrangement.spacedBy(10.dp),
                 verticalAlignment =
                     Alignment.CenterVertically
             ) {
-                FilterChip(
-                    selected = activeOnly,
+
+                Surface(
                     onClick = {
                         onActiveOnlyChange(!activeOnly)
                     },
-                    label = {
-                        Text(
-                            text = tr(
-                                isEnglish,
-                                "פעילים בלבד",
-                                "Active only"
-                            ),
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-                )
-
-                Spacer(Modifier.weight(1f))
-
-                if (activeFiltersCount > 0) {
-                    TextButton(
-                        onClick = onClearFilters,
-                        modifier = Modifier.heightIn(min = 56.dp)
+                    modifier =
+                        Modifier
+                            .weight(1f)
+                            .height(46.dp),
+                    shape = RoundedCornerShape(14.dp),
+                    color =
+                        if (activeOnly) {
+                            MaterialTheme.colorScheme.primary
+                                .copy(alpha = 0.16f)
+                        } else {
+                            MaterialTheme.colorScheme.surfaceVariant
+                        },
+                    border =
+                        BorderStroke(
+                            width = 1.dp,
+                            color =
+                                if (activeOnly) {
+                                    MaterialTheme.colorScheme.primary
+                                        .copy(alpha = 0.70f)
+                                } else {
+                                    MaterialTheme.colorScheme.outlineVariant
+                                }
+                        ),
+                    tonalElevation = 0.dp,
+                    shadowElevation = 0.dp
+                ) {
+                    Box(
+                        modifier =
+                            Modifier.fillMaxSize(),
+                        contentAlignment =
+                            Alignment.Center
                     ) {
                         Text(
-                            text = tr(
-                                isEnglish,
-                                "↻ איפוס סינונים",
-                                "↻ Reset filters"
-                            ),
-                            style = KmiTypography.action.copy(
-                                fontWeight = FontWeight.ExtraBold
-                            ),
-                            color = MaterialTheme.colorScheme.primary
+                            text =
+                                if (activeOnly) {
+                                    tr(
+                                        isEnglish,
+                                        "✓ פעילים בלבד",
+                                        "✓ Active only"
+                                    )
+                                } else {
+                                    tr(
+                                        isEnglish,
+                                        "פעילים בלבד",
+                                        "Active only"
+                                    )
+                                },
+                            style =
+                                KmiTypography.action.copy(
+                                    fontWeight =
+                                        FontWeight.ExtraBold
+                                ),
+                            color =
+                                if (activeOnly) {
+                                    MaterialTheme.colorScheme.primary
+                                } else {
+                                    MaterialTheme.colorScheme.onSurface
+                                },
+                            textAlign =
+                                TextAlign.Center,
+                            maxLines = 1
+                        )
+                    }
+                }
+
+                Surface(
+                    onClick = {
+                        if (activeFiltersCount > 0) {
+                            onClearFilters()
+                        }
+                    },
+                    modifier =
+                        Modifier
+                            .weight(1f)
+                            .height(46.dp),
+                    shape = RoundedCornerShape(14.dp),
+                    color =
+                        MaterialTheme.colorScheme.surfaceVariant,
+                    border =
+                        BorderStroke(
+                            width = 1.dp,
+                            color =
+                                MaterialTheme.colorScheme.outlineVariant
+                        ),
+                    tonalElevation = 0.dp,
+                    shadowElevation = 0.dp
+                ) {
+                    Box(
+                        modifier =
+                            Modifier.fillMaxSize(),
+                        contentAlignment =
+                            Alignment.Center
+                    ) {
+                        Text(
+                            text =
+                                tr(
+                                    isEnglish,
+                                    "↻ איפוס סינונים",
+                                    "↻ Reset filters"
+                                ),
+                            style =
+                                KmiTypography.action.copy(
+                                    fontWeight =
+                                        FontWeight.ExtraBold
+                                ),
+                            color =
+                                if (activeFiltersCount > 0) {
+                                    MaterialTheme.colorScheme.primary
+                                } else {
+                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                        .copy(alpha = 0.45f)
+                                },
+                            textAlign =
+                                TextAlign.Center,
+                            maxLines = 1
                         )
                     }
                 }
@@ -1101,316 +1194,39 @@ private fun <T> NationalFilterSection(
     labelForOption: (T) -> String,
     onToggle: (T) -> Unit
 ) {
-    if (options.isEmpty()) return
-
-    var expanded by remember {
-        mutableStateOf(false)
+    if (options.isEmpty()) {
+        return
     }
 
-    val selectedText = remember(
-        selected,
-        options,
-        isEnglish
-    ) {
-        when {
-            selected.isEmpty() ->
-                tr(
-                    isEnglish,
-                    "הכול",
-                    "All"
-                )
+    KmiPremiumMultiSelectDropdown(
+        title = title,
+        options = options,
+        selectedValues = selected,
+        isEnglish = isEnglish,
+        labelForOption = labelForOption,
+        onSelectionChange = { newSelection ->
 
-            selected.size == 1 ->
-                selected.firstOrNull()
-                    ?.let(labelForOption)
-                    .orEmpty()
+            /*
+             * שומרים על ה-API הקיים של המסך:
+             * NationalStatisticsScreen עדיין עובד
+             * באמצעות onToggle עבור כל ערך.
+             */
 
-            else ->
-                tr(
-                    isEnglish,
-                    "${selected.size} אפשרויות נבחרו",
-                    "${selected.size} options selected"
-                )
-        }
-    }
+            val removedValues =
+                selected - newSelection
 
-    Column(
-        modifier = Modifier.fillMaxWidth(),
-        verticalArrangement =
-            Arrangement.spacedBy(5.dp)
-    ) {
-        Text(
-            text = title,
-            modifier = Modifier.fillMaxWidth(),
-            style = KmiTypography.caption.copy(
-                fontWeight = FontWeight.ExtraBold
-            ),
-            color =
-                MaterialTheme.colorScheme.onSurfaceVariant,
-            textAlign =
-                startTextAlign(isEnglish),
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis
-        )
+            val addedValues =
+                newSelection - selected
 
-        Box(
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Surface(
-                onClick = {
-                    expanded = true
-                },
-                modifier = Modifier.fillMaxWidth(),
-                color =
-                    MaterialTheme.colorScheme.surface,
-                shape = RoundedCornerShape(17.dp),
-                border = BorderStroke(
-                    width = 1.dp,
-                    color =
-                        if (selected.isNotEmpty()) {
-                            MaterialTheme.colorScheme.primary
-                        } else {
-                            MaterialTheme.colorScheme.outlineVariant
-                        }
-                ),
-                shadowElevation = 0.dp,
-                tonalElevation = 0.dp
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(min = 56.dp)
-                        .padding(
-                            horizontal = 11.dp,
-                            vertical = 7.dp
-                        ),
-                    verticalAlignment =
-                        Alignment.CenterVertically
-                ) {
-                    Text(
-                        text = selectedText,
-                        modifier = Modifier.weight(1f),
-                        style = KmiTypography.body.copy(
-                            fontWeight = FontWeight.Bold
-                        ),
-                        color =
-                            if (selected.isNotEmpty()) {
-                                MaterialTheme.colorScheme.primary
-                            } else {
-                                MaterialTheme.colorScheme.onSurfaceVariant
-                            },
-                        textAlign =
-                            startTextAlign(isEnglish),
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis
-                    )
-
-                    Spacer(Modifier.width(6.dp))
-
-                    Surface(
-                        modifier = Modifier.size(30.dp),
-                        shape = CircleShape,
-                        color =
-                            if (expanded) {
-                                MaterialTheme.colorScheme.primary
-                            } else {
-                                MaterialTheme.colorScheme.primary
-                                    .copy(alpha = 0.10f)
-                            },
-                        shadowElevation = 0.dp,
-                        tonalElevation = 0.dp
-                    ) {
-                        Box(
-                            modifier = Modifier.fillMaxSize(),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector =
-                                    Icons.Default.KeyboardArrowDown,
-                                contentDescription = null,
-                                tint =
-                                    if (expanded) {
-                                        MaterialTheme.colorScheme.onPrimary
-                                    } else {
-                                        MaterialTheme.colorScheme.primary
-                                    }
-                            )
-                        }
-                    }
-                }
+            removedValues.forEach { value ->
+                onToggle(value)
             }
 
-            DropdownMenu(
-                expanded = expanded,
-                onDismissRequest = {
-                    expanded = false
-                },
-                modifier = Modifier
-                    .fillMaxWidth(0.92f)
-                    .heightIn(max = 380.dp)
-                    .background(
-                        MaterialTheme.colorScheme.surface
-                    )
-            ) {
-                if (selected.isNotEmpty()) {
-                    DropdownMenuItem(
-                        text = {
-                            Text(
-                                text = tr(
-                                    isEnglish,
-                                    "נקה בחירה והצג הכול",
-                                    "Clear selection and show all"
-                                ),
-                                modifier = Modifier.fillMaxWidth(),
-                                style = KmiTypography.body.copy(
-                                    fontWeight = FontWeight.ExtraBold
-                                ),
-                                color =
-                                    MaterialTheme.colorScheme.error,
-                                textAlign =
-                                    startTextAlign(isEnglish)
-                            )
-                        },
-                        leadingIcon = {
-                            Icon(
-                                imageVector = Icons.Default.Close,
-                                contentDescription = null,
-                                tint =
-                                    MaterialTheme.colorScheme.error
-                            )
-                        },
-                        onClick = {
-                            selected
-                                .toList()
-                                .forEach { option ->
-                                    onToggle(option)
-                                }
-
-                            expanded = false
-                        }
-                    )
-                }
-
-                options.forEach { option ->
-                    val isSelected = option in selected
-
-                    DropdownMenuItem(
-                        text = {
-                            Text(
-                                text = labelForOption(option),
-                                modifier = Modifier.fillMaxWidth(),
-                                style = KmiTypography.body.copy(
-                                    fontWeight =
-                                        if (isSelected) {
-                                            FontWeight.ExtraBold
-                                        } else {
-                                            FontWeight.Medium
-                                        }
-                                ),
-                                color =
-                                    if (isSelected) {
-                                        MaterialTheme.colorScheme.primary
-                                    } else {
-                                        MaterialTheme.colorScheme.onSurface
-                                    },
-                                textAlign =
-                                    startTextAlign(isEnglish),
-                                maxLines = 2,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        },
-                        leadingIcon = {
-                            Surface(
-                                modifier = Modifier.size(24.dp),
-                                shape = RoundedCornerShape(7.dp),
-                                color =
-                                    if (isSelected) {
-                                        MaterialTheme.colorScheme.primary
-                                    } else {
-                                        Color.Transparent
-                                    },
-                                border = BorderStroke(
-                                    width = 1.dp,
-                                    color =
-                                        if (isSelected) {
-                                            MaterialTheme.colorScheme.primary
-                                        } else {
-                                            MaterialTheme.colorScheme.outline
-                                        }
-                                ),
-                                shadowElevation = 0.dp,
-                                tonalElevation = 0.dp
-                            ) {
-                                if (isSelected) {
-                                    Box(
-                                        modifier =
-                                            Modifier.fillMaxSize(),
-                                        contentAlignment =
-                                            Alignment.Center
-                                    ) {
-                                        Icon(
-                                            imageVector =
-                                                Icons.Default.Check,
-                                            contentDescription = null,
-                                            tint =
-                                                MaterialTheme.colorScheme.onPrimary,
-                                            modifier =
-                                                Modifier.size(KmiIconSize.small)
-                                        )
-                                    }
-                                }
-                            }
-                        },
-                        onClick = {
-                            /*
-                             * התפריט נשאר פתוח כדי לאפשר
-                             * בחירה של כמה ערכים ברצף.
-                             */
-                            onToggle(option)
-                        }
-                    )
-                }
-
-                if (selected.isNotEmpty()) {
-                    DropdownMenuItem(
-                        text = {
-                            Text(
-                                text = tr(
-                                    isEnglish,
-                                    "סיום בחירה",
-                                    "Done"
-                                ),
-                                modifier =
-                                    Modifier.fillMaxWidth(),
-                                style =
-                                    KmiTypography.action.copy(
-                                        fontWeight =
-                                            FontWeight.Black
-                                    ),
-                                color =
-                                    MaterialTheme.colorScheme.onPrimary,
-                                textAlign = TextAlign.Center
-                            )
-                        },
-                        onClick = {
-                            expanded = false
-                        },
-                        modifier = Modifier
-                            .padding(
-                                horizontal = 8.dp,
-                                vertical = 4.dp
-                            )
-                            .background(
-                                color =
-                                    MaterialTheme.colorScheme.primary,
-                                shape =
-                                    RoundedCornerShape(13.dp)
-                            )
-                    )
-                }
+            addedValues.forEach { value ->
+                onToggle(value)
             }
         }
-    }
+    )
 }
 
 @Composable
