@@ -225,31 +225,46 @@ function groupUsersByIdentity(
       const user =
         entry.user || {};
 
-      const uid =
-        globalUserUid(
-          entry.id,
-          user
-        );
+     const uidValues =
+       Array.from(
+         new Set(
+           [
+             entry.id,
+             user.uid,
+             user.authUid,
+             user.userDocId,
+             user.traineeId,
+           ]
+             .map((value) =>
+               String(value || "")
+                 .trim()
+             )
+             .filter(Boolean)
+         )
+       );
 
-      const email =
-        globalUserEmail(user);
+     const email =
+       globalUserEmail(user);
 
-      const phone =
-        globalUserPhone(user);
+     const phone =
+       globalUserPhone(user);
 
-      if (uid) {
-        if (uidOwner.has(uid)) {
-          union(
-            index,
-            uidOwner.get(uid)
-          );
-        } else {
-          uidOwner.set(
-            uid,
-            index
-          );
-        }
-      }
+     uidValues.forEach(
+       (uidValue) => {
+
+         if (uidOwner.has(uidValue)) {
+           union(
+             index,
+             uidOwner.get(uidValue)
+           );
+         } else {
+           uidOwner.set(
+             uidValue,
+             index
+           );
+         }
+       }
+     );
 
       if (email) {
         if (emailOwner.has(email)) {
@@ -379,12 +394,9 @@ exports.recoverUsername = functions.https.onCall(async (data, context) => {
     }
 
     if (userSnap.empty) {
-      console.log(
-        "recoverUsername: user not found",
-        {
-          emailLower,
-        }
-      );
+    console.log(
+      "recoverUsername: user not found"
+    );
 
       return genericResult;
     }
@@ -412,12 +424,9 @@ exports.recoverUsername = functions.https.onCall(async (data, context) => {
      ).trim();
 
     if (!username) {
-      console.log(
-        "recoverUsername: username missing",
-        {
-          uid: userDoc.id,
-        }
-      );
+     console.log(
+       "recoverUsername: username missing"
+     );
 
       return genericResult;
     }
@@ -489,12 +498,9 @@ exports.recoverUsername = functions.https.onCall(async (data, context) => {
       "username_recovery",
   });
 
-    console.log(
-      "recoverUsername: recovery email queued",
-      {
-        uid: userDoc.id,
-      }
-    );
+   console.log(
+     "recoverUsername: recovery email queued"
+   );
 
     return genericResult;
   } catch (error) {
@@ -675,12 +681,9 @@ exports.recoverPassword = functions.https.onCall(async (data, context) => {
         error &&
         error.code === "auth/user-not-found"
       ) {
-        console.log(
-          "recoverPassword: user not found",
-          {
-            emailLower,
-          }
-        );
+     console.log(
+       "recoverPassword: user not found"
+     );
 
         return genericResult;
       }
@@ -760,12 +763,9 @@ exports.recoverPassword = functions.https.onCall(async (data, context) => {
         "password_reset",
     });
 
-    console.log(
-      "recoverPassword: recovery email queued",
-      {
-        uid: authUser.uid,
-      }
-    );
+   console.log(
+     "recoverPassword: recovery email queued"
+   );
 
     return genericResult;
 
@@ -1449,32 +1449,90 @@ exports.loadSecurePaymentsReport =
             .get(),
         ]);
 
-      const allowedUsers =
-        usersSnapshot.docs
-          .map((document) => ({
-            document,
-            user:
-              document.data() || {},
-          }))
-          .filter(({ user }) =>
-            isRelevantTrainee(user)
-          )
-          .filter(({ user }) => {
+     const paymentUserIdentityGroups =
+       groupUsersByIdentity(
+         usersSnapshot.docs.map(
+           (document) => ({
+             id:
+               document.id,
 
-            if (isAdminUser) {
-              return true;
-            }
+             document,
 
-            return userBranches(user)
-              .some((branch) =>
-                authorizedBranchKeys.has(
-                  normalizeValue(branch)
-                )
-              );
-          });
+             user:
+               document.data() || {},
+           })
+         )
+       );
 
-      const allowedIdentityKeys =
-        new Set();
+     const allowedIdentityGroups =
+       paymentUserIdentityGroups.filter(
+         (entries) => {
+
+           if (
+             !Array.isArray(entries) ||
+             entries.length === 0
+           ) {
+             return false;
+           }
+
+           const hasRelevantTrainee =
+             entries.some(
+               (entry) =>
+                 isRelevantTrainee(
+                   entry.user || {}
+                 )
+             );
+
+           if (!hasRelevantTrainee) {
+             return false;
+           }
+
+           if (isAdminUser) {
+             return true;
+           }
+
+           const identityBranches =
+             Array.from(
+               new Set(
+                 entries
+                   .flatMap(
+                     (entry) =>
+                       userBranches(
+                         entry.user || {}
+                       )
+                   )
+                   .map(
+                     normalizeValue
+                   )
+                   .filter(Boolean)
+               )
+             );
+
+           return identityBranches.some(
+             (branchKey) =>
+               authorizedBranchKeys.has(
+                 branchKey
+               )
+           );
+         }
+       );
+
+     const allowedUsers =
+       allowedIdentityGroups.flatMap(
+         (entries) =>
+           entries.map(
+             (entry) => ({
+               document:
+                 entry.document,
+
+               user:
+                 entry.user || {},
+             })
+           )
+       );
+
+     const allowedIdentityKeys =
+       new Set();
 
       allowedUsers.forEach(
         ({ document, user }) => {
@@ -1536,19 +1594,8 @@ exports.loadSecurePaymentsReport =
           });
         });
 
-   const groupedUsers =
-     groupUsersByIdentity(
-       allowedUsers.map(
-         ({ document, user }) => ({
-           id:
-             document.id,
-
-           user,
-
-           document,
-         })
-       )
-     );
+ const groupedUsers =
+   allowedIdentityGroups;
 
       const items = [];
 
@@ -1815,22 +1862,21 @@ exports.loadSecurePaymentsReport =
         }
       );
 
-      console.log(
-        "Secure payments report loaded:",
-        {
-          uid,
-          isAdmin:
-            isAdminUser,
+    console.log(
+      "Secure payments report loaded:",
+      {
+        isAdmin:
+          isAdminUser,
 
-          authorizedBranchCount:
-            isAdminUser
-              ? "all"
-              : authorizedBranches.length,
+        authorizedBranchCount:
+          isAdminUser
+            ? "all"
+            : authorizedBranches.length,
 
-          itemCount:
-            items.length,
-        }
-      );
+        itemCount:
+          items.length,
+      }
+    );
 
       return {
         items,
@@ -3218,113 +3264,155 @@ exports.loadSecureCoachGroupsBeltProgress =
      * קודם מסננים רק מתאמנים שנמצאים
      * בתחום ההרשאה הרלוונטי.
      */
-    const eligibleTraineeEntries =
-      usersSnapshot.docs
-        .map((document) => ({
-          id:
-            document.id,
+ const allTraineeIdentityGroups =
+   groupUsersByIdentity(
+     usersSnapshot.docs.map(
+       (document) => ({
+         id:
+           document.id,
 
-          user:
-            document.data() || {},
-        }))
-        .filter(({ id, user }) => {
+         user:
+           document.data() || {},
+       })
+     )
+   );
 
-          const role =
-            String(
-              user.role ||
-              user.userRole ||
-              user.userType ||
-              ""
-            )
-              .trim()
-              .toLowerCase();
+ const traineeIdentityGroups =
+   allTraineeIdentityGroups.filter(
+     (entries) => {
 
-          const isCoach =
-            role === "coach" ||
-            role === "trainer" ||
-            role === "מאמן" ||
-            user.isCoach === true;
+       if (
+         !Array.isArray(entries) ||
+         entries.length === 0
+       ) {
+         return false;
+       }
 
-          if (isCoach) {
-            return false;
-          }
+       const identityContainsCurrentUser =
+         entries.some(
+           (entry) => {
 
-          const candidateUid =
-            String(
-              user.uid ||
-              user.authUid ||
-              id ||
-              ""
-            ).trim();
+             const user =
+               entry.user || {};
 
-          if (
-            !candidateUid ||
-            candidateUid === uid
-          ) {
-            return false;
-          }
+             return [
+               entry.id,
+               user.uid,
+               user.authUid,
+               user.userDocId,
+               user.traineeId,
+             ]
+               .map((value) =>
+                 String(value || "")
+                   .trim()
+               )
+               .filter(Boolean)
+               .includes(uid);
+           }
+         );
 
-          /*
-           * Admin רואה את כל המשתמשים שאינם מאמנים.
-           */
-          if (isAdminUser) {
-            return true;
-          }
+       if (identityContainsCurrentUser) {
+         return false;
+       }
 
-          const traineeBranches =
-            parseUserTargetValues(
-              user,
-              [
-                "branch",
-                "branches",
-                "branches_json",
-                "branchesCsv",
-                "selected_branches",
-                "selectedBranches",
-                "active_branch",
-                "activeBranch",
-                "branchName",
-              ]
-            );
+       const identityIsCoach =
+         entries.some(
+           (entry) => {
 
-          const traineeGroups =
-            parseUserTargetValues(
-              user,
-              [
-                "group",
-                "groups",
-                "groups_json",
-                "groupsCsv",
-                "selected_groups",
-                "selectedGroups",
-                "active_group",
-                "activeGroup",
-                "age_group",
-                "age_groups",
-                "primaryGroup",
-                "groupKey",
-              ]
-            );
+             const user =
+               entry.user || {};
 
-          return traineeBranches.some(
-            (branch) =>
-              traineeGroups.some(
-                (group) =>
-                  authorizedPairKeys.has(
-                    `${branch}||${group}`
-                  )
-              )
-          );
-        });
+             const role =
+               String(
+                 user.role ||
+                 user.userRole ||
+                 user.userType ||
+                 ""
+               )
+                 .trim()
+                 .toLowerCase();
 
-    /*
-     * מאחדים כפילויות לפי:
-     * UID / אימייל / טלפון.
-     */
-    const traineeIdentityGroups =
-      groupUsersByIdentity(
-        eligibleTraineeEntries
-      );
+             return (
+               role === "coach" ||
+               role === "trainer" ||
+               role === "מאמן" ||
+               user.isCoach === true
+             );
+           }
+         );
+
+       if (identityIsCoach) {
+         return false;
+       }
+
+       if (isAdminUser) {
+         return true;
+       }
+
+       const traineeBranches =
+         Array.from(
+           new Set(
+             entries
+               .flatMap(
+                 (entry) =>
+                   parseUserTargetValues(
+                     entry.user || {},
+                     [
+                       "branch",
+                       "branches",
+                       "branches_json",
+                       "branchesCsv",
+                       "selected_branches",
+                       "selectedBranches",
+                       "active_branch",
+                       "activeBranch",
+                       "branchName",
+                     ]
+                   )
+               )
+               .filter(Boolean)
+           )
+         );
+
+       const traineeGroups =
+         Array.from(
+           new Set(
+             entries
+               .flatMap(
+                 (entry) =>
+                   parseUserTargetValues(
+                     entry.user || {},
+                     [
+                       "group",
+                       "groups",
+                       "groups_json",
+                       "groupsCsv",
+                       "selected_groups",
+                       "selectedGroups",
+                       "active_group",
+                       "activeGroup",
+                       "age_group",
+                       "age_groups",
+                       "primaryGroup",
+                       "groupKey",
+                     ]
+                   )
+               )
+               .filter(Boolean)
+           )
+         );
+
+       return traineeBranches.some(
+         (branch) =>
+           traineeGroups.some(
+             (group) =>
+               authorizedPairKeys.has(
+                 `${branch}||${group}`
+               )
+           )
+       );
+     }
+   );
 
     if (
       traineeIdentityGroups.length === 0
@@ -4049,95 +4137,122 @@ exports.loadSecureCoachTrainees =
           .collection("users")
           .get();
 
-      const matchedDocuments =
-        usersSnapshot.docs
-          .map((document) => ({
-            id: document.id,
+    const allCoachTraineeIdentityGroups =
+      groupUsersByIdentity(
+        usersSnapshot.docs.map(
+          (document) => ({
+            id:
+              document.id,
+
             user:
               document.data() || {},
-          }))
-          .filter(
-            ({ user }) => {
+          })
+        )
+      );
 
-              const role =
-                cleanCoachText(
-                  user.role ||
-                  user.userRole ||
-                  user.userType ||
-                  ""
-                )
-                  .toLowerCase();
+    const identityGroups =
+      allCoachTraineeIdentityGroups.filter(
+        (entries) => {
 
-              const isCoach =
-                role === "coach" ||
-                role === "trainer" ||
-                role === "מאמן" ||
-                user.isCoach === true;
+          if (
+            !Array.isArray(entries) ||
+            entries.length === 0
+          ) {
+            return false;
+          }
 
-              if (isCoach) {
-                return false;
+          const identityIsCoach =
+            entries.some(
+              (entry) => {
+
+                const user =
+                  entry.user || {};
+
+                const role =
+                  cleanCoachText(
+                    user.role ||
+                    user.userRole ||
+                    user.userType ||
+                    ""
+                  )
+                    .toLowerCase();
+
+                return (
+                  role === "coach" ||
+                  role === "trainer" ||
+                  role === "מאמן" ||
+                  user.isCoach === true
+                );
               }
+            );
 
-              const branches =
-                parseUserTargetValues(
-                  user,
-                  [
-                    "branch",
-                    "branches",
-                    "branches_json",
-                    "branchesCsv",
-                    "selected_branches",
-                    "selectedBranches",
-                    "active_branch",
-                    "activeBranch",
-                    "branchName",
-                  ]
-                );
+          if (identityIsCoach) {
+            return false;
+          }
 
-              const groups =
-                parseUserTargetValues(
-                  user,
-                  [
-                    "group",
-                    "groups",
-                    "groups_json",
-                    "groupsCsv",
-                    "selected_groups",
-                    "selectedGroups",
-                    "active_group",
-                    "activeGroup",
-                    "age_group",
-                    "age_groups",
-                    "primaryGroup",
-                    "groupKey",
-                  ]
-                );
+          const branches =
+            Array.from(
+              new Set(
+                entries
+                  .flatMap(
+                    (entry) =>
+                      parseUserTargetValues(
+                        entry.user || {},
+                        [
+                          "branch",
+                          "branches",
+                          "branches_json",
+                          "branchesCsv",
+                          "selected_branches",
+                          "selectedBranches",
+                          "active_branch",
+                          "activeBranch",
+                          "branchName",
+                        ]
+                      )
+                  )
+                  .filter(Boolean)
+              )
+            );
 
-              return (
-                branches.includes(
-                  normalizedBranch
-                ) &&
-                groups.includes(
-                  normalizedGroup
-                )
-              );
-            }
+          const groups =
+            Array.from(
+              new Set(
+                entries
+                  .flatMap(
+                    (entry) =>
+                      parseUserTargetValues(
+                        entry.user || {},
+                        [
+                          "group",
+                          "groups",
+                          "groups_json",
+                          "groupsCsv",
+                          "selected_groups",
+                          "selectedGroups",
+                          "active_group",
+                          "activeGroup",
+                          "age_group",
+                          "age_groups",
+                          "primaryGroup",
+                          "groupKey",
+                        ]
+                      )
+                  )
+                  .filter(Boolean)
+              )
+            );
+
+          return (
+            branches.includes(
+              normalizedBranch
+            ) &&
+            groups.includes(
+              normalizedGroup
+            )
           );
-
-     /*
-      * איחוד משתמשים דרך מנגנון הזהות הגלובלי.
-      *
-      * האיחוד מתבצע לפי:
-      * - UID
-      * - אימייל מנורמל
-      * - טלפון מנורמל
-      *
-      * אין איחוד לפי שם בלבד.
-      */
-     const identityGroups =
-       groupUsersByIdentity(
-         matchedDocuments
-       );
+        }
+      );
 
       const items =
         identityGroups
@@ -4581,73 +4696,184 @@ exports.updateSecureCoachTrainee =
         );
       }
 
-      const traineeRef =
-        db
-          .collection("users")
-          .doc(traineeDocId);
+    const allCoachUpdateUsersSnapshot =
+      await db
+        .collection("users")
+        .get();
 
-      const traineeSnapshot =
-        await traineeRef.get();
+    const coachUpdateIdentityGroups =
+      groupUsersByIdentity(
+        allCoachUpdateUsersSnapshot.docs.map(
+          (document) => ({
+            id:
+              document.id,
 
-      if (!traineeSnapshot.exists) {
-        throw new functions.https.HttpsError(
-          "not-found",
-          "Trainee was not found."
-        );
-      }
+            document,
 
-      const trainee =
-        traineeSnapshot.data() || {};
+            user:
+              document.data() || {},
+          })
+        )
+      );
 
-      const traineeBranches =
-        parseUserTargetValues(
-          trainee,
-          [
-            "branch",
-            "branches",
-            "branches_json",
-            "branchesCsv",
-            "selected_branches",
-            "selectedBranches",
-            "active_branch",
-            "activeBranch",
-            "branchName",
-          ]
-        );
+    const traineeIdentityEntries =
+      coachUpdateIdentityGroups.find(
+        (entries) =>
+          entries.some(
+            (entry) => {
 
-      const traineeGroups =
-        parseUserTargetValues(
-          trainee,
-          [
-            "group",
-            "groups",
-            "groups_json",
-            "groupsCsv",
-            "selected_groups",
-            "selectedGroups",
-            "active_group",
-            "activeGroup",
-            "age_group",
-            "age_groups",
-            "primaryGroup",
-            "groupKey",
-          ]
-        );
+              const user =
+                entry.user || {};
 
-      const traineeBelongsToPair =
-        traineeBranches.includes(
-          normalizedBranch
-        ) &&
-        traineeGroups.includes(
-          normalizedGroup
-        );
+              return [
+                entry.id,
+                user.uid,
+                user.authUid,
+                user.userDocId,
+                user.traineeId,
+              ]
+                .map((value) =>
+                  String(value || "")
+                    .trim()
+                )
+                .filter(Boolean)
+                .includes(traineeDocId);
+            }
+          )
+      ) || [];
 
-      if (!traineeBelongsToPair) {
-        throw new functions.https.HttpsError(
-          "permission-denied",
-          "Trainee is outside the coach authorization scope."
-        );
-      }
+    if (traineeIdentityEntries.length === 0) {
+      throw new functions.https.HttpsError(
+        "not-found",
+        "Trainee was not found."
+      );
+    }
+
+    const identityIsCoach =
+      traineeIdentityEntries.some(
+        (entry) => {
+
+          const user =
+            entry.user || {};
+
+          const role =
+            String(
+              user.role ||
+              user.userRole ||
+              user.user_role ||
+              user.userType ||
+              user.type ||
+              ""
+            )
+              .trim()
+              .toLowerCase();
+
+          return (
+            role === "coach" ||
+            role === "trainer" ||
+            role === "מאמן" ||
+            user.isCoach === true
+          );
+        }
+      );
+
+    if (identityIsCoach) {
+      throw new functions.https.HttpsError(
+        "permission-denied",
+        "Target user is not a trainee."
+      );
+    }
+
+    const traineeBranches =
+      Array.from(
+        new Set(
+          traineeIdentityEntries
+            .flatMap(
+              (entry) =>
+                parseUserTargetValues(
+                  entry.user || {},
+                  [
+                    "branch",
+                    "branches",
+                    "branches_json",
+                    "branchesCsv",
+                    "selected_branches",
+                    "selectedBranches",
+                    "active_branch",
+                    "activeBranch",
+                    "branchName",
+                  ]
+                )
+            )
+            .filter(Boolean)
+        )
+      );
+
+    const traineeGroups =
+      Array.from(
+        new Set(
+          traineeIdentityEntries
+            .flatMap(
+              (entry) =>
+                parseUserTargetValues(
+                  entry.user || {},
+                  [
+                    "group",
+                    "groups",
+                    "groups_json",
+                    "groupsCsv",
+                    "selected_groups",
+                    "selectedGroups",
+                    "active_group",
+                    "activeGroup",
+                    "age_group",
+                    "age_groups",
+                    "primaryGroup",
+                    "groupKey",
+                  ]
+                )
+            )
+            .filter(Boolean)
+        )
+      );
+
+    const traineeBelongsToPair =
+      traineeBranches.includes(
+        normalizedBranch
+      ) &&
+      traineeGroups.includes(
+        normalizedGroup
+      );
+
+    if (!traineeBelongsToPair) {
+      throw new functions.https.HttpsError(
+        "permission-denied",
+        "Trainee is outside the coach authorization scope."
+      );
+    }
+
+    const exactTraineeEntry =
+      traineeIdentityEntries.find(
+        (entry) =>
+          entry.id === traineeDocId
+      );
+
+    const traineeWriteEntry =
+      exactTraineeEntry ||
+      traineeIdentityEntries[0];
+
+    if (
+      !traineeWriteEntry ||
+      !traineeWriteEntry.document
+    ) {
+      throw new functions.https.HttpsError(
+        "not-found",
+        "Trainee document was not found."
+      );
+    }
+
+    const traineeRef =
+      traineeWriteEntry.document.ref;
 
       const nowMillis =
         Date.now();
@@ -5055,105 +5281,236 @@ exports.loadSecureCoachBroadcastRecipients =
           .collection("users")
           .get();
 
-      const branchUsers = [];
+   const broadcastIdentityGroups =
+     groupUsersByIdentity(
+       usersSnapshot.docs.map(
+         (document) => ({
+           id:
+             document.id,
 
-      usersSnapshot.docs
-        .forEach((document) => {
+           document,
 
-          const user =
-            document.data() || {};
+           user:
+             document.data() || {},
+         })
+       )
+     );
 
-          const role =
-            String(
-              user.role ||
-              user.userRole ||
-              user.user_role ||
-              user.userType ||
-              user.type ||
-              ""
-            )
-              .trim()
-              .toLowerCase();
+   const branchUsers = [];
 
-          const isCoach =
-            role === "coach" ||
-            role === "trainer" ||
-            role === "מאמן" ||
-            user.isCoach === true;
+   broadcastIdentityGroups.forEach(
+     (entries) => {
 
-          if (isCoach) {
-            return;
-          }
+       if (
+         !Array.isArray(entries) ||
+         entries.length === 0
+       ) {
+         return;
+       }
 
-          const status =
-            String(
-              user.status ||
-              user.active ||
-              ""
-            )
-              .trim()
-              .toLowerCase();
+       const identityIsCoach =
+         entries.some(
+           (entry) => {
 
-          const isActive =
-            user.isActive !== false &&
-            status !== "inactive" &&
-            status !== "disabled" &&
-            status !== "blocked" &&
-            status !== "לא פעיל";
+             const user =
+               entry.user || {};
 
-          if (!isActive) {
-            return;
-          }
+             const role =
+               String(
+                 user.role ||
+                 user.userRole ||
+                 user.user_role ||
+                 user.userType ||
+                 user.type ||
+                 ""
+               )
+                 .trim()
+                 .toLowerCase();
 
-          const branches =
-            parseUserTargetValues(
-              user,
-              [
-                "branch",
-                "branches",
-                "branches_json",
-                "branchesCsv",
-                "selected_branches",
-                "selectedBranches",
-                "active_branch",
-                "activeBranch",
-                "branchName",
-              ]
-            );
+             return (
+               role === "coach" ||
+               role === "trainer" ||
+               role === "מאמן" ||
+               user.isCoach === true
+             );
+           }
+         );
 
-          if (
-            !branches.includes(
-              normalizedBranch
-            )
-          ) {
-            return;
-          }
+       if (identityIsCoach) {
+         return;
+       }
 
-          const groups =
-            parseUserTargetValues(
-              user,
-              [
-                "group",
-                "groups",
-                "groups_json",
-                "groupsCsv",
-                "selected_groups",
-                "selectedGroups",
-                "active_group",
-                "activeGroup",
-                "age_group",
-                "age_groups",
-                "primaryGroup",
-                "groupKey",
-              ]
-            );
+       const activeEntries =
+         entries.filter(
+           (entry) => {
 
-          branchUsers.push({
-            document,
-            user,
-            groups,
-          });
-        });
+             const user =
+               entry.user || {};
+
+             const status =
+               String(
+                 user.status ||
+                 user.active ||
+                 ""
+               )
+                 .trim()
+                 .toLowerCase();
+
+             return (
+               user.isActive !== false &&
+               status !== "inactive" &&
+               status !== "disabled" &&
+               status !== "blocked" &&
+               status !== "לא פעיל"
+             );
+           }
+         );
+
+       if (activeEntries.length === 0) {
+         return;
+       }
+
+       const branches =
+         Array.from(
+           new Set(
+             activeEntries
+               .flatMap(
+                 (entry) =>
+                   parseUserTargetValues(
+                     entry.user || {},
+                     [
+                       "branch",
+                       "branches",
+                       "branches_json",
+                       "branchesCsv",
+                       "selected_branches",
+                       "selectedBranches",
+                       "active_branch",
+                       "activeBranch",
+                       "branchName",
+                     ]
+                   )
+               )
+               .filter(Boolean)
+           )
+         );
+
+       if (
+         !branches.includes(
+           normalizedBranch
+         )
+       ) {
+         return;
+       }
+
+       const groups =
+         Array.from(
+           new Set(
+             activeEntries
+               .flatMap(
+                 (entry) =>
+                   parseUserTargetValues(
+                     entry.user || {},
+                     [
+                       "group",
+                       "groups",
+                       "groups_json",
+                       "groupsCsv",
+                       "selected_groups",
+                       "selectedGroups",
+                       "active_group",
+                       "activeGroup",
+                       "age_group",
+                       "age_groups",
+                       "primaryGroup",
+                       "groupKey",
+                     ]
+                   )
+               )
+               .filter(Boolean)
+           )
+         );
+
+       const primary =
+         activeEntries
+           .slice()
+           .sort(
+             (a, b) => {
+
+               const aUser =
+                 a.user || {};
+
+               const bUser =
+                 b.user || {};
+
+               const aScore =
+                 (
+                   globalUserEmail(aUser)
+                     ? 1
+                     : 0
+                 ) +
+                 (
+                   globalUserPhone(aUser)
+                     ? 1
+                     : 0
+                 ) +
+                 (
+                   String(
+                     aUser.fullName ||
+                     aUser.name ||
+                     aUser.displayName ||
+                     aUser.full_name ||
+                     ""
+                   ).trim()
+                     ? 1
+                     : 0
+                 );
+
+               const bScore =
+                 (
+                   globalUserEmail(bUser)
+                     ? 1
+                     : 0
+                 ) +
+                 (
+                   globalUserPhone(bUser)
+                     ? 1
+                     : 0
+                 ) +
+                 (
+                   String(
+                     bUser.fullName ||
+                     bUser.name ||
+                     bUser.displayName ||
+                     bUser.full_name ||
+                     ""
+                   ).trim()
+                     ? 1
+                     : 0
+                 );
+
+               return bScore - aScore;
+             }
+           )[0];
+
+       if (
+         !primary ||
+         !primary.document
+       ) {
+         return;
+       }
+
+       branchUsers.push({
+         document:
+           primary.document,
+
+         user:
+           primary.user || {},
+
+         groups,
+       });
+     }
+   );
 
       /*
        * Admin יכול לגלות קבוצות בפועל מהמשתמשים.
@@ -5219,21 +5576,6 @@ exports.loadSecureCoachBroadcastRecipients =
               (group) =>
                 allowedGroupKeys.has(group)
             );
-
-          matchedAllowedGroups
-            .forEach((group) => {
-
-              const displayGroup =
-                authorizedGroupsForBranch.get(
-                  group
-                ) || group;
-
-              groupCounts[displayGroup] =
-                (
-                  groupCounts[displayGroup] ||
-                  0
-                ) + 1;
-            });
 
           const belongsToRequestedScope =
             matchedAllowedGroups.some(
@@ -5490,19 +5832,62 @@ exports.loadSecureCoachBroadcastRecipients =
       };
     })
     .filter(Boolean)
-    .sort(
-      (a, b) =>
-        String(
-          a.name || ""
-        ).localeCompare(
+      .sort(
+        (a, b) =>
           String(
-            b.name || ""
-          ),
-          "he"
-        )
-    );
+            a.name || ""
+          ).localeCompare(
+            String(
+              b.name || ""
+            ),
+            "he"
+          )
+      );
 
-const availableGroups =
+  uniqueRecipients.forEach(
+    (recipient) => {
+
+      const recipientGroups =
+        Array.isArray(
+          recipient.groups
+        )
+          ? recipient.groups
+          : [];
+
+      recipientGroups.forEach(
+        (groupName) => {
+
+          const cleanGroupName =
+            String(
+              groupName || ""
+            ).trim();
+
+          if (
+            !cleanGroupName ||
+            !Object.prototype
+              .hasOwnProperty.call(
+                groupCounts,
+                cleanGroupName
+              )
+          ) {
+            return;
+          }
+
+          groupCounts[
+            cleanGroupName
+          ] =
+            (
+              groupCounts[
+                cleanGroupName
+              ] ||
+              0
+            ) + 1;
+        }
+      );
+    }
+  );
+
+  const availableGroups =
   Array.from(
     authorizedGroupsForBranch.values()
   )
@@ -5791,76 +6176,115 @@ exports.createSecureCoachBroadcast =
       /*
        * קריאת users מתבצעת רק בשרת.
        */
-      const usersSnapshot =
-        await db
-          .collection("users")
-          .get();
+   const usersSnapshot =
+     await db
+       .collection("users")
+       .get();
 
-      /*
-       * Admin:
-       * אם לא נשלחו קבוצות, כל הקבוצות בסניף מותרות.
-       */
-      if (isAdminUser) {
-        usersSnapshot.docs
-          .forEach((document) => {
+   const allBroadcastIdentityGroups =
+     groupUsersByIdentity(
+       usersSnapshot.docs.map(
+         (document) => ({
+           id:
+             document.id,
 
-            const user =
-              document.data() || {};
+           document,
 
-            const branches =
-              parseUserTargetValues(
-                user,
-                [
-                  "branch",
-                  "branches",
-                  "branches_json",
-                  "branchesCsv",
-                  "selected_branches",
-                  "selectedBranches",
-                  "active_branch",
-                  "activeBranch",
-                  "branchName",
-                ]
-              );
+           user:
+             document.data() || {},
+         })
+       )
+     );
 
-            if (
-              !branches.includes(
-                normalizedBranch
-              )
-            ) {
-              return;
-            }
+   /*
+    * Admin:
+    * אם לא נשלחו קבוצות, כל הקבוצות בסניף מותרות.
+    */
+   if (isAdminUser) {
+     allBroadcastIdentityGroups.forEach(
+       (entries) => {
 
-            const groups =
-              parseUserTargetValues(
-                user,
-                [
-                  "group",
-                  "groups",
-                  "groups_json",
-                  "groupsCsv",
-                  "selected_groups",
-                  "selectedGroups",
-                  "active_group",
-                  "activeGroup",
-                  "age_group",
-                  "age_groups",
-                  "primaryGroup",
-                  "groupKey",
-                ]
-              );
+         if (
+           !Array.isArray(entries) ||
+           entries.length === 0
+         ) {
+           return;
+         }
 
-            groups.forEach(
-              (group) => {
-                if (group) {
-                  authorizedGroupKeys.add(
-                    group
-                  );
-                }
-              }
-            );
-          });
-      }
+         const branches =
+           Array.from(
+             new Set(
+               entries
+                 .flatMap(
+                   (entry) =>
+                     parseUserTargetValues(
+                       entry.user || {},
+                       [
+                         "branch",
+                         "branches",
+                         "branches_json",
+                         "branchesCsv",
+                         "selected_branches",
+                         "selectedBranches",
+                         "active_branch",
+                         "activeBranch",
+                         "branchName",
+                       ]
+                     )
+                 )
+                 .filter(Boolean)
+             )
+           );
+
+         if (
+           !branches.includes(
+             normalizedBranch
+           )
+         ) {
+           return;
+         }
+
+         const groups =
+           Array.from(
+             new Set(
+               entries
+                 .flatMap(
+                   (entry) =>
+                     parseUserTargetValues(
+                       entry.user || {},
+                       [
+                         "group",
+                         "groups",
+                         "groups_json",
+                         "groupsCsv",
+                         "selected_groups",
+                         "selectedGroups",
+                         "active_group",
+                         "activeGroup",
+                         "age_group",
+                         "age_groups",
+                         "primaryGroup",
+                         "groupKey",
+                       ]
+                     )
+                 )
+                 .filter(Boolean)
+             )
+           );
+
+         groups.forEach(
+           (group) => {
+
+             if (group) {
+               authorizedGroupKeys.add(
+                 group
+               );
+             }
+           }
+         );
+       }
+     );
+   }
 
       const effectiveGroupKeys =
         requestedGroupKeys.size > 0
@@ -5876,124 +6300,153 @@ exports.createSecureCoachBroadcast =
         );
       }
 
-    /*
-     * בונים תחילה רשימת משתמשים חוקיים
-     * בתחום הסניף והקבוצות המבוקשות.
-     */
-    const eligibleRecipientEntries =
-      usersSnapshot.docs
-        .map((document) => ({
-          id:
-            document.id,
+   /*
+    * קודם מאחדים זהויות ורק לאחר מכן
+    * מסננים לפי פעילות, תפקיד וסניף/קבוצה.
+    */
+   const recipientIdentityGroups =
+     allBroadcastIdentityGroups.filter(
+       (entries) => {
 
-          user:
-            document.data() || {},
-        }))
-        .filter(({ user }) => {
+         if (
+           !Array.isArray(entries) ||
+           entries.length === 0
+         ) {
+           return false;
+         }
 
-          const role =
-            String(
-              user.role ||
-              user.userRole ||
-              user.user_role ||
-              user.userType ||
-              user.type ||
-              ""
-            )
-              .trim()
-              .toLowerCase();
+         const identityIsCoach =
+           entries.some(
+             (entry) => {
 
-          const isCoach =
-            role === "coach" ||
-            role === "trainer" ||
-            role === "מאמן" ||
-            user.isCoach === true;
+               const user =
+                 entry.user || {};
 
-          if (isCoach) {
-            return false;
-          }
+               const role =
+                 String(
+                   user.role ||
+                   user.userRole ||
+                   user.user_role ||
+                   user.userType ||
+                   user.type ||
+                   ""
+                 )
+                   .trim()
+                   .toLowerCase();
 
-          const status =
-            String(
-              user.status ||
-              user.active ||
-              ""
-            )
-              .trim()
-              .toLowerCase();
+               return (
+                 role === "coach" ||
+                 role === "trainer" ||
+                 role === "מאמן" ||
+                 user.isCoach === true
+               );
+             }
+           );
 
-          const active =
-            user.isActive !== false &&
-            status !== "inactive" &&
-            status !== "disabled" &&
-            status !== "blocked" &&
-            status !== "לא פעיל";
+         if (identityIsCoach) {
+           return false;
+         }
 
-          if (!active) {
-            return false;
-          }
+         const activeEntries =
+           entries.filter(
+             (entry) => {
 
-          const branches =
-            parseUserTargetValues(
-              user,
-              [
-                "branch",
-                "branches",
-                "branches_json",
-                "branchesCsv",
-                "selected_branches",
-                "selectedBranches",
-                "active_branch",
-                "activeBranch",
-                "branchName",
-              ]
-            );
+               const user =
+                 entry.user || {};
 
-          if (
-            !branches.includes(
-              normalizedBranch
-            )
-          ) {
-            return false;
-          }
+               const status =
+                 String(
+                   user.status ||
+                   user.active ||
+                   ""
+                 )
+                   .trim()
+                   .toLowerCase();
 
-          const groups =
-            parseUserTargetValues(
-              user,
-              [
-                "group",
-                "groups",
-                "groups_json",
-                "groupsCsv",
-                "selected_groups",
-                "selectedGroups",
-                "active_group",
-                "activeGroup",
-                "age_group",
-                "age_groups",
-                "primaryGroup",
-                "groupKey",
-              ]
-            );
+               return (
+                 user.isActive !== false &&
+                 status !== "inactive" &&
+                 status !== "disabled" &&
+                 status !== "blocked" &&
+                 status !== "לא פעיל"
+               );
+             }
+           );
 
-          return groups.some(
-            (group) =>
-              effectiveGroupKeys.has(
-                group
-              )
-          );
-        });
+         if (activeEntries.length === 0) {
+           return false;
+         }
 
-    /*
-     * מאחדים את כל הרשומות של אותו אדם לפי:
-     * - UID
-     * - אימייל
-     * - טלפון
-     */
-    const recipientIdentityGroups =
-      groupUsersByIdentity(
-        eligibleRecipientEntries
-      );
+         const branches =
+           Array.from(
+             new Set(
+               activeEntries
+                 .flatMap(
+                   (entry) =>
+                     parseUserTargetValues(
+                       entry.user || {},
+                       [
+                         "branch",
+                         "branches",
+                         "branches_json",
+                         "branchesCsv",
+                         "selected_branches",
+                         "selectedBranches",
+                         "active_branch",
+                         "activeBranch",
+                         "branchName",
+                       ]
+                     )
+                 )
+                 .filter(Boolean)
+             )
+           );
+
+         if (
+           !branches.includes(
+             normalizedBranch
+           )
+         ) {
+           return false;
+         }
+
+         const groups =
+           Array.from(
+             new Set(
+               activeEntries
+                 .flatMap(
+                   (entry) =>
+                     parseUserTargetValues(
+                       entry.user || {},
+                       [
+                         "group",
+                         "groups",
+                         "groups_json",
+                         "groupsCsv",
+                         "selected_groups",
+                         "selectedGroups",
+                         "active_group",
+                         "activeGroup",
+                         "age_group",
+                         "age_groups",
+                         "primaryGroup",
+                         "groupKey",
+                       ]
+                     )
+                 )
+                 .filter(Boolean)
+             )
+           );
+
+         return groups.some(
+           (group) =>
+             effectiveGroupKeys.has(
+               group
+             )
+         );
+       }
+     );
+
 
     /*
      * כל UID / documentId ישן או חדש
@@ -6849,27 +7302,26 @@ exports.setSecureFreeSessionParticipantState =
           .collection("free_sessions")
           .doc(sessionId);
 
-      const [
-        sessionSnapshot,
-        adminSnapshot,
-        coachSnapshot,
-        userSnapshot,
-      ] =
-        await Promise.all([
-          sessionRef.get(),
+    const [
+      sessionSnapshot,
+      adminSnapshot,
+      coachSnapshot,
+      allFreeSessionStateUsersSnapshot,
+    ] =
+      await Promise.all([
+        sessionRef.get(),
 
-          db.collection("admins")
-            .doc(uid)
-            .get(),
+        db.collection("admins")
+          .doc(uid)
+          .get(),
 
-          db.collection("authorizedCoaches")
-            .doc(uid)
-            .get(),
+        db.collection("authorizedCoaches")
+          .doc(uid)
+          .get(),
 
-          db.collection("users")
-            .doc(uid)
-            .get(),
-        ]);
+        db.collection("users")
+          .get(),
+      ]);
 
       if (!sessionSnapshot.exists) {
         throw new functions.https.HttpsError(
@@ -6923,10 +7375,45 @@ exports.setSecureFreeSessionParticipantState =
           ? coachSnapshot.data() || {}
           : {};
 
-      const userData =
-        userSnapshot.exists
-          ? userSnapshot.data() || {}
-          : {};
+      const freeSessionStateUserEntries =
+        allFreeSessionStateUsersSnapshot.docs.map(
+          (document) => ({
+            id:
+              document.id,
+
+            user:
+              document.data() || {},
+          })
+        );
+
+      const freeSessionStateIdentityGroup =
+        groupUsersByIdentity(
+          freeSessionStateUserEntries
+        )
+          .find(
+            (entries) =>
+              entries.some(
+                (entry) => {
+
+                  const user =
+                    entry.user || {};
+
+                  return [
+                    entry.id,
+                    user.uid,
+                    user.authUid,
+                    user.userDocId,
+                    user.traineeId,
+                  ]
+                    .map((value) =>
+                      String(value || "")
+                        .trim()
+                    )
+                    .filter(Boolean)
+                    .includes(uid);
+                }
+              )
+          ) || [];
 
       const isAdminUser =
         adminData.enabled === true;
@@ -6993,38 +7480,56 @@ exports.setSecureFreeSessionParticipantState =
       }
 
       const traineeBranches =
-        parseUserTargetValues(
-          userData,
-          [
-            "branch",
-            "branches",
-            "branches_json",
-            "branchesCsv",
-            "selected_branches",
-            "selectedBranches",
-            "active_branch",
-            "activeBranch",
-            "branchName",
-          ]
+        Array.from(
+          new Set(
+            freeSessionStateIdentityGroup
+              .flatMap(
+                (entry) =>
+                  parseUserTargetValues(
+                    entry.user || {},
+                    [
+                      "branch",
+                      "branches",
+                      "branches_json",
+                      "branchesCsv",
+                      "selected_branches",
+                      "selectedBranches",
+                      "active_branch",
+                      "activeBranch",
+                      "branchName",
+                    ]
+                  )
+              )
+              .filter(Boolean)
+          )
         );
 
       const traineeGroups =
-        parseUserTargetValues(
-          userData,
-          [
-            "group",
-            "groups",
-            "groups_json",
-            "groupsCsv",
-            "selected_groups",
-            "selectedGroups",
-            "active_group",
-            "activeGroup",
-            "age_group",
-            "age_groups",
-            "primaryGroup",
-            "groupKey",
-          ]
+        Array.from(
+          new Set(
+            freeSessionStateIdentityGroup
+              .flatMap(
+                (entry) =>
+                  parseUserTargetValues(
+                    entry.user || {},
+                    [
+                      "group",
+                      "groups",
+                      "groups_json",
+                      "groupsCsv",
+                      "selected_groups",
+                      "selectedGroups",
+                      "active_group",
+                      "activeGroup",
+                      "age_group",
+                      "age_groups",
+                      "primaryGroup",
+                      "groupKey",
+                    ]
+                  )
+              )
+              .filter(Boolean)
+          )
         );
 
       const traineeAuthorizedForPair =
@@ -7046,24 +7551,99 @@ exports.setSecureFreeSessionParticipantState =
         );
       }
 
-      const participantName =
-        String(
-          userData.fullName ||
-          userData.name ||
-          userData.displayName ||
-          userData.full_name ||
-          coachData.fullName ||
-          context.auth.token.name ||
-          context.auth.token.email ||
-          "משתמש"
-        )
-          .trim()
-          .slice(0, 200);
+     const identityParticipantName =
+       freeSessionStateIdentityGroup
+         .map(
+           (entry) => {
 
-      const participantRef =
-        sessionRef
-          .collection("participants")
-          .doc(uid);
+             const user =
+               entry.user || {};
+
+             return String(
+               user.fullName ||
+               user.name ||
+               user.displayName ||
+               user.full_name ||
+               ""
+             )
+               .trim()
+               .replace(
+                 /\s+/g,
+                 " "
+               );
+           }
+         )
+         .find(Boolean) ||
+       "";
+
+     const participantName =
+       String(
+         identityParticipantName ||
+         coachData.fullName ||
+         context.auth.token.name ||
+         context.auth.token.email ||
+         "משתמש"
+       )
+         .trim()
+         .slice(0, 200);
+
+     const freeSessionStateIdentityIds =
+       Array.from(
+         new Set(
+           freeSessionStateIdentityGroup
+             .flatMap(
+               (entry) => {
+
+                 const user =
+                   entry.user || {};
+
+                 return [
+                   entry.id,
+                   user.uid,
+                   user.authUid,
+                   user.userDocId,
+                   user.traineeId,
+                 ];
+               }
+             )
+             .concat([
+               uid,
+             ])
+             .map((value) =>
+               String(value || "")
+                 .trim()
+             )
+             .filter(Boolean)
+         )
+       );
+
+     const existingParticipantSnapshots =
+       await Promise.all(
+         freeSessionStateIdentityIds
+           .map(
+             (identityId) =>
+               sessionRef
+                 .collection("participants")
+                 .doc(identityId)
+                 .get()
+           )
+       );
+
+     const existingParticipantSnapshot =
+       existingParticipantSnapshots.find(
+         (snapshot) =>
+           snapshot.exists
+       );
+
+     const participantDocId =
+       existingParticipantSnapshot
+         ? existingParticipantSnapshot.id
+         : uid;
+
+     const participantRef =
+       sessionRef
+         .collection("participants")
+         .doc(participantDocId);
 
       const counterFieldForState =
         (value) => {
@@ -7907,24 +8487,23 @@ exports.loadSecureFreeSessions =
         );
       }
 
-      const [
-        adminSnapshot,
-        coachSnapshot,
-        userSnapshot,
-      ] =
-        await Promise.all([
-          db.collection("admins")
-            .doc(uid)
-            .get(),
+     const [
+       adminSnapshot,
+       coachSnapshot,
+       allFreeSessionUsersSnapshot,
+     ] =
+       await Promise.all([
+         db.collection("admins")
+           .doc(uid)
+           .get(),
 
-          db.collection("authorizedCoaches")
-            .doc(uid)
-            .get(),
+         db.collection("authorizedCoaches")
+           .doc(uid)
+           .get(),
 
-          db.collection("users")
-            .doc(uid)
-            .get(),
-        ]);
+         db.collection("users")
+           .get(),
+       ]);
 
       const adminData =
         adminSnapshot.exists
@@ -7936,10 +8515,45 @@ exports.loadSecureFreeSessions =
           ? coachSnapshot.data() || {}
           : {};
 
-      const userData =
-        userSnapshot.exists
-          ? userSnapshot.data() || {}
-          : {};
+     const freeSessionUserEntries =
+       allFreeSessionUsersSnapshot.docs.map(
+         (document) => ({
+           id:
+             document.id,
+
+           user:
+             document.data() || {},
+         })
+       );
+
+     const freeSessionIdentityGroup =
+       groupUsersByIdentity(
+         freeSessionUserEntries
+       )
+         .find(
+           (entries) =>
+             entries.some(
+               (entry) => {
+
+                 const user =
+                   entry.user || {};
+
+                 return [
+                   entry.id,
+                   user.uid,
+                   user.authUid,
+                   user.userDocId,
+                   user.traineeId,
+                 ]
+                   .map((value) =>
+                     String(value || "")
+                       .trim()
+                   )
+                   .filter(Boolean)
+                   .includes(uid);
+               }
+             )
+         ) || [];
 
       const isAdminUser =
         adminData.enabled === true;
@@ -8009,52 +8623,70 @@ exports.loadSecureFreeSessions =
           );
       }
 
-      /*
-       * Trainee:
-       * בודקים את מסמך users של המשתמש עצמו.
-       */
-      const traineeBranches =
-        parseUserTargetValues(
-          userData,
-          [
-            "branch",
-            "branches",
-            "branches_json",
-            "branchesCsv",
-            "selected_branches",
-            "selectedBranches",
-            "active_branch",
-            "activeBranch",
-            "branchName",
-          ]
-        );
+ /*
+  * Trainee:
+  * מאמתים את כל רשומות הזהות המאוחדת.
+  */
+ const traineeBranches =
+   Array.from(
+     new Set(
+       freeSessionIdentityGroup
+         .flatMap(
+           (entry) =>
+             parseUserTargetValues(
+               entry.user || {},
+               [
+                 "branch",
+                 "branches",
+                 "branches_json",
+                 "branchesCsv",
+                 "selected_branches",
+                 "selectedBranches",
+                 "active_branch",
+                 "activeBranch",
+                 "branchName",
+               ]
+             )
+         )
+         .filter(Boolean)
+     )
+   );
 
-      const traineeGroups =
-        parseUserTargetValues(
-          userData,
-          [
-            "group",
-            "groups",
-            "groups_json",
-            "groupsCsv",
-            "selected_groups",
-            "selectedGroups",
-            "active_group",
-            "activeGroup",
-            "age_group",
-            "age_groups",
-            "primaryGroup",
-            "groupKey",
-          ]
-        );
+ const traineeGroups =
+   Array.from(
+     new Set(
+       freeSessionIdentityGroup
+         .flatMap(
+           (entry) =>
+             parseUserTargetValues(
+               entry.user || {},
+               [
+                 "group",
+                 "groups",
+                 "groups_json",
+                 "groupsCsv",
+                 "selected_groups",
+                 "selectedGroups",
+                 "active_group",
+                 "activeGroup",
+                 "age_group",
+                 "age_groups",
+                 "primaryGroup",
+                 "groupKey",
+               ]
+             )
+         )
+         .filter(Boolean)
+     )
+   );
 
-      const traineeAuthorizedForPair =
-        traineeBranches.includes(
-          normalizedBranch
-        ) &&
-        traineeGroups.includes(
-          normalizedGroup
-        );
+ const traineeAuthorizedForPair =
+   traineeBranches.includes(
+     normalizedBranch
+   ) &&
+   traineeGroups.includes(
+     normalizedGroup
+   );
 
       if (
         !isAdminUser &&
@@ -8361,24 +8993,23 @@ exports.loadSecureFreeSessionParticipants =
         );
       }
 
-      const [
-        adminSnapshot,
-        coachSnapshot,
-        userSnapshot,
-      ] =
-        await Promise.all([
-          db.collection("admins")
-            .doc(uid)
-            .get(),
+     const [
+       adminSnapshot,
+       coachSnapshot,
+       allFreeSessionParticipantUsersSnapshot,
+     ] =
+       await Promise.all([
+         db.collection("admins")
+           .doc(uid)
+           .get(),
 
-          db.collection("authorizedCoaches")
-            .doc(uid)
-            .get(),
+         db.collection("authorizedCoaches")
+           .doc(uid)
+           .get(),
 
-          db.collection("users")
-            .doc(uid)
-            .get(),
-        ]);
+         db.collection("users")
+           .get(),
+       ]);
 
       const adminData =
         adminSnapshot.exists
@@ -8390,10 +9021,45 @@ exports.loadSecureFreeSessionParticipants =
           ? coachSnapshot.data() || {}
           : {};
 
-      const userData =
-        userSnapshot.exists
-          ? userSnapshot.data() || {}
-          : {};
+     const freeSessionParticipantUserEntries =
+       allFreeSessionParticipantUsersSnapshot.docs.map(
+         (document) => ({
+           id:
+             document.id,
+
+           user:
+             document.data() || {},
+         })
+       );
+
+     const freeSessionParticipantIdentityGroup =
+       groupUsersByIdentity(
+         freeSessionParticipantUserEntries
+       )
+         .find(
+           (entries) =>
+             entries.some(
+               (entry) => {
+
+                 const user =
+                   entry.user || {};
+
+                 return [
+                   entry.id,
+                   user.uid,
+                   user.authUid,
+                   user.userDocId,
+                   user.traineeId,
+                 ]
+                   .map((value) =>
+                     String(value || "")
+                       .trim()
+                   )
+                   .filter(Boolean)
+                   .includes(uid);
+               }
+             )
+         ) || [];
 
       const isAdminUser =
         adminData.enabled === true;
@@ -8459,48 +9125,66 @@ exports.loadSecureFreeSessionParticipants =
           );
       }
 
-      const traineeBranches =
-        parseUserTargetValues(
-          userData,
-          [
-            "branch",
-            "branches",
-            "branches_json",
-            "branchesCsv",
-            "selected_branches",
-            "selectedBranches",
-            "active_branch",
-            "activeBranch",
-            "branchName",
-          ]
-        );
+     const traineeBranches =
+       Array.from(
+         new Set(
+           freeSessionParticipantIdentityGroup
+             .flatMap(
+               (entry) =>
+                 parseUserTargetValues(
+                   entry.user || {},
+                   [
+                     "branch",
+                     "branches",
+                     "branches_json",
+                     "branchesCsv",
+                     "selected_branches",
+                     "selectedBranches",
+                     "active_branch",
+                     "activeBranch",
+                     "branchName",
+                   ]
+                 )
+             )
+             .filter(Boolean)
+         )
+       );
 
-      const traineeGroups =
-        parseUserTargetValues(
-          userData,
-          [
-            "group",
-            "groups",
-            "groups_json",
-            "groupsCsv",
-            "selected_groups",
-            "selectedGroups",
-            "active_group",
-            "activeGroup",
-            "age_group",
-            "age_groups",
-            "primaryGroup",
-            "groupKey",
-          ]
-        );
+     const traineeGroups =
+       Array.from(
+         new Set(
+           freeSessionParticipantIdentityGroup
+             .flatMap(
+               (entry) =>
+                 parseUserTargetValues(
+                   entry.user || {},
+                   [
+                     "group",
+                     "groups",
+                     "groups_json",
+                     "groupsCsv",
+                     "selected_groups",
+                     "selectedGroups",
+                     "active_group",
+                     "activeGroup",
+                     "age_group",
+                     "age_groups",
+                     "primaryGroup",
+                     "groupKey",
+                   ]
+                 )
+             )
+             .filter(Boolean)
+         )
+       );
 
-      const traineeAuthorizedForPair =
-        traineeBranches.includes(
-          normalizedBranch
-        ) &&
-        traineeGroups.includes(
-          normalizedGroup
-        );
+     const traineeAuthorizedForPair =
+       traineeBranches.includes(
+         normalizedBranch
+       ) &&
+       traineeGroups.includes(
+         normalizedGroup
+       );
 
       if (
         !isAdminUser &&
@@ -8592,23 +9276,18 @@ exports.loadSecureFreeSessionParticipants =
         );
       }
 
-    const [
-      participantsSnapshot,
-      allUsersSnapshot,
-    ] =
-      await Promise.all([
-        sessionRef
-          .collection("participants")
-          .orderBy(
-            "updatedAt",
-            "desc"
-          )
-          .limit(500)
-          .get(),
+  const participantsSnapshot =
+    await sessionRef
+      .collection("participants")
+      .orderBy(
+        "updatedAt",
+        "desc"
+      )
+      .limit(500)
+      .get();
 
-        db.collection("users")
-          .get(),
-      ]);
+  const allUsersSnapshot =
+    allFreeSessionParticipantUsersSnapshot;
 
     /*
      * בונים מפת זהות גלובלית:
@@ -8874,7 +9553,7 @@ exports.loadSecureForumParticipants =
       const [
         adminSnapshot,
         coachSnapshot,
-        userSnapshot,
+        allForumParticipantsUsersSnapshot,
       ] =
         await Promise.all([
           db.collection("admins")
@@ -8886,7 +9565,6 @@ exports.loadSecureForumParticipants =
             .get(),
 
           db.collection("users")
-            .doc(uid)
             .get(),
         ]);
 
@@ -8900,10 +9578,45 @@ exports.loadSecureForumParticipants =
           ? coachSnapshot.data() || {}
           : {};
 
-      const userData =
-        userSnapshot.exists
-          ? userSnapshot.data() || {}
-          : {};
+      const forumParticipantsUserEntries =
+        allForumParticipantsUsersSnapshot.docs.map(
+          (document) => ({
+            id:
+              document.id,
+
+            user:
+              document.data() || {},
+          })
+        );
+
+      const forumParticipantsCurrentIdentityGroup =
+        groupUsersByIdentity(
+          forumParticipantsUserEntries
+        )
+          .find(
+            (entries) =>
+              entries.some(
+                (entry) => {
+
+                  const user =
+                    entry.user || {};
+
+                  return [
+                    entry.id,
+                    user.uid,
+                    user.authUid,
+                    user.userDocId,
+                    user.traineeId,
+                  ]
+                    .map((value) =>
+                      String(value || "")
+                        .trim()
+                    )
+                    .filter(Boolean)
+                    .includes(uid);
+                }
+              )
+          ) || [];
 
       const isAdminUser =
         adminData.enabled === true;
@@ -8966,48 +9679,66 @@ exports.loadSecureForumParticipants =
           );
       }
 
-      const traineeBranches =
-        parseUserTargetValues(
-          userData,
-          [
-            "branch",
-            "branches",
-            "branches_json",
-            "branchesCsv",
-            "selected_branches",
-            "selectedBranches",
-            "active_branch",
-            "activeBranch",
-            "branchName",
-          ]
-        );
+     const traineeBranches =
+       Array.from(
+         new Set(
+           forumParticipantsCurrentIdentityGroup
+             .flatMap(
+               (entry) =>
+                 parseUserTargetValues(
+                   entry.user || {},
+                   [
+                     "branch",
+                     "branches",
+                     "branches_json",
+                     "branchesCsv",
+                     "selected_branches",
+                     "selectedBranches",
+                     "active_branch",
+                     "activeBranch",
+                     "branchName",
+                   ]
+                 )
+             )
+             .filter(Boolean)
+         )
+       );
 
-      const traineeGroups =
-        parseUserTargetValues(
-          userData,
-          [
-            "group",
-            "groups",
-            "groups_json",
-            "groupsCsv",
-            "selected_groups",
-            "selectedGroups",
-            "active_group",
-            "activeGroup",
-            "age_group",
-            "age_groups",
-            "primaryGroup",
-            "groupKey",
-          ]
-        );
+     const traineeGroups =
+       Array.from(
+         new Set(
+           forumParticipantsCurrentIdentityGroup
+             .flatMap(
+               (entry) =>
+                 parseUserTargetValues(
+                   entry.user || {},
+                   [
+                     "group",
+                     "groups",
+                     "groups_json",
+                     "groupsCsv",
+                     "selected_groups",
+                     "selectedGroups",
+                     "active_group",
+                     "activeGroup",
+                     "age_group",
+                     "age_groups",
+                     "primaryGroup",
+                     "groupKey",
+                   ]
+                 )
+             )
+             .filter(Boolean)
+         )
+       );
 
-      const traineeAuthorizedForPair =
-        traineeBranches.includes(
-          normalizedBranch
-        ) &&
-        traineeGroups.includes(
-          normalizedGroup
-        );
+     const traineeAuthorizedForPair =
+       traineeBranches.includes(
+         normalizedBranch
+       ) &&
+       traineeGroups.includes(
+         normalizedGroup
+       );
 
       if (
         !isAdminUser &&
@@ -9020,24 +9751,21 @@ exports.loadSecureForumParticipants =
         );
       }
 
-      const usersSnapshot =
-        await db
-          .collection("users")
-          .get();
+     const usersSnapshot =
+       allForumParticipantsUsersSnapshot;
 
 const coachesSnapshot =
   await db
     .collection("authorizedCoaches")
     .get();
 
-      /*
-     /*
-      * קודם מאחדים את כל מסמכי המשתמשים
-      * לפי הזהות הגלובלית.
-      *
-      * רק לאחר האיחוד בודקים פעילות,
-      * סניף וקבוצה.
-      */
+   /*
+    * קודם מאחדים את כל מסמכי המשתמשים
+    * לפי הזהות הגלובלית.
+    *
+    * רק לאחר האיחוד בודקים פעילות,
+    * סניף וקבוצה.
+    */
      const allForumUserEntries =
        usersSnapshot.docs
          .map((document) => ({
@@ -9526,24 +10254,19 @@ const coachItems =
          );
        }
 
-       const [
-         adminSnapshot,
-         coachSnapshot,
-         userSnapshot,
-       ] =
-         await Promise.all([
-           db.collection("admins")
-             .doc(uid)
-             .get(),
+      const [
+        adminSnapshot,
+        coachSnapshot,
+      ] =
+        await Promise.all([
+          db.collection("admins")
+            .doc(uid)
+            .get(),
 
-           db.collection("authorizedCoaches")
-             .doc(uid)
-             .get(),
-
-           db.collection("users")
-             .doc(uid)
-             .get(),
-         ]);
+          db.collection("authorizedCoaches")
+            .doc(uid)
+            .get(),
+        ]);
 
        const adminData =
          adminSnapshot.exists
@@ -9553,11 +10276,6 @@ const coachItems =
        const coachData =
          coachSnapshot.exists
            ? coachSnapshot.data() || {}
-           : {};
-
-       const userData =
-         userSnapshot.exists
-           ? userSnapshot.data() || {}
            : {};
 
        const isAdminUser =
@@ -10033,24 +10751,19 @@ exports.saveSecureForumMessage =
         );
       }
 
-      const [
-        adminSnapshot,
-        coachSnapshot,
-        userSnapshot,
-      ] =
-        await Promise.all([
-          db.collection("admins")
-            .doc(uid)
-            .get(),
+     const [
+       adminSnapshot,
+       coachSnapshot,
+     ] =
+       await Promise.all([
+         db.collection("admins")
+           .doc(uid)
+           .get(),
 
-          db.collection("authorizedCoaches")
-            .doc(uid)
-            .get(),
-
-          db.collection("users")
-            .doc(uid)
-            .get(),
-        ]);
+         db.collection("authorizedCoaches")
+           .doc(uid)
+           .get(),
+       ]);
 
       const adminData =
         adminSnapshot.exists
@@ -10060,11 +10773,6 @@ exports.saveSecureForumMessage =
       const coachData =
         coachSnapshot.exists
           ? coachSnapshot.data() || {}
-          : {};
-
-      const userData =
-        userSnapshot.exists
-          ? userSnapshot.data() || {}
           : {};
 
       const isAdminUser =
@@ -10634,6 +11342,32 @@ authorizedCoachesSnapshot.docs.forEach(
   }
 );
 
+const uniqueParticipantIds =
+  Array.from(
+    new Set(
+      participantIds
+        .map((value) =>
+          String(value || "")
+            .trim()
+        )
+        .filter(Boolean)
+    )
+  )
+    .slice(0, 500);
+
+const uniqueParticipantNames =
+  Array.from(
+    new Set(
+      participantNames
+        .map((value) =>
+          String(value || "")
+            .trim()
+        )
+        .filter(Boolean)
+    )
+  )
+    .slice(0, 500);
+
       /*
        * יצירת הודעה חדשה.
        */
@@ -10663,22 +11397,14 @@ authorizedCoachesSnapshot.docs.forEach(
                 groupKey:
                   group,
 
-              participantCount:
-                participantIds.length,
+            participantCount:
+              uniqueParticipantIds.length,
 
-              participantIds:
-                Array.from(
-                  new Set(
-                    participantIds
-                  )
-                ).slice(0, 500),
+            participantIds:
+              uniqueParticipantIds,
 
-              participantNames:
-                Array.from(
-                  new Set(
-                    participantNames
-                  )
-                ).slice(0, 500),
+            participantNames:
+              uniqueParticipantNames,
 
                 participantSource:
                   "server_forum_scope",
@@ -11055,24 +11781,19 @@ exports.deleteSecureForumMessage =
         );
       }
 
-      const [
-        adminSnapshot,
-        coachSnapshot,
-        userSnapshot,
-      ] =
-        await Promise.all([
-          db.collection("admins")
-            .doc(uid)
-            .get(),
+     const [
+       adminSnapshot,
+       coachSnapshot,
+     ] =
+       await Promise.all([
+         db.collection("admins")
+           .doc(uid)
+           .get(),
 
-          db.collection("authorizedCoaches")
-            .doc(uid)
-            .get(),
-
-          db.collection("users")
-            .doc(uid)
-            .get(),
-        ]);
+         db.collection("authorizedCoaches")
+           .doc(uid)
+           .get(),
+       ]);
 
       const adminData =
         adminSnapshot.exists
@@ -11082,11 +11803,6 @@ exports.deleteSecureForumMessage =
       const coachData =
         coachSnapshot.exists
           ? coachSnapshot.data() || {}
-          : {};
-
-      const userData =
-        userSnapshot.exists
-          ? userSnapshot.data() || {}
           : {};
 
       const isAdminUser =
@@ -11439,178 +12155,315 @@ function emptyBeltStats(beltId) {
   };
 }
 
-async function applyProgressDeltasToBeltStats(transaction, deltasByBeltId) {
-  const beltIds = Object.keys(deltasByBeltId || {})
-    .map((v) => String(v || "").trim())
-    .filter((v) => v.length > 0);
+async function rebuildDeduplicatedBeltStats(
+  beltId
+) {
+  const cleanBeltId =
+    String(beltId || "")
+      .trim();
 
-  if (beltIds.length === 0) return;
-
-  const refsByBeltId = {};
-  const snapsByBeltId = {};
-
-  // חשוב: קודם כל קוראים את כל המסמכים.
-  // ב-Firestore Transaction אסור לבצע read אחרי write.
-  for (const beltId of beltIds) {
-    const ref = db.collection("beltStats").doc(beltId);
-    refsByBeltId[beltId] = ref;
-    snapsByBeltId[beltId] = await transaction.get(ref);
+  if (!cleanBeltId) {
+    return;
   }
 
-  // ורק אחרי שכל הקריאות הסתיימו — מבצעים כתיבות.
-  for (const beltId of beltIds) {
-    const statsRef = refsByBeltId[beltId];
-    const statsSnap = snapsByBeltId[beltId];
-    const delta = deltasByBeltId[beltId] || {};
+  const [
+    usersSnapshot,
+    progressSnapshot,
+  ] =
+    await Promise.all([
+      db.collection("users")
+        .get(),
 
- const current =
-   statsSnap.exists
-     ? Object.assign(
-         {},
-         emptyBeltStats(beltId),
-         statsSnap.data() || {}
-       )
-     : emptyBeltStats(beltId);
+      db.collection("userProgress")
+        .where(
+          "beltId",
+          "==",
+          cleanBeltId
+        )
+        .get(),
+    ]);
 
- const nextUsersCount = Math.max(
-   0,
-   safeNumber(current.usersCount) +
-     safeNumber(delta.usersCount)
- );
+  const identityGroups =
+    groupUsersByIdentity(
+      usersSnapshot.docs.map(
+        (document) => ({
+          id:
+            document.id,
 
- const nextTotalKnownPercentSum = Math.max(
-   0,
-   safeNumber(current.totalKnownPercentSum) +
-     safeNumber(delta.knownPercent)
- );
+          user:
+            document.data() || {},
+        })
+      )
+    );
 
- const nextAverageKnownPercent =
-   nextUsersCount <= 0
-     ? 0
-     : Math.round(
-         nextTotalKnownPercentSum /
-           nextUsersCount
+  const identityKeyByUid =
+    new Map();
+
+  identityGroups.forEach(
+    (entries, groupIndex) => {
+
+      const identityKey =
+        `person:${groupIndex}`;
+
+      entries.forEach(
+        (entry) => {
+
+          const user =
+            entry.user || {};
+
+          [
+            entry.id,
+            user.uid,
+            user.authUid,
+            user.userDocId,
+            user.traineeId,
+          ]
+            .map((value) =>
+              String(value || "")
+                .trim()
+            )
+            .filter(Boolean)
+            .forEach(
+              (identityValue) => {
+
+                identityKeyByUid.set(
+                  identityValue,
+                  identityKey
+                );
+              }
+            );
+        }
+      );
+    }
+  );
+
+  const progressByIdentity =
+    new Map();
+
+  progressSnapshot.docs.forEach(
+    (document) => {
+
+      const progress =
+        document.data() || {};
+
+      const progressUid =
+        String(
+          progress.uid || ""
+        ).trim();
+
+      const knownPercent =
+        Number(
+          progress.knownPercent
+        );
+
+      const totalCount =
+        Number(
+          progress.totalCount
+        );
+
+      const expectedDocumentId =
+        `${progressUid}__${cleanBeltId}`;
+
+      if (
+        !progressUid ||
+        document.id !== expectedDocumentId ||
+        !Number.isFinite(knownPercent) ||
+        knownPercent < 0 ||
+        knownPercent > 100 ||
+        !Number.isFinite(totalCount) ||
+        totalCount <= 0
+      ) {
+        return;
+      }
+
+      const identityKey =
+        identityKeyByUid.get(
+          progressUid
+        ) ||
+        `uid:${progressUid}`;
+
+      const updatedAtMillis =
+        Number(
+          progress.updatedAtMillis ||
+          (
+            progress.updatedAt &&
+            typeof progress.updatedAt.toMillis ===
+              "function"
+              ? progress.updatedAt.toMillis()
+              : 0
+          )
+        );
+
+      const current =
+        progressByIdentity.get(
+          identityKey
+        );
+
+      if (
+        !current ||
+        updatedAtMillis >
+          current.updatedAtMillis
+      ) {
+        progressByIdentity.set(
+          identityKey,
+          {
+            knownPercent:
+              Math.round(
+                knownPercent
+              ),
+
+            bucket:
+              safeNumber(
+                progress.bucket,
+                knownPercent
+              ),
+
+            updatedAtMillis:
+              Number.isFinite(
+                updatedAtMillis
+              )
+                ? updatedAtMillis
+                : 0,
+          }
+        );
+      }
+    }
+  );
+
+  const nextData =
+    emptyBeltStats(
+      cleanBeltId
+    );
+
+  progressByIdentity.forEach(
+    (progress) => {
+
+      nextData.usersCount +=
+        1;
+
+      nextData.totalKnownPercentSum +=
+        progress.knownPercent;
+
+      const bucketField =
+        bucketFieldForBucket(
+          progress.bucket
+        );
+
+      nextData[bucketField] =
+        safeNumber(
+          nextData[bucketField]
+        ) + 1;
+    }
+  );
+
+  nextData.averageKnownPercent =
+    nextData.usersCount > 0
+      ? Math.round(
+          nextData.totalKnownPercentSum /
+          nextData.usersCount
+        )
+      : 0;
+
+  nextData.updatedAt =
+    admin.firestore
+      .FieldValue
+      .serverTimestamp();
+
+  nextData.updatedAtMillis =
+    Date.now();
+
+  await db
+    .collection("beltStats")
+    .doc(cleanBeltId)
+    .set(
+      nextData,
+      {
+        merge: false,
+      }
+    );
+}
+
+exports.onUserProgressWritten =
+  functions.firestore
+    .document("userProgress/{uid}")
+    .onWrite(
+      async (change, context) => {
+
+        const uid =
+          String(
+            context.params.uid ||
+            ""
+          ).trim();
+
+        const beforeExists =
+          change.before.exists;
+
+        const afterExists =
+          change.after.exists;
+
+        const before =
+          beforeExists
+            ? change.before.data() || {}
+            : null;
+
+        const after =
+          afterExists
+            ? change.after.data() || {}
+            : null;
+
+       console.log(
+         "userProgress write detected:",
+         {
+           beforeExists,
+
+           afterExists,
+
+           beforeBelt:
+             before &&
+             before.beltId,
+
+           afterBelt:
+             after &&
+             after.beltId,
+         }
        );
 
- const nextData =
-   Object.assign(
-     {},
-     current,
-     {
-       beltId,
-       usersCount:
-         nextUsersCount,
-       totalKnownPercentSum:
-         nextTotalKnownPercentSum,
-       averageKnownPercent:
-         nextAverageKnownPercent,
-       updatedAt:
-         admin.firestore.FieldValue.serverTimestamp(),
-       updatedAtMillis:
-         Date.now(),
-     }
-   );
+        const affectedBeltIds =
+          Array.from(
+            new Set(
+              [
+                before &&
+                  before.beltId,
 
-    const bucketDeltas = delta.bucketDeltas || {};
-    Object.keys(bucketDeltas).forEach((field) => {
-      nextData[field] = Math.max(
-        0,
-        safeNumber(current[field]) + safeNumber(bucketDeltas[field])
-      );
-    });
+                after &&
+                  after.beltId,
+              ]
+                .map((value) =>
+                  String(value || "")
+                    .trim()
+                )
+                .filter(Boolean)
+            )
+          );
 
-    transaction.set(statsRef, nextData, { merge: true });
-  }
-}
+        for (
+          const beltId
+          of affectedBeltIds
+        ) {
+          await rebuildDeduplicatedBeltStats(
+            beltId
+          );
+        }
 
-function addProgressDelta(deltasByBeltId, beltId, progress, direction) {
-  const cleanBeltId = String(beltId || "").trim();
-  if (!cleanBeltId) return;
-
-  const percent = safePercent(progress.knownPercent);
-  const bucket = safeNumber(progress.bucket, 0);
-  const bucketField = bucketFieldForBucket(bucket);
-
-  if (!deltasByBeltId[cleanBeltId]) {
-    deltasByBeltId[cleanBeltId] = {
-      usersCount: 0,
-      knownPercent: 0,
-      bucketDeltas: {},
-    };
-  }
-
-  deltasByBeltId[cleanBeltId].usersCount += direction;
-  deltasByBeltId[cleanBeltId].knownPercent += direction * percent;
-  deltasByBeltId[cleanBeltId].bucketDeltas[bucketField] =
-    safeNumber(deltasByBeltId[cleanBeltId].bucketDeltas[bucketField]) + direction;
-}
-
-exports.onUserProgressWritten = functions.firestore
-  .document("userProgress/{uid}")
-  .onWrite(async (change, context) => {
-    const uid = (context.params.uid || "").toString();
-
-    const beforeExists = change.before.exists;
-    const afterExists = change.after.exists;
-
-    const before = beforeExists ? (change.before.data() || {}) : null;
-    const after = afterExists ? (change.after.data() || {}) : null;
-
-    console.log("userProgress write detected:", {
-      uid,
-      beforeExists,
-      afterExists,
-      beforeBelt: before && before.beltId,
-      afterBelt: after && after.beltId,
-    });
-
-    const deltasByBeltId = {};
-
-    if (before) {
-      addProgressDelta(
-        deltasByBeltId,
-        before.beltId,
-        before,
-        -1
-      );
-    }
-
-    if (after) {
-      addProgressDelta(
-        deltasByBeltId,
-        after.beltId,
-        after,
-        1
-      );
-    }
-
-    await db.runTransaction(async (transaction) => {
-      await applyProgressDeltasToBeltStats(transaction, deltasByBeltId);
-    });
-
-    return null;
-  });
+        return null;
+      }
+    );
 
 // 🎙️ Google Cloud Text-to-Speech – קול גברי Neural
 const textToSpeech = require("@google-cloud/text-to-speech");
 const ttsClient = new textToSpeech.TextToSpeechClient();
 
-// 🔥 Generative TTS (קול אנושי הרבה יותר)
-const { v1beta1: ttsGen } = require("@google-cloud/text-to-speech");
-const genClient = new ttsGen.TextToSpeechClient();
-
 const KMI_TTS_VERSION = "tts-chirp3-he-v5";
-
-/**
- * פונקציית עזר לפיצול מערכים למקטעים (כרגע לא נשתמש בה, אבל נשאיר אם תרצה בעתיד)
- */
-function chunkArray(arr, size) {
-  const chunks = [];
-  for (let i = 0; i < arr.length; i += size) {
-    chunks.push(arr.slice(i, i + size));
-  }
-  return chunks;
-}
 
 function extractFcmTokensFromUser(user) {
   const tokens = [];
@@ -11676,14 +12529,15 @@ exports.onForumMessageCreated = functions.firestore
       (text ? text.slice(0, 120) : "הודעה חדשה")
     ).toString();
 
-    console.log("New forum room message created:", {
-      branchId,
-      roomId,
-      messageId,
-      groupKey,
-      authorUid,
-      preview: messagePreview.slice(0, 80),
-    });
+ console.log(
+   "New forum room message created:",
+   {
+     branchId,
+     roomId,
+     messageId,
+     groupKey,
+   }
+ );
 
     if (!branchId || !roomId || !messageId) {
       console.log("Missing forum path params, skipping push", {
@@ -11818,10 +12672,17 @@ if (
  * כך אפשר לזהות גם חדרים ישנים שבהם
  * אותו אדם שמור תחת כמה UID-ים.
  */
-const allUsersSnapshot =
-  await db
-    .collection("users")
-    .get();
+const [
+  allUsersSnapshot,
+  allAuthorizedCoachesSnapshot,
+] =
+  await Promise.all([
+    db.collection("users")
+      .get(),
+
+    db.collection("authorizedCoaches")
+      .get(),
+  ]);
 
 const allUserEntries =
   allUsersSnapshot.docs.map(
@@ -11834,9 +12695,39 @@ const allUserEntries =
     })
   );
 
+const allCoachIdentityEntries =
+  allAuthorizedCoachesSnapshot.docs
+    .filter(
+      (document) => {
+
+        const coach =
+          document.data() || {};
+
+        return (
+          coach.active === true &&
+          String(
+            coach.role || ""
+          )
+            .trim()
+            .toLowerCase() === "coach"
+        );
+      }
+    )
+    .map(
+      (document) => ({
+        id:
+          document.id,
+
+        user:
+          document.data() || {},
+      })
+    );
+
 const userIdentityGroups =
   groupUsersByIdentity(
-    allUserEntries
+    allUserEntries.concat(
+      allCoachIdentityEntries
+    )
   );
 
 /*
@@ -12234,21 +13125,42 @@ const tokens =
     } catch (e) {
       console.error("Failed to send forum room FCM:", e);
 
-      await snap.ref.update({
-        pushStatus: "failed",
-        pushError: String(e),
-        pushFailedAt: admin.firestore.FieldValue.serverTimestamp(),
-      }).catch(() => null);
+     await snap.ref.update({
+       pushStatus:
+         "failed",
 
-      await roomRef.set(
-        {
-          lastPushError: String(e),
-          lastPushFailedAt: admin.firestore.FieldValue.serverTimestamp(),
-          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-          updatedAtMillis: Date.now(),
-        },
-        { merge: true }
-      ).catch(() => null);
+       pushError:
+         "forum_push_failed",
+
+       pushFailedAt:
+         admin.firestore
+           .FieldValue
+           .serverTimestamp(),
+     }).catch(() => null);
+
+     await roomRef.set(
+       {
+         lastPushError:
+           "forum_push_failed",
+
+         lastPushFailedAt:
+           admin.firestore
+             .FieldValue
+             .serverTimestamp(),
+
+         updatedAt:
+           admin.firestore
+             .FieldValue
+             .serverTimestamp(),
+
+         updatedAtMillis:
+           Date.now(),
+       },
+       {
+         merge:
+           true,
+       }
+     ).catch(() => null);
 
       return null;
     }
@@ -12306,15 +13218,17 @@ const authorUid = (
        )
      );
 
-    console.log("New coach broadcast created:", {
+  console.log(
+    "New coach broadcast created:",
+    {
       broadcastId,
       region,
       branch,
       groupKey,
-      authorUid,
-      targetUidsCount: targetUids.length,
-      textPreview: text.slice(0, 80),
-    });
+      targetUidsCount:
+        targetUids.length,
+    }
+  );
 
     if (!text) {
       console.log("Coach broadcast has no text, skipping push", { broadcastId });
@@ -12485,13 +13399,9 @@ const authorUid = (
          ) ||
          identityEntries.length === 0
        ) {
-         console.log(
-           "Target user identity not found",
-           {
-             uid:
-               targetUid,
-           }
-         );
+        console.log(
+          "Target user identity not found"
+        );
 
          return [];
        }
@@ -12544,10 +13454,15 @@ const authorUid = (
    );
 
     if (tokens.length === 0) {
-      console.log("No FCM tokens found for coach broadcast targets", {
-        broadcastId,
-        targetUids,
-      });
+     console.log(
+       "No FCM tokens found for coach broadcast targets",
+       {
+         broadcastId,
+
+         targetCount:
+           targetUids.length,
+       }
+     );
 
       await snap.ref.update({
         pushStatus: "no_tokens",
@@ -12667,11 +13582,18 @@ const authorUid = (
     } catch (e) {
       console.error("Failed to send coach broadcast FCM:", e);
 
-      await snap.ref.update({
-        pushStatus: "failed",
-        pushError: String(e),
-        pushFailedAt: admin.firestore.FieldValue.serverTimestamp(),
-      }).catch(() => null);
+     await snap.ref.update({
+       pushStatus:
+         "failed",
+
+       pushError:
+         "coach_broadcast_push_failed",
+
+       pushFailedAt:
+         admin.firestore
+           .FieldValue
+           .serverTimestamp(),
+     }).catch(() => null);
 
       return null;
     }
@@ -12971,15 +13893,17 @@ exports.onTrainingOverrideWritten = functions.firestore
     const changedByUid =
       String(data.changedByUid || "").trim();
 
-    console.log("Training override notification requested:", {
-      overrideId,
-      type,
-      branch,
-      group,
-      place,
-      isActive,
-      changedByUid,
-    });
+   console.log(
+     "Training override notification requested:",
+     {
+       overrideId,
+       type,
+       branch,
+       group,
+       place,
+       isActive,
+     }
+   );
 
     if (!branch || !group) {
       await change.after.ref.set(
@@ -13006,81 +13930,199 @@ exports.onTrainingOverrideWritten = functions.firestore
     const usersSnapshot =
       await db.collection("users").get();
 
-const eligibleTargetEntries =
-  usersSnapshot.docs
-    .map((document) => ({
-      id:
-        document.id,
+const allTrainingOverrideIdentityGroups =
+  groupUsersByIdentity(
+    usersSnapshot.docs.map(
+      (document) => ({
+        id:
+          document.id,
 
-      user:
-        document.data() || {},
-    }))
-    .filter(({ id, user }) => {
+        user:
+          document.data() || {},
+      })
+    )
+  );
 
-      /*
-       * לא שולחים למאמן שביצע את השינוי.
-       */
-      if (changedByUid) {
-        const identityValues =
-          [
-            id,
-            user.uid,
-            user.authUid,
-            user.userDocId,
-            user.traineeId,
-          ]
-            .map((value) =>
-              String(value || "")
-                .trim()
-            )
-            .filter(Boolean);
+const targetIdentityGroups =
+  allTrainingOverrideIdentityGroups.filter(
+    (entries) => {
 
-        if (
-          identityValues.includes(
-            changedByUid
-          )
-        ) {
-          return false;
-        }
-      }
-
-      const role =
-        String(
-          user.role ||
-          user.userRole ||
-          user.userType ||
-          ""
-        )
-          .trim()
-          .toLowerCase();
-
-      /*
-       * מונעים שליחה למאמנים אחרים.
-       */
-      const isCoach =
-        role === "coach" ||
-        role === "trainer" ||
-        role === "מאמן" ||
-        user.isCoach === true;
-
-      if (isCoach) {
+      if (
+        !Array.isArray(entries) ||
+        entries.length === 0
+      ) {
         return false;
       }
 
-      return userMatchesTrainingOverride(
-        user,
-        branch,
-        group
-      );
-    });
+      const identityValues =
+        Array.from(
+          new Set(
+            entries
+              .flatMap(
+                (entry) => {
 
-/*
- * כל אדם נספר פעם אחת בלבד לפי
- * UID / אימייל / טלפון.
- */
-const targetIdentityGroups =
-  groupUsersByIdentity(
-    eligibleTargetEntries
+                  const user =
+                    entry.user || {};
+
+                  return [
+                    entry.id,
+                    user.uid,
+                    user.authUid,
+                    user.userDocId,
+                    user.traineeId,
+                  ];
+                }
+              )
+              .map((value) =>
+                String(value || "")
+                  .trim()
+              )
+              .filter(Boolean)
+          )
+        );
+
+      if (
+        changedByUid &&
+        identityValues.includes(
+          changedByUid
+        )
+      ) {
+        return false;
+      }
+
+      const identityIsCoach =
+        entries.some(
+          (entry) => {
+
+            const user =
+              entry.user || {};
+
+            const role =
+              String(
+                user.role ||
+                user.userRole ||
+                user.userType ||
+                ""
+              )
+                .trim()
+                .toLowerCase();
+
+            return (
+              role === "coach" ||
+              role === "trainer" ||
+              role === "מאמן" ||
+              user.isCoach === true
+            );
+          }
+        );
+
+      if (identityIsCoach) {
+        return false;
+      }
+
+      const branches =
+        Array.from(
+          new Set(
+            entries
+              .flatMap(
+                (entry) =>
+                  parseUserTargetValues(
+                    entry.user || {},
+                    [
+                      "branch",
+                      "branches",
+                      "branches_json",
+                      "branchesCsv",
+                      "selected_branches",
+                      "selectedBranches",
+                      "active_branch",
+                      "activeBranch",
+                      "branchName",
+                      "branch2",
+                      "branch3",
+                    ]
+                  )
+              )
+              .filter(Boolean)
+          )
+        );
+
+      const groups =
+        Array.from(
+          new Set(
+            entries
+              .flatMap(
+                (entry) =>
+                  parseUserTargetValues(
+                    entry.user || {},
+                    [
+                      "group",
+                      "groups",
+                      "groups_json",
+                      "groupsCsv",
+                      "selected_groups",
+                      "selectedGroups",
+                      "active_group",
+                      "activeGroup",
+                      "age_group",
+                      "age_groups",
+                      "primaryGroup",
+                      "groupKey",
+                    ]
+                  )
+              )
+              .filter(Boolean)
+          )
+        );
+
+      const wantedBranch =
+        normalizeTrainingTargetText(
+          branch
+        );
+
+      const wantedGroup =
+        normalizeTrainingTargetText(
+          group
+        );
+
+      const branchMatches =
+        branches.includes(
+          wantedBranch
+        );
+
+      const groupMatches =
+        groups.some(
+          (value) => {
+
+            if (value === wantedGroup) {
+              return true;
+            }
+
+            const combinedYouthAdults =
+              value.includes("נוער") &&
+              value.includes("בוגרים");
+
+            return (
+              combinedYouthAdults &&
+              (
+                wantedGroup ===
+                  normalizeTrainingTargetText(
+                    "נוער"
+                  ) ||
+                wantedGroup ===
+                  normalizeTrainingTargetText(
+                    "בוגרים"
+                  )
+              )
+            );
+          }
+        );
+
+      return (
+        branchMatches &&
+        groupMatches
+      );
+    }
   );
 
 /*
@@ -13126,18 +14168,13 @@ const tokenResults =
               }
             );
           } catch (error) {
-            console.error(
-              "Failed extracting training target tokens:",
-              {
-                userDocId:
-                  String(
-                    entry.id || ""
-                  ),
-
-                error:
-                  String(error),
-              }
-            );
+          console.error(
+            "Failed extracting training target tokens:",
+            {
+              error:
+                String(error),
+            }
+          );
           }
         }
       );
@@ -13681,17 +14718,138 @@ async function synthesizeWithVoiceFallback({
  * ====================================================
  */
 exports.kmiTts = functions.https.onRequest(async (req, res) => {
-  res.set("Access-Control-Allow-Origin", "*");
-  res.set("Access-Control-Allow-Methods", "POST, OPTIONS");
-  res.set("Access-Control-Allow-Headers", "Content-Type");
+ res.set(
+   "Access-Control-Allow-Origin",
+   "*"
+ );
+
+ res.set(
+   "Access-Control-Allow-Methods",
+   "POST, OPTIONS"
+ );
+
+ res.set(
+   "Access-Control-Allow-Headers",
+   "Content-Type, Authorization"
+ );
 
   if (req.method === "OPTIONS") return res.status(204).send("");
   if (req.method !== "POST") return res.status(405).json({ error: "Use POST with JSON body" });
 
+const authorizationHeader =
+  String(
+    req.get("Authorization") || ""
+  )
+    .trim();
+
+if (
+  !authorizationHeader.startsWith(
+    "Bearer "
+  )
+) {
+  return res
+    .status(401)
+    .json({
+      error:
+        "Authentication is required.",
+    });
+}
+
+const idToken =
+  authorizationHeader
+    .substring(7)
+    .trim();
+
+if (!idToken) {
+  return res
+    .status(401)
+    .json({
+      error:
+        "Authentication is required.",
+    });
+}
+
+let authenticatedUid =
+  "";
+
+try {
+  const decodedToken =
+    await admin.auth()
+      .verifyIdToken(
+        idToken
+      );
+
+  authenticatedUid =
+    String(
+      decodedToken.uid || ""
+    )
+      .trim();
+
+} catch (error) {
+  console.error(
+    "kmiTts invalid Firebase token:",
+    {
+      error:
+        String(error),
+    }
+  );
+
+  return res
+    .status(401)
+    .json({
+      error:
+        "Invalid authentication token.",
+    });
+}
+
+if (!authenticatedUid) {
+  return res
+    .status(401)
+    .json({
+      error:
+        "Authentication is required.",
+    });
+}
+
+console.log(
+  "kmiTts authenticated request"
+);
+
   try {
- const { text, languageCode, pitch, voice, style } = req.body || {};
- if (!text || typeof text !== "string" || !text.trim()) {
-   return res.status(400).json({ error: 'Missing "text" field in body' });
+ const {
+   text,
+   languageCode,
+   pitch,
+   voice,
+   style,
+ } =
+   req.body || {};
+
+ if (
+   typeof text !== "string" ||
+   !text.trim()
+ ) {
+   return res
+     .status(400)
+     .json({
+       error:
+         'Missing "text" field in body',
+     });
+ }
+
+ const cleanTtsText =
+   text
+     .trim();
+
+ if (
+   cleanTtsText.length > 2000
+ ) {
+   return res
+     .status(413)
+     .json({
+       error:
+         "TTS text is too long.",
+     });
  }
 
  const lang = (languageCode || "he-IL").trim();
@@ -13763,7 +14921,8 @@ exports.kmiTts = functions.https.onRequest(async (req, res) => {
 // 🔥 ניסיון ראשון – קול אנושי, רק אם נבחר human
 if (wantHuman && preferredHumanVoice) {
   const humanResult = await synthesizeHumanVoice({
-    text,
+    text:
+      cleanTtsText,
     lang,
     preferredHumanVoice,
   });
@@ -13786,14 +14945,21 @@ if (wantHuman && preferredHumanVoice) {
    }
 
 // fallback רגיל
-const { audioContent, usedVoiceName, usedEngine } = await synthesizeWithVoiceFallback({
-  text,
-  lang,
-  voiceKey,
-  rate,
-  pitch,
-  style: resolvedStyle,
-});
+const {
+  audioContent,
+  usedVoiceName,
+  usedEngine,
+} =
+  await synthesizeWithVoiceFallback({
+    text:
+      cleanTtsText,
+    lang,
+    voiceKey,
+    rate,
+    pitch,
+    style:
+      resolvedStyle,
+  });
 
   console.log("kmiTts final voice:", {
     voice: usedVoiceName,
@@ -13816,7 +14982,12 @@ const { audioContent, usedVoiceName, usedEngine } = await synthesizeWithVoiceFal
   return res.status(200).send(audioContent);
     } catch (err) {
     console.error("kmiTts error:", err);
-    return res.status(500).json({ error: "TTS failed", details: String(err) });
+   return res
+     .status(500)
+     .json({
+       error:
+         "TTS failed",
+     });
   }
 });
 
@@ -14112,68 +15283,8 @@ exports.verifyKmiSubscription =
             matchingLineItem
           );
 
-      const nowDate =
-        new Date();
-
-      const jerusalemDateParts =
-        new Intl.DateTimeFormat(
-          "en-CA",
-          {
-            timeZone:
-              "Asia/Jerusalem",
-
-            year:
-              "numeric",
-
-            month:
-              "2-digit",
-
-            day:
-              "2-digit",
-          }
-        )
-          .formatToParts(nowDate);
-
-      const year =
-        Number(
-          jerusalemDateParts
-            .find(
-              (part) =>
-                part.type === "year"
-            )
-            ?.value
-        );
-
-      const month =
-        Number(
-          jerusalemDateParts
-            .find(
-              (part) =>
-                part.type === "month"
-            )
-            ?.value
-        );
-
-      const day =
-        Number(
-          jerusalemDateParts
-            .find(
-              (part) =>
-                part.type === "day"
-            )
-            ?.value
-        );
-
-      const jerusalemMidnight =
-        new Date(
-          `${String(year).padStart(4, "0")}-` +
-          `${String(month).padStart(2, "0")}-` +
-          `${String(day).padStart(2, "0")}` +
-          "T00:00:00+03:00"
-        );
-
-      const nowMillis =
-        jerusalemMidnight.getTime();
+const nowMillis =
+  Date.now();
 
         const active =
           Boolean(matchingLineItem) &&
@@ -14285,7 +15396,6 @@ exports.verifyKmiSubscription =
         console.log(
           "KMI subscription verification completed:",
           {
-            uid,
             productId,
             active,
             subscriptionState,
@@ -14583,19 +15693,8 @@ async function reserveAiBudget(
           ? entitlementSnapshot.data() || {}
           : {};
 
-     const requestedNowMillis =
-       Number(
-         data &&
-         data.nowMillis
-       );
-
      const nowMillis =
-       Number.isFinite(
-         requestedNowMillis
-       ) &&
-       requestedNowMillis > 0
-         ? requestedNowMillis
-         : Date.now();
+       Date.now();
 
       const subscriptionActive =
         entitlement.active === true &&
@@ -15504,16 +16603,15 @@ exports.kmiAiAssistant =
             },
           };
         } catch (error) {
-          console.error(
-            "KMI AI assistant failed:",
-            {
-              uid,
-              monthKey,
-              openAiCompleted,
-              error:
-                String(error),
-            }
-          );
+         console.error(
+           "KMI AI assistant failed:",
+           {
+             monthKey,
+             openAiCompleted,
+             error:
+               String(error),
+           }
+         );
 
           /*
            * אם OpenAI כבר החזיר תשובה אבל הייתה תקלה

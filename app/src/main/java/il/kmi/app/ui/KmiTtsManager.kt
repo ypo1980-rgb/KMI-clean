@@ -6,6 +6,8 @@ import androidx.media3.common.PlaybackException
 import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
+import com.google.android.gms.tasks.Tasks
+import com.google.firebase.auth.FirebaseAuth
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -363,6 +365,28 @@ object KmiTtsManager {
         }
 
         withContext(Dispatchers.IO) {
+            val firebaseUser =
+                FirebaseAuth.getInstance().currentUser
+                    ?: throw IllegalStateException(
+                        "Firebase user is not signed in"
+                    )
+
+            val idTokenResult =
+                Tasks.await(
+                    firebaseUser.getIdToken(false)
+                )
+
+            val idToken =
+                idTokenResult.token
+                    ?.trim()
+                    .orEmpty()
+
+            if (idToken.isBlank()) {
+                throw IllegalStateException(
+                    "Firebase ID token is empty"
+                )
+            }
+
             val urlStr = requireValidCloudUrl()
             val url = URL(urlStr)
 
@@ -371,7 +395,16 @@ object KmiTtsManager {
                 connectTimeout = 4_000
                 readTimeout = 8_000
                 doOutput = true
-                setRequestProperty("Content-Type", "application/json; charset=utf-8")
+
+                setRequestProperty(
+                    "Content-Type",
+                    "application/json; charset=utf-8"
+                )
+
+                setRequestProperty(
+                    "Authorization",
+                    "Bearer $idToken"
+                )
             }
 
             val body = JSONObject()
