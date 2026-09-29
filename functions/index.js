@@ -31,7 +31,281 @@ function normalizeDigits(value) {
 }
 
 function normalizeEmail(value) {
-  return String(value || "").trim().toLowerCase();
+  return String(value || "")
+    .trim()
+    .toLowerCase();
+}
+
+/**
+ * ====================================================
+ * Global User Identity
+ *
+ * מקור אמת גלובלי לאיחוד רשומות משתמש.
+ *
+ * שתי רשומות נחשבות לאותו אדם כאשר יש ביניהן
+ * לפחות אחד מהמזהים הבאים:
+ *
+ * - אותו UID
+ * - אותו טלפון מנורמל
+ * - אותו אימייל מנורמל
+ *
+ * האיחוד הוא טרנזיטיבי:
+ * A זהה ל-B לפי טלפון,
+ * B זהה ל-C לפי אימייל,
+ * לכן A+B+C הם אדם אחד.
+ *
+ * אין איחוד לפי שם בלבד.
+ * ====================================================
+ */
+function normalizeUserPhone(value) {
+  let digits =
+    normalizeDigits(value);
+
+  if (!digits) {
+    return "";
+  }
+
+  /*
+   * 00972XXXXXXXXX
+   * -> 0XXXXXXXXX
+   */
+  if (
+    digits.startsWith("00972") &&
+    digits.length > 5
+  ) {
+    digits =
+      "0" +
+      digits.substring(5);
+  }
+
+  /*
+   * 972XXXXXXXXX
+   * -> 0XXXXXXXXX
+   */
+  if (
+    digits.startsWith("972") &&
+    digits.length > 3
+  ) {
+    digits =
+      "0" +
+      digits.substring(3);
+  }
+
+  /*
+   * מספר סלולרי ישראלי ללא 0 מוביל.
+   * 5XXXXXXXX -> 05XXXXXXXX
+   */
+  if (
+    digits.length === 9 &&
+    digits.startsWith("5")
+  ) {
+    digits =
+      "0" + digits;
+  }
+
+  return digits;
+}
+
+function globalUserEmail(user) {
+  return normalizeEmail(
+    user &&
+    (
+      user.email ||
+      user.emailLower ||
+      user.userEmail ||
+      user.user_email ||
+      user.mail ||
+      user.gmail ||
+      ""
+    )
+  );
+}
+
+function globalUserPhone(user) {
+  return normalizeUserPhone(
+    user &&
+    (
+      user.phone ||
+      user.phoneDigits ||
+      user.phoneNumber ||
+      user.phone_number ||
+      user.mobile ||
+      user.mobilePhone ||
+      user.cellPhone ||
+      ""
+    )
+  );
+}
+
+function globalUserUid(
+  documentId,
+  user
+) {
+  return String(
+    user &&
+    (
+      user.uid ||
+      user.authUid ||
+      user.userDocId ||
+      user.traineeId
+    ) ||
+    documentId ||
+    ""
+  ).trim();
+}
+
+/**
+ * מקבל רשומות בצורה:
+ *
+ * {
+ *   id: document.id,
+ *   user: document.data()
+ * }
+ *
+ * ומחזיר מערך קבוצות.
+ * כל קבוצה מייצגת אדם אחד.
+ */
+function groupUsersByIdentity(
+  entries
+) {
+  const safeEntries =
+    Array.isArray(entries)
+      ? entries.filter(Boolean)
+      : [];
+
+  if (safeEntries.length === 0) {
+    return [];
+  }
+
+  /*
+   * Union-Find מאפשר איחוד טרנזיטיבי אמיתי.
+   */
+  const parent =
+    safeEntries.map(
+      (_, index) => index
+    );
+
+  function find(index) {
+    if (parent[index] !== index) {
+      parent[index] =
+        find(parent[index]);
+    }
+
+    return parent[index];
+  }
+
+  function union(
+    firstIndex,
+    secondIndex
+  ) {
+    const firstRoot =
+      find(firstIndex);
+
+    const secondRoot =
+      find(secondIndex);
+
+    if (firstRoot !== secondRoot) {
+      parent[secondRoot] =
+        firstRoot;
+    }
+  }
+
+  const uidOwner =
+    new Map();
+
+  const emailOwner =
+    new Map();
+
+  const phoneOwner =
+    new Map();
+
+  safeEntries.forEach(
+    (entry, index) => {
+
+      const user =
+        entry.user || {};
+
+      const uid =
+        globalUserUid(
+          entry.id,
+          user
+        );
+
+      const email =
+        globalUserEmail(user);
+
+      const phone =
+        globalUserPhone(user);
+
+      if (uid) {
+        if (uidOwner.has(uid)) {
+          union(
+            index,
+            uidOwner.get(uid)
+          );
+        } else {
+          uidOwner.set(
+            uid,
+            index
+          );
+        }
+      }
+
+      if (email) {
+        if (emailOwner.has(email)) {
+          union(
+            index,
+            emailOwner.get(email)
+          );
+        } else {
+          emailOwner.set(
+            email,
+            index
+          );
+        }
+      }
+
+      if (phone) {
+        if (phoneOwner.has(phone)) {
+          union(
+            index,
+            phoneOwner.get(phone)
+          );
+        } else {
+          phoneOwner.set(
+            phone,
+            index
+          );
+        }
+      }
+    }
+  );
+
+  const groups =
+    new Map();
+
+  safeEntries.forEach(
+    (entry, index) => {
+
+      const root =
+        find(index);
+
+      if (!groups.has(root)) {
+        groups.set(
+          root,
+          []
+        );
+      }
+
+      groups
+        .get(root)
+        .push(entry);
+    }
+  );
+
+  return Array.from(
+    groups.values()
+  );
 }
 
 function loadEmailTemplate(fileName) {
@@ -663,21 +937,21 @@ exports.verifyCoachInvite = functions.https.onCall(async (data, context) => {
                 ""
               ).trim();
 
-            const groups =
-              Array.isArray(
-                assignment &&
-                assignment.groups
-              )
-                ? [
-                    ...new Set(
-                      assignment.groups
-                        .map((group) =>
-                          String(group || "").trim()
-                        )
-                        .filter(Boolean)
-                    ),
-                  ]
-                : [];
+           const groups =
+             Array.isArray(
+               assignment &&
+               assignment.groups
+             )
+               ? Array.from(
+                   new Set(
+                     assignment.groups
+                       .map((group) =>
+                         String(group || "").trim()
+                       )
+                       .filter(Boolean)
+                   )
+                 )
+               : [];
 
             return {
               branch,
@@ -696,21 +970,25 @@ exports.verifyCoachInvite = functions.https.onCall(async (data, context) => {
       ""
     ).trim();
 
-  const coachPayload = {
-    active: true,
-    role: "coach",
-    fullName,
-    email: emailLower,
-    emailLower,
-    phoneDigits,
-    linkedFromInvite: phoneDigits,
-    linkedAt: admin.firestore.FieldValue.serverTimestamp(),
-    linkedAtMillis: Date.now(),
+ const coachPayload =
+   Object.assign(
+     {
+       active: true,
+       role: "coach",
+       fullName,
+       email: emailLower,
+       emailLower,
+       phoneDigits,
+       linkedFromInvite: phoneDigits,
+       linkedAt:
+         admin.firestore.FieldValue.serverTimestamp(),
+       linkedAtMillis:
+         Date.now(),
 
-    coachBranchAssignments,
-
-    ...permissions,
-  };
+       coachBranchAssignments,
+     },
+     permissions
+   );
 
   await authorizedCoachRef.set(
     coachPayload,
@@ -726,18 +1004,30 @@ exports.verifyCoachInvite = functions.https.onCall(async (data, context) => {
     { merge: true }
   );
 
-  await db.collection("users").doc(uid).set(
-    {
-      role: "coach",
-      userType: "coach",
-      isCoach: true,
-      coachAuthorized: true,
-      coachInvitePhoneDigits: phoneDigits,
-      coachAuthorizedAt: admin.firestore.FieldValue.serverTimestamp(),
-      ...permissions,
-    },
-    { merge: true }
-  );
+ const userCoachPayload =
+   Object.assign(
+     {
+       role: "coach",
+       userType: "coach",
+       isCoach: true,
+       coachAuthorized: true,
+       coachInvitePhoneDigits:
+         phoneDigits,
+       coachAuthorizedAt:
+         admin.firestore.FieldValue.serverTimestamp(),
+     },
+     permissions
+   );
+
+ await db
+   .collection("users")
+   .doc(uid)
+   .set(
+     userCoachPayload,
+     {
+       merge: true,
+     }
+   );
 
   return {
     allowed: true,
@@ -1005,11 +1295,11 @@ exports.loadSecurePaymentsReport =
             });
           });
 
-          return [
-            ...new Set(
-              values.filter(Boolean)
-            ),
-          ];
+         return Array.from(
+           new Set(
+             values.filter(Boolean)
+           )
+         );
         };
 
       const userDisplayName =
@@ -1246,48 +1536,24 @@ exports.loadSecurePaymentsReport =
           });
         });
 
-      const groupedUsers =
-        new Map();
+   const groupedUsers =
+     groupUsersByIdentity(
+       allowedUsers.map(
+         ({ document, user }) => ({
+           id:
+             document.id,
 
-      allowedUsers.forEach(
-        ({ document, user }) => {
+           user,
 
-          const email =
-            userEmail(user);
-
-          const phone =
-            userPhone(user);
-
-          const mergeKey =
-            email
-              ? `email:${email}`
-              : (
-                  phone
-                    ? `phone:${phone}`
-                    : `doc:${document.id}`
-                );
-
-          const existing =
-            groupedUsers.get(
-              mergeKey
-            ) || [];
-
-          existing.push({
-            document,
-            user,
-          });
-
-          groupedUsers.set(
-            mergeKey,
-            existing
-          );
-        }
-      );
+           document,
+         })
+       )
+     );
 
       const items = [];
 
-      groupedUsers.forEach(
-        (entries) => {
+     groupedUsers.forEach(
+       (entries) => {
 
           const primary =
             entries
@@ -1333,24 +1599,30 @@ exports.loadSecurePaymentsReport =
               primary.document.id
             );
 
-          const identityKeys =
-            [
-              traineeId,
-              primary.document.id,
-              ...entries.flatMap(
-                ({ document, user }) => [
-                  document.id,
-                  user.uid,
-                  user.authUid,
-                  user.userDocId,
-                  user.traineeId,
-                ]
-              ),
-            ]
-              .map((value) =>
-                cleanText(value)
-              )
-              .filter(Boolean);
+       const identityKeys =
+         Array.from(
+           new Set(
+             [
+               traineeId,
+               primary.document.id,
+             ]
+               .concat(
+                 entries.flatMap(
+                   ({ document, user }) => [
+                     document.id,
+                     user.uid,
+                     user.authUid,
+                     user.userDocId,
+                     user.traineeId,
+                   ]
+                 )
+               )
+               .map((value) =>
+                 cleanText(value)
+               )
+               .filter(Boolean)
+           )
+         );
 
           let payment = null;
 
@@ -1763,24 +2035,97 @@ exports.updateSecureMembershipPayment =
        * - authUid
        * - userDocId
        */
-      const usersSnapshot =
-        await db
-          .collection("users")
-          .get();
+  const usersSnapshot =
+    await db
+      .collection("users")
+      .get();
 
-      let matchedDocument = null;
-      let matchedUser = null;
+  const paymentUserEntries =
+    usersSnapshot.docs.map(
+      (document) => ({
+        id:
+          document.id,
 
-      for (
-        const document
-        of usersSnapshot.docs
-      ) {
+        document,
+
+        user:
+          document.data() || {},
+      })
+    );
+
+  const paymentIdentityGroups =
+    groupUsersByIdentity(
+      paymentUserEntries
+    );
+
+  let matchedIdentityEntries =
+    null;
+
+  for (
+    const entries
+    of paymentIdentityGroups
+  ) {
+    const containsRequestedIdentity =
+      entries.some(
+        (entry) => {
+
+          const user =
+            entry.user || {};
+
+          const identityKeys =
+            [
+              entry.id,
+              user.uid,
+              user.authUid,
+              user.userDocId,
+              user.traineeId,
+            ]
+              .map((value) =>
+                String(value || "")
+                  .trim()
+              )
+              .filter(Boolean);
+
+          return identityKeys.includes(
+            traineeId
+          );
+        }
+      );
+
+    if (containsRequestedIdentity) {
+      matchedIdentityEntries =
+        entries;
+
+      break;
+    }
+  }
+
+  if (
+    !Array.isArray(
+      matchedIdentityEntries
+    ) ||
+    matchedIdentityEntries.length === 0
+  ) {
+    throw new functions.https.HttpsError(
+      "not-found",
+      "Trainee was not found."
+    );
+  }
+
+  /*
+   * מעדיפים את הרשומה שאליה ה-traineeId
+   * שנשלח מהדו"ח מצביע בפועל.
+   */
+  const exactIdentityEntry =
+    matchedIdentityEntries.find(
+      (entry) => {
+
         const user =
-          document.data() || {};
+          entry.user || {};
 
         const identityKeys =
           [
-            document.id,
+            entry.id,
             user.uid,
             user.authUid,
             user.userDocId,
@@ -1792,71 +2137,93 @@ exports.updateSecureMembershipPayment =
             )
             .filter(Boolean);
 
-        if (
-          identityKeys.includes(
-            traineeId
-          )
-        ) {
-          matchedDocument =
-            document;
-
-          matchedUser =
-            user;
-
-          break;
-        }
-      }
-
-      if (
-        !matchedDocument ||
-        !matchedUser
-      ) {
-        throw new functions.https.HttpsError(
-          "not-found",
-          "Trainee was not found."
+        return identityKeys.includes(
+          traineeId
         );
       }
+    );
 
-      const role =
-        String(
-          matchedUser.role ||
-          matchedUser.userRole ||
-          matchedUser.userType ||
-          ""
+  const primaryIdentityEntry =
+    exactIdentityEntry ||
+    matchedIdentityEntries[0];
+
+  if (
+    !primaryIdentityEntry ||
+    !primaryIdentityEntry.document
+  ) {
+    throw new functions.https.HttpsError(
+      "not-found",
+      "Trainee was not found."
+    );
+  }
+
+  const matchedDocument =
+    primaryIdentityEntry.document;
+
+  const matchedUser =
+    primaryIdentityEntry.user || {};
+
+   const isCoachTarget =
+     matchedIdentityEntries.some(
+       (entry) => {
+
+         const user =
+           entry.user || {};
+
+         const role =
+           String(
+             user.role ||
+             user.userRole ||
+             user.user_role ||
+             user.userType ||
+             user.type ||
+             ""
+           )
+             .trim()
+             .toLowerCase();
+
+         return (
+           role === "coach" ||
+           role === "trainer" ||
+           role === "מאמן" ||
+           user.isCoach === true
+         );
+       }
+     );
+
+   if (isCoachTarget) {
+     throw new functions.https.HttpsError(
+       "permission-denied",
+       "Payment target is not a trainee."
+     );
+   }
+
+const traineeBranches =
+  Array.from(
+    new Set(
+      matchedIdentityEntries
+        .flatMap(
+          (entry) =>
+            parseUserTargetValues(
+              entry.user || {},
+              [
+                "branch",
+                "branches",
+                "branches_json",
+                "branchesCsv",
+                "selected_branches",
+                "selectedBranches",
+                "active_branch",
+                "activeBranch",
+                "branchName",
+              ]
+            )
         )
-          .trim()
-          .toLowerCase();
+        .filter(Boolean)
+    )
+  );
 
-      const isCoachTarget =
-        role === "coach" ||
-        role === "trainer" ||
-        role === "מאמן" ||
-        matchedUser.isCoach === true;
-
-      if (isCoachTarget) {
-        throw new functions.https.HttpsError(
-          "permission-denied",
-          "Payment target is not a trainee."
-        );
-      }
-
-      const traineeBranches =
-        parseUserTargetValues(
-          matchedUser,
-          [
-            "branch",
-            "branches",
-            "branches_json",
-            "branchesCsv",
-            "selected_branches",
-            "selectedBranches",
-            "active_branch",
-            "activeBranch",
-            "branchName",
-          ]
-        );
-
-      let resolvedBranch = "";
+let resolvedBranch = "";
 
       if (isAdminUser) {
         resolvedBranch =
@@ -1931,25 +2298,76 @@ exports.updateSecureMembershipPayment =
         );
       }
 
-      const paymentDocId =
-        String(
-          matchedUser.uid ||
-          matchedUser.authUid ||
-          matchedDocument.id
-        ).trim();
+   const paymentIdentityIds =
+     Array.from(
+       new Set(
+         matchedIdentityEntries
+           .flatMap(
+             (entry) => {
 
-      if (!paymentDocId) {
-        throw new functions.https.HttpsError(
-          "internal",
-          "Unable to resolve payment identity."
-        );
-      }
+               const user =
+                 entry.user || {};
 
-      const paymentRef =
-        db.collection(
-          "membershipPayments"
-        )
-          .doc(paymentDocId);
+               return [
+                 entry.id,
+                 user.uid,
+                 user.authUid,
+                 user.userDocId,
+                 user.traineeId,
+               ];
+             }
+           )
+           .concat([
+             traineeId,
+             matchedDocument.id,
+           ])
+           .map((value) =>
+             String(value || "")
+               .trim()
+           )
+           .filter(Boolean)
+       )
+     );
+
+   const existingPaymentSnapshots =
+     await Promise.all(
+       paymentIdentityIds.map(
+         (identityId) =>
+           db
+             .collection(
+               "membershipPayments"
+             )
+             .doc(identityId)
+             .get()
+       )
+     );
+
+   const existingPaymentSnapshot =
+     existingPaymentSnapshots.find(
+       (snapshot) =>
+         snapshot.exists
+     );
+
+   const paymentDocId =
+     existingPaymentSnapshot
+       ? existingPaymentSnapshot.id
+       : String(
+           matchedDocument.id || ""
+         ).trim();
+
+   if (!paymentDocId) {
+     throw new functions.https.HttpsError(
+       "internal",
+       "Unable to resolve payment identity."
+     );
+   }
+
+   const paymentRef =
+     db
+       .collection(
+         "membershipPayments"
+       )
+       .doc(paymentDocId);
 
       const historyRef =
         paymentRef
@@ -2027,16 +2445,34 @@ exports.updateSecureMembershipPayment =
                   )
                 : 0;
 
-            const requiredAmountRaw =
-              Number(
-                existingPayment.requiredAmount ||
-                matchedUser.requiredAmount ||
-                matchedUser.membershipRequiredAmount ||
-                matchedUser.membershipFee ||
-                matchedUser.annualMembershipFee ||
-                matchedUser.feeAmount ||
-                150
-              );
+         const identityRequiredAmount =
+           matchedIdentityEntries
+             .map((entry) => {
+
+               const user =
+                 entry.user || {};
+
+               return Number(
+                 user.requiredAmount ||
+                 user.membershipRequiredAmount ||
+                 user.membershipFee ||
+                 user.annualMembershipFee ||
+                 user.feeAmount ||
+                 0
+               );
+             })
+             .find(
+               (value) =>
+                 Number.isFinite(value) &&
+                 value > 0
+             );
+
+         const requiredAmountRaw =
+           Number(
+             existingPayment.requiredAmount ||
+             identityRequiredAmount ||
+             150
+           );
 
             const requiredAmount =
               Number.isFinite(
@@ -2066,17 +2502,27 @@ exports.updateSecureMembershipPayment =
                 "PARTIAL";
             }
 
-            const fullName =
-              paymentDisplayName(
-                matchedUser
-              );
+           const fullName =
+             matchedIdentityEntries
+               .map((entry) =>
+                 paymentDisplayName(
+                   entry.user || {}
+                 )
+               )
+               .find(Boolean) ||
+             "";
 
-            const phone =
-              paymentPhone(
-                matchedUser
-              );
+           const phone =
+             matchedIdentityEntries
+               .map((entry) =>
+                 paymentPhone(
+                   entry.user || {}
+                 )
+               )
+               .find(Boolean) ||
+             "";
 
-            const paymentData = {
+           const paymentData = {
               traineeId:
                 paymentDocId,
 
@@ -2351,13 +2797,106 @@ exports.loadSecureBeltComparison =
         );
       }
 
-      const progressByUid =
-        await loadValidProgressForBelt(
-          beltId
-        );
+     const progressByUid =
+       await loadValidProgressForBelt(
+         beltId
+       );
 
-      const currentUserPercent =
-        progressByUid.get(uid);
+     const comparisonUsersSnapshot =
+       await db
+         .collection("users")
+         .get();
+
+     const comparisonIdentityGroups =
+       groupUsersByIdentity(
+         comparisonUsersSnapshot.docs.map(
+           (document) => ({
+             id:
+               document.id,
+
+             user:
+               document.data() || {},
+           })
+         )
+       );
+
+     const comparisonIdentityKeyByUid =
+       new Map();
+
+     comparisonIdentityGroups.forEach(
+       (entries, groupIndex) => {
+
+         const identityKey =
+           `person:${groupIndex}`;
+
+         entries.forEach(
+           (entry) => {
+
+             const user =
+               entry.user || {};
+
+             [
+               entry.id,
+               user.uid,
+               user.authUid,
+               user.userDocId,
+               user.traineeId,
+             ]
+               .map((value) =>
+                 String(value || "")
+                   .trim()
+               )
+               .filter(Boolean)
+               .forEach(
+                 (identityValue) => {
+
+                   comparisonIdentityKeyByUid.set(
+                     identityValue,
+                     identityKey
+                   );
+                 }
+               );
+           }
+         );
+       }
+     );
+
+     const currentIdentityKey =
+       comparisonIdentityKeyByUid.get(
+         uid
+       ) ||
+       `uid:${uid}`;
+
+     const progressByIdentity =
+       new Map();
+
+     progressByUid.forEach(
+       (percent, progressUid) => {
+
+         const identityKey =
+           comparisonIdentityKeyByUid.get(
+             progressUid
+           ) ||
+           `uid:${progressUid}`;
+
+         if (
+           !progressByIdentity.has(
+             identityKey
+           ) ||
+           progressUid === uid
+         ) {
+           progressByIdentity.set(
+             identityKey,
+             percent
+           );
+         }
+       }
+     );
+
+     const currentUserPercent =
+       progressByIdentity.get(
+         currentIdentityKey
+       );
 
       /*
        * אין משתמש נוכחי תקין בנתוני החגורה.
@@ -2368,8 +2907,8 @@ exports.loadSecureBeltComparison =
       ) {
         return {
           beltId,
-          usersCount:
-            progressByUid.size,
+         usersCount:
+           progressByIdentity.size,
           userKnownPercent: 0,
           averageKnownPercent: 0,
           percentileAbove: 0,
@@ -2379,16 +2918,17 @@ exports.loadSecureBeltComparison =
 
       const allPercents =
         Array.from(
-          progressByUid.values()
+          progressByIdentity.values()
         );
 
       const otherPercents =
         Array.from(
-          progressByUid.entries()
+          progressByIdentity.entries()
         )
           .filter(
-            ([otherUid]) =>
-              otherUid !== uid
+            ([identityKey]) =>
+              identityKey !==
+              currentIdentityKey
           )
           .map(
             ([, percent]) =>
@@ -2669,19 +3209,25 @@ exports.loadSecureCoachGroupsBeltProgress =
         };
       }
 
-      const usersSnapshot =
-        await db
-          .collection("users")
-          .get();
+    const usersSnapshot =
+      await db
+        .collection("users")
+        .get();
 
-      const traineeUids =
-        new Set();
-
+    /*
+     * קודם מסננים רק מתאמנים שנמצאים
+     * בתחום ההרשאה הרלוונטי.
+     */
+    const eligibleTraineeEntries =
       usersSnapshot.docs
-        .forEach((document) => {
+        .map((document) => ({
+          id:
+            document.id,
 
-          const user =
-            document.data() || {};
+          user:
+            document.data() || {},
+        }))
+        .filter(({ id, user }) => {
 
           const role =
             String(
@@ -2700,32 +3246,29 @@ exports.loadSecureCoachGroupsBeltProgress =
             user.isCoach === true;
 
           if (isCoach) {
-            return;
+            return false;
+          }
+
+          const candidateUid =
+            String(
+              user.uid ||
+              user.authUid ||
+              id ||
+              ""
+            ).trim();
+
+          if (
+            !candidateUid ||
+            candidateUid === uid
+          ) {
+            return false;
           }
 
           /*
-           * Admin:
-           * כל המשתמשים שאינם מאמנים.
+           * Admin רואה את כל המשתמשים שאינם מאמנים.
            */
           if (isAdminUser) {
-            const traineeUid =
-              String(
-                user.uid ||
-                user.authUid ||
-                document.id ||
-                ""
-              ).trim();
-
-            if (
-              traineeUid &&
-              traineeUid !== uid
-            ) {
-              traineeUids.add(
-                traineeUid
-              );
-            }
-
-            return;
+            return true;
           }
 
           const traineeBranches =
@@ -2763,83 +3306,110 @@ exports.loadSecureCoachGroupsBeltProgress =
               ]
             );
 
-          const belongsToAuthorizedPair =
-            traineeBranches.some(
-              (branch) =>
-                traineeGroups.some(
-                  (group) =>
-                    authorizedPairKeys.has(
-                      `${branch}||${group}`
-                    )
-                )
-            );
-
-          if (
-            !belongsToAuthorizedPair
-          ) {
-            return;
-          }
-
-          const traineeUid =
-            String(
-              user.uid ||
-              user.authUid ||
-              document.id ||
-              ""
-            ).trim();
-
-          if (
-            traineeUid &&
-            traineeUid !== uid
-          ) {
-            traineeUids.add(
-              traineeUid
-            );
-          }
+          return traineeBranches.some(
+            (branch) =>
+              traineeGroups.some(
+                (group) =>
+                  authorizedPairKeys.has(
+                    `${branch}||${group}`
+                  )
+              )
+          );
         });
 
-      if (
-        traineeUids.size === 0
-      ) {
-        return {
-          beltId,
+    /*
+     * מאחדים כפילויות לפי:
+     * UID / אימייל / טלפון.
+     */
+    const traineeIdentityGroups =
+      groupUsersByIdentity(
+        eligibleTraineeEntries
+      );
 
-          groupsCount:
-            isAdminUser
-              ? 0
-              : authorizedPairKeys.size,
+    if (
+      traineeIdentityGroups.length === 0
+    ) {
+      return {
+        beltId,
 
-          totalTrainees: 0,
-          traineesWithProgress: 0,
-          averageKnownPercent: 0,
-        };
+        groupsCount:
+          isAdminUser
+            ? 0
+            : authorizedPairKeys.size,
+
+        totalTrainees: 0,
+        traineesWithProgress: 0,
+        averageKnownPercent: 0,
+      };
+    }
+
+    const progressByUid =
+      await loadValidProgressForBelt(
+        beltId
+      );
+
+    const matchedPercents =
+      [];
+
+    /*
+     * כל קבוצת זהות היא אדם אחד.
+     *
+     * אם קיימים כמה UID-ים לאותו אדם,
+     * מחפשים התקדמות אצל כולם אבל מוסיפים
+     * לכל היותר אחוז אחד לאותו אדם.
+     */
+    traineeIdentityGroups.forEach(
+      (entries) => {
+
+  const identityUids =
+    Array.from(
+      new Set(
+        entries
+          .flatMap(
+            (entry) => {
+
+              const user =
+                entry.user || {};
+
+              return [
+                entry.id,
+                user.uid,
+                user.authUid,
+                user.userDocId,
+                user.traineeId,
+              ];
+            }
+          )
+          .map((value) =>
+            String(value || "")
+              .trim()
+          )
+          .filter(Boolean)
+      )
+    );
+
+        const percent =
+          identityUids
+            .map((identityUid) =>
+              progressByUid.get(
+                identityUid
+              )
+            )
+            .find(
+              (value) =>
+                typeof value === "number"
+            );
+
+        if (
+          typeof percent ===
+          "number"
+        ) {
+          matchedPercents.push(
+            percent
+          );
+        }
       }
-
-      const progressByUid =
-        await loadValidProgressForBelt(
-          beltId
-        );
-
-      const matchedPercents =
-        [];
-
-      traineeUids.forEach(
-        (traineeUid) => {
-
-          const percent =
-            progressByUid.get(
-              traineeUid
-            );
-
-          if (
-            typeof percent ===
-            "number"
-          ) {
-            matchedPercents.push(
-              percent
-            );
-          }
-        });
+    );
 
       const averageKnownPercent =
         matchedPercents.length > 0
@@ -2867,8 +3437,8 @@ exports.loadSecureCoachGroupsBeltProgress =
             ? 0
             : authorizedPairKeys.size,
 
-        totalTrainees:
-          traineeUids.size,
+      totalTrainees:
+        traineeIdentityGroups.length,
 
         traineesWithProgress:
           matchedPercents.length,
@@ -3554,105 +4124,20 @@ exports.loadSecureCoachTrainees =
             }
           );
 
-      /*
-       * מאחדים רשומות כפולות.
-       */
-      const identityGroups =
-        [];
-
-      matchedDocuments.forEach(
-        (entry) => {
-
-          const emailKey =
-            normalizeCoachEmail(
-              traineeEmail(
-                entry.user
-              )
-            );
-
-          const phoneKey =
-            normalizeCoachPhone(
-              traineePhone(
-                entry.user
-              )
-            );
-
-          const nameKey =
-            normalizeTrainingTargetText(
-              traineeDisplayName(
-                entry.user
-              )
-            );
-
-          const matchingGroup =
-            identityGroups
-              .find((group) =>
-                group.some(
-                  (existing) => {
-
-                    const existingEmail =
-                      normalizeCoachEmail(
-                        traineeEmail(
-                          existing.user
-                        )
-                      );
-
-                    const existingPhone =
-                      normalizeCoachPhone(
-                        traineePhone(
-                          existing.user
-                        )
-                      );
-
-                    const existingName =
-                      normalizeTrainingTargetText(
-                        traineeDisplayName(
-                          existing.user
-                        )
-                      );
-
-                    if (
-                      emailKey &&
-                      existingEmail &&
-                      emailKey ===
-                      existingEmail
-                    ) {
-                      return true;
-                    }
-
-                    if (
-                      phoneKey &&
-                      existingPhone &&
-                      phoneKey ===
-                      existingPhone
-                    ) {
-                      return true;
-                    }
-
-                    return (
-                      !emailKey &&
-                      !phoneKey &&
-                      !existingEmail &&
-                      !existingPhone &&
-                      nameKey &&
-                      nameKey ===
-                      existingName
-                    );
-                  }
-                )
-              );
-
-          if (matchingGroup) {
-            matchingGroup.push(
-              entry
-            );
-          } else {
-            identityGroups.push([
-              entry,
-            ]);
-          }
-        }
-      );
+     /*
+      * איחוד משתמשים דרך מנגנון הזהות הגלובלי.
+      *
+      * האיחוד מתבצע לפי:
+      * - UID
+      * - אימייל מנורמל
+      * - טלפון מנורמל
+      *
+      * אין איחוד לפי שם בלבד.
+      */
+     const identityGroups =
+       groupUsersByIdentity(
+         matchedDocuments
+       );
 
       const items =
         identityGroups
@@ -4833,67 +5318,215 @@ exports.loadSecureCoachBroadcastRecipients =
         }
       );
 
+  /*
+   * איחוד נמענים דרך מנגנון הזהות הגלובלי.
+   *
+   * אותו אדם מזוהה לפי:
+   * - UID
+   * - אימייל
+   * - טלפון
+   */
+  const recipientIdentityGroups =
+    groupUsersByIdentity(
+      recipients.map(
+        (recipient) => ({
+          id:
+            recipient.userDocId ||
+            recipient.uid,
+
+          user: {
+            uid:
+              recipient.uid,
+
+            email:
+              recipient.email,
+
+            phone:
+              recipient.phone,
+
+            fullName:
+              recipient.name,
+          },
+
+          recipient,
+        })
+      )
+    );
+
+  const uniqueRecipients =
+    recipientIdentityGroups
+      .map((entries) => {
+
+      if (
+        !Array.isArray(entries) ||
+        entries.length === 0
+      ) {
+        return null;
+      }
+
       /*
-       * מניעת כפילויות.
+       * מעדיפים רשומה שיש בה יותר פרטים.
        */
-      const uniqueRecipients =
-        Array.from(
-          recipients.reduce(
-            (map, recipient) => {
+      const primary =
+        entries
+          .slice()
+          .sort((a, b) => {
 
-              const key =
-                recipient.uid ||
-                recipient.userDocId;
+            const aRecipient =
+              a.recipient || {};
 
-              if (
-                key &&
-                !map.has(key)
-              ) {
-                map.set(
-                  key,
-                  recipient
-                );
-              }
+            const bRecipient =
+              b.recipient || {};
 
-              return map;
-            },
-            new Map()
-          ).values()
+            const aScore =
+              (aRecipient.name ? 1 : 0) +
+              (aRecipient.email ? 1 : 0) +
+              (aRecipient.phone ? 1 : 0);
+
+            const bScore =
+              (bRecipient.name ? 1 : 0) +
+              (bRecipient.email ? 1 : 0) +
+              (bRecipient.phone ? 1 : 0);
+
+            return bScore - aScore;
+          })[0];
+
+      if (!primary) {
+        return null;
+      }
+
+    const mergedGroups =
+      Array.from(
+        new Set(
+          entries.flatMap(
+            (entry) => {
+
+              const recipient =
+                entry.recipient || {};
+
+              return Array.isArray(
+                recipient.groups
+              )
+                ? recipient.groups
+                    .map((group) =>
+                      String(
+                        group || ""
+                      ).trim()
+                    )
+                    .filter(Boolean)
+                : [];
+            }
+          )
         )
-          .sort(
-            (a, b) =>
-              String(a.name || "")
-                .localeCompare(
-                  String(b.name || ""),
-                  "he"
-                )
-          );
+      );
 
-      const availableGroups =
-        Array.from(
-          authorizedGroupsForBranch.values()
-        )
-          .filter(Boolean)
-          .sort(
-            (a, b) =>
-              String(a)
-                .localeCompare(
-                  String(b),
-                  "he"
-                )
-          );
+      const mergedUid =
+        String(
+          primary.recipient.uid ||
+          ""
+        ).trim();
+
+      const mergedUserDocId =
+        String(
+          primary.recipient.userDocId ||
+          ""
+        ).trim();
+
+      const mergedName =
+        String(
+          primary.recipient.name ||
+          ""
+        ).trim();
+
+      const mergedPhone =
+        entries
+          .map((entry) =>
+            String(
+              entry.recipient &&
+              entry.recipient.phone ||
+              ""
+            ).trim()
+          )
+          .find(Boolean) ||
+        "";
+
+      const mergedEmail =
+        entries
+          .map((entry) =>
+            normalizeEmail(
+              entry.recipient &&
+              entry.recipient.email ||
+              ""
+            )
+          )
+          .find(Boolean) ||
+        "";
+
+      if (
+        !mergedUid &&
+        !mergedUserDocId
+      ) {
+        return null;
+      }
 
       return {
-        branch:
-          requestedBranch,
+        uid:
+          mergedUid,
 
-        availableGroups,
+        userDocId:
+          mergedUserDocId,
 
-        groupCounts,
+        name:
+          mergedName,
 
-        recipients:
-          uniqueRecipients,
+        phone:
+          mergedPhone,
+
+        email:
+          mergedEmail,
+
+        groups:
+          mergedGroups,
       };
+    })
+    .filter(Boolean)
+    .sort(
+      (a, b) =>
+        String(
+          a.name || ""
+        ).localeCompare(
+          String(
+            b.name || ""
+          ),
+          "he"
+        )
+    );
+
+const availableGroups =
+  Array.from(
+    authorizedGroupsForBranch.values()
+  )
+    .filter(Boolean)
+    .sort(
+      (a, b) =>
+        String(a)
+          .localeCompare(
+            String(b),
+            "he"
+          )
+    );
+
+return {
+  branch:
+    requestedBranch,
+
+  availableGroups,
+
+  groupCounts,
+
+  recipients:
+    uniqueRecipients,
+};
     }
   );
 
@@ -4961,41 +5594,41 @@ exports.createSecureCoachBroadcast =
           .trim()
           .slice(0, 5000);
 
-      const requestedGroups =
-        Array.isArray(
-          data &&
-          data.groups
-        )
-          ? [
-              ...new Set(
-                data.groups
-                  .map((value) =>
-                    String(value || "")
-                      .trim()
-                      .slice(0, 160)
-                  )
-                  .filter(Boolean)
-              ),
-            ].slice(0, 50)
-          : [];
+    const requestedGroups =
+      Array.isArray(
+        data &&
+        data.groups
+      )
+        ? Array.from(
+            new Set(
+              data.groups
+                .map((value) =>
+                  String(value || "")
+                    .trim()
+                    .slice(0, 160)
+                )
+                .filter(Boolean)
+            )
+          ).slice(0, 50)
+        : [];
 
-      const requestedTargetUids =
-        Array.isArray(
-          data &&
-          data.targetUids
-        )
-          ? [
-              ...new Set(
-                data.targetUids
-                  .map((value) =>
-                    String(value || "")
-                      .trim()
-                      .slice(0, 200)
-                  )
-                  .filter(Boolean)
-              ),
-            ].slice(0, 500)
-          : [];
+     const requestedTargetUids =
+       Array.isArray(
+         data &&
+         data.targetUids
+       )
+         ? Array.from(
+             new Set(
+               data.targetUids
+                 .map((value) =>
+                   String(value || "")
+                     .trim()
+                     .slice(0, 200)
+                 )
+                 .filter(Boolean)
+             )
+           ).slice(0, 500)
+         : [];
 
       if (
         !branch ||
@@ -5243,18 +5876,20 @@ exports.createSecureCoachBroadcast =
         );
       }
 
-      /*
-       * כל מזהה שהלקוח יכול לשלוח ממופה
-       * למסמך המשתמש המאומת שלו.
-       */
-      const allowedRecipientByIdentity =
-        new Map();
-
+    /*
+     * בונים תחילה רשימת משתמשים חוקיים
+     * בתחום הסניף והקבוצות המבוקשות.
+     */
+    const eligibleRecipientEntries =
       usersSnapshot.docs
-        .forEach((document) => {
+        .map((document) => ({
+          id:
+            document.id,
 
-          const user =
-            document.data() || {};
+          user:
+            document.data() || {},
+        }))
+        .filter(({ user }) => {
 
           const role =
             String(
@@ -5275,7 +5910,7 @@ exports.createSecureCoachBroadcast =
             user.isCoach === true;
 
           if (isCoach) {
-            return;
+            return false;
           }
 
           const status =
@@ -5295,7 +5930,7 @@ exports.createSecureCoachBroadcast =
             status !== "לא פעיל";
 
           if (!active) {
-            return;
+            return false;
           }
 
           const branches =
@@ -5319,7 +5954,7 @@ exports.createSecureCoachBroadcast =
               normalizedBranch
             )
           ) {
-            return;
+            return false;
           }
 
           const groups =
@@ -5341,73 +5976,172 @@ exports.createSecureCoachBroadcast =
               ]
             );
 
-          const belongsToAllowedGroup =
-            groups.some(
-              (group) =>
-                effectiveGroupKeys.has(
-                  group
-                )
-            );
+          return groups.some(
+            (group) =>
+              effectiveGroupKeys.has(
+                group
+              )
+          );
+        });
 
-          if (!belongsToAllowedGroup) {
-            return;
-          }
+    /*
+     * מאחדים את כל הרשומות של אותו אדם לפי:
+     * - UID
+     * - אימייל
+     * - טלפון
+     */
+    const recipientIdentityGroups =
+      groupUsersByIdentity(
+        eligibleRecipientEntries
+      );
 
-          const identities =
+    /*
+     * כל UID / documentId ישן או חדש
+     * ימופה למסמך קנוני אחד בלבד.
+     *
+     * חשוב:
+     * בוחרים document.id כמזהה היעד,
+     * כי טריגר ה-Push קורא אחר כך users/{uid}.
+     */
+    const allowedRecipientByIdentity =
+      new Map();
+
+    recipientIdentityGroups.forEach(
+      (entries) => {
+
+        if (
+          !Array.isArray(entries) ||
+          entries.length === 0
+        ) {
+          return;
+        }
+
+        const primary =
+          entries
+            .slice()
+            .sort((a, b) => {
+
+              const aUser =
+                a.user || {};
+
+              const bUser =
+                b.user || {};
+
+              const aScore =
+                (globalUserEmail(aUser) ? 1 : 0) +
+                (globalUserPhone(aUser) ? 1 : 0) +
+                (
+                  String(
+                    aUser.fullName ||
+                    aUser.name ||
+                    aUser.displayName ||
+                    ""
+                  ).trim()
+                    ? 1
+                    : 0
+                );
+
+              const bScore =
+                (globalUserEmail(bUser) ? 1 : 0) +
+                (globalUserPhone(bUser) ? 1 : 0) +
+                (
+                  String(
+                    bUser.fullName ||
+                    bUser.name ||
+                    bUser.displayName ||
+                    ""
+                  ).trim()
+                    ? 1
+                    : 0
+                );
+
+              return bScore - aScore;
+            })[0];
+
+        if (!primary) {
+          return;
+        }
+
+        const canonicalTargetUid =
+          String(
+            primary.id ||
+            ""
+          ).trim();
+
+        if (!canonicalTargetUid) {
+          return;
+        }
+
+        entries.forEach(
+          (entry) => {
+
+            const user =
+              entry.user || {};
+
             [
-              document.id,
+              entry.id,
               user.uid,
               user.authUid,
               user.userDocId,
+              user.traineeId,
             ]
               .map((value) =>
                 String(value || "")
                   .trim()
               )
-              .filter(Boolean);
-
-          identities.forEach(
-            (identity) => {
-              allowedRecipientByIdentity.set(
-                identity,
-                document.id
-              );
-            }
-          );
-        });
-
-      const verifiedTargetUids =
-        requestedTargetUids
-          .map((requestedUid) =>
-            allowedRecipientByIdentity.get(
-              requestedUid
-            )
-          )
-          .filter(Boolean);
-
-      const uniqueVerifiedTargetUids =
-        [
-          ...new Set(
-            verifiedTargetUids
-          ),
-        ];
-
-      /*
-       * אם אפילו UID אחד שהלקוח שלח אינו חוקי,
-       * לא שולחים חלקית ולא מתעלמים ממנו.
-       */
-      if (
-        uniqueVerifiedTargetUids.length !==
-        requestedTargetUids.length
-      ) {
-        throw new functions.https.HttpsError(
-          "permission-denied",
-          "One or more recipients are outside the authorized scope."
+              .filter(Boolean)
+              .forEach((identity) => {
+                allowedRecipientByIdentity.set(
+                  identity,
+                  canonicalTargetUid
+                );
+              });
+          }
         );
       }
+    );
 
-      const nowMillis =
-        Date.now();
+    /*
+     * מאמתים כל יעד שהלקוח שלח.
+     */
+    const verifiedTargetUids =
+      requestedTargetUids
+        .map((requestedUid) =>
+          allowedRecipientByIdentity.get(
+            requestedUid
+          )
+        )
+        .filter(Boolean);
+
+    /*
+     * אם אפילו מזהה אחד אינו חוקי,
+     * לא מבצעים שליחה חלקית.
+     */
+    if (
+      verifiedTargetUids.length !==
+      requestedTargetUids.length
+    ) {
+      throw new functions.https.HttpsError(
+        "permission-denied",
+        "One or more recipients are outside the authorized scope."
+      );
+    }
+
+    /*
+     * אחרי האימות מאחדים יעדים קנוניים.
+     *
+     * אם הלקוח שלח שני UID-ים שונים
+     * ששייכים לאותו אדם, תישלח הודעה פעם אחת בלבד.
+     */
+    const uniqueVerifiedTargetUids =
+      Array.from(
+        new Set(
+          verifiedTargetUids
+        )
+      );
+
+    const nowMillis =
+      Date.now();
 
       const coachName =
         String(
@@ -5549,6 +6283,5106 @@ exports.createSecureCoachBroadcast =
 
 /**
  * ====================================================
+ * יצירת אימון חופשי – מאובטחת
+ *
+ * הלקוח שולח:
+ * - branch
+ * - group
+ * - title
+ * - locationName
+ * - lat
+ * - lng
+ * - startsAt
+ *
+ * השרת:
+ * - מאמת Firebase Auth
+ * - בודק Admin / Coach פעיל
+ * - למאמן: מאמת branch||group מול authorizedCoaches
+ * - קובע את UID ושם היוצר בצד השרת
+ * - יוצר את האימון
+ * - מוסיף את היוצר כ-GOING
+ * ====================================================
+ */
+exports.createSecureFreeSession =
+  functions.https.onCall(
+    async (data, context) => {
+
+      const uid =
+        String(
+          context.auth &&
+          context.auth.uid ||
+          ""
+        ).trim();
+
+      if (!uid) {
+        throw new functions.https.HttpsError(
+          "unauthenticated",
+          "User must be signed in."
+        );
+      }
+
+      const branch =
+        String(
+          data &&
+          data.branch ||
+          ""
+        )
+          .trim()
+          .slice(0, 160);
+
+      const group =
+        String(
+          data &&
+          data.group ||
+          ""
+        )
+          .trim()
+          .slice(0, 160);
+
+      const title =
+        String(
+          data &&
+          data.title ||
+          ""
+        )
+          .trim()
+          .slice(0, 300);
+
+      const locationName =
+        String(
+          data &&
+          data.locationName ||
+          ""
+        )
+          .trim()
+          .slice(0, 500);
+
+      const startsAt =
+        Number(
+          data &&
+          data.startsAt
+        );
+
+      const rawLat =
+        data &&
+        data.lat;
+
+      const rawLng =
+        data &&
+        data.lng;
+
+      const lat =
+        rawLat === null ||
+        rawLat === undefined ||
+        rawLat === ""
+          ? null
+          : Number(rawLat);
+
+      const lng =
+        rawLng === null ||
+        rawLng === undefined ||
+        rawLng === ""
+          ? null
+          : Number(rawLng);
+
+      if (
+        !branch ||
+        !group ||
+        !title ||
+        !Number.isFinite(startsAt) ||
+        startsAt <= 0
+      ) {
+        throw new functions.https.HttpsError(
+          "invalid-argument",
+          "Invalid free session data."
+        );
+      }
+
+      if (
+        lat !== null &&
+        (
+          !Number.isFinite(lat) ||
+          lat < -90 ||
+          lat > 90
+        )
+      ) {
+        throw new functions.https.HttpsError(
+          "invalid-argument",
+          "Invalid latitude."
+        );
+      }
+
+      if (
+        lng !== null &&
+        (
+          !Number.isFinite(lng) ||
+          lng < -180 ||
+          lng > 180
+        )
+      ) {
+        throw new functions.https.HttpsError(
+          "invalid-argument",
+          "Invalid longitude."
+        );
+      }
+
+      const [
+        adminSnapshot,
+        coachSnapshot,
+      ] =
+        await Promise.all([
+          db.collection("admins")
+            .doc(uid)
+            .get(),
+
+          db.collection("authorizedCoaches")
+            .doc(uid)
+            .get(),
+        ]);
+
+      const adminData =
+        adminSnapshot.exists
+          ? adminSnapshot.data() || {}
+          : {};
+
+      const coachData =
+        coachSnapshot.exists
+          ? coachSnapshot.data() || {}
+          : {};
+
+      const isAdminUser =
+        adminData.enabled === true;
+
+      const isActiveCoach =
+        coachSnapshot.exists &&
+        coachData.active === true &&
+        String(
+          coachData.role || ""
+        )
+          .trim()
+          .toLowerCase() === "coach";
+
+      if (
+        !isAdminUser &&
+        !isActiveCoach
+      ) {
+        throw new functions.https.HttpsError(
+          "permission-denied",
+          "User is not allowed to create free sessions."
+        );
+      }
+
+      const normalizedBranch =
+        normalizeTrainingTargetText(
+          branch
+        );
+
+      const normalizedGroup =
+        normalizeTrainingTargetText(
+          group
+        );
+
+      if (
+        !normalizedBranch ||
+        !normalizedGroup
+      ) {
+        throw new functions.https.HttpsError(
+          "invalid-argument",
+          "Invalid branch or group."
+        );
+      }
+
+      /*
+       * Coach חייב להיות מורשה לזוג המדויק.
+       * Admin עובר בלי מגבלת זוג.
+       */
+      if (!isAdminUser) {
+
+        const authorizedPairKeys =
+          new Set(
+            (
+              Array.isArray(
+                coachData.authorizedBranchGroups
+              )
+                ? coachData.authorizedBranchGroups
+                : []
+            )
+              .map((rawPair) => {
+
+                const pair =
+                  String(rawPair || "")
+                    .trim();
+
+                const separatorIndex =
+                  pair.indexOf("||");
+
+                if (separatorIndex <= 0) {
+                  return "";
+                }
+
+                const pairBranch =
+                  normalizeTrainingTargetText(
+                    pair.substring(
+                      0,
+                      separatorIndex
+                    )
+                  );
+
+                const pairGroup =
+                  normalizeTrainingTargetText(
+                    pair.substring(
+                      separatorIndex + 2
+                    )
+                  );
+
+                if (
+                  !pairBranch ||
+                  !pairGroup
+                ) {
+                  return "";
+                }
+
+                return `${pairBranch}||${pairGroup}`;
+              })
+              .filter(Boolean)
+          );
+
+        const requestedPair =
+          `${normalizedBranch}||${normalizedGroup}`;
+
+        if (
+          !authorizedPairKeys.has(
+            requestedPair
+          )
+        ) {
+          throw new functions.https.HttpsError(
+            "permission-denied",
+            "Coach is not authorized for this branch and group."
+          );
+        }
+      }
+
+      function freeSessionPathSegment(
+        value
+      ) {
+        const clean =
+          String(value || "")
+            .trim()
+            .replace(/\s+/g, " ");
+
+        if (!clean) {
+          return "general";
+        }
+
+        return clean
+          .replace(
+            /[\/\\#?\[\]*~]/g,
+            "_"
+          )
+          .trim() ||
+          "general";
+      }
+
+      const safeBranch =
+        freeSessionPathSegment(
+          branch
+        );
+
+      const safeGroup =
+        freeSessionPathSegment(
+          group
+        );
+
+      /*
+       * זהות היוצר נקבעת מהשרת בלבד.
+       * createdByUid / createdByName מהלקוח אינם מקור אמת.
+       */
+      const createdByName =
+        String(
+          coachData.fullName ||
+          context.auth.token.name ||
+          context.auth.token.email ||
+          "מאמן"
+        )
+          .trim()
+          .slice(0, 200);
+
+      const nowMillis =
+        Date.now();
+
+      const sessionRef =
+        db.collection("branches")
+          .doc(safeBranch)
+          .collection("groups")
+          .doc(safeGroup)
+          .collection("free_sessions")
+          .doc();
+
+      const participantRef =
+        sessionRef
+          .collection("participants")
+          .doc(uid);
+
+      const batch =
+        db.batch();
+
+      batch.set(
+        sessionRef,
+        {
+          id:
+            sessionRef.id,
+
+          branch,
+          groupKey:
+            group,
+
+          title,
+
+          locationName:
+            locationName || null,
+
+          lat,
+          lng,
+
+          startsAt,
+
+          createdAt:
+            nowMillis,
+
+          createdByUid:
+            uid,
+
+          createdByName,
+
+          status:
+            "OPEN",
+
+          goingCount:
+            1,
+
+          onWayCount:
+            0,
+
+          arrivedCount:
+            0,
+
+          cantCount:
+            0,
+
+          createdAtServer:
+            admin.firestore
+              .FieldValue
+              .serverTimestamp(),
+
+          source:
+            "server_secure_free_session",
+        }
+      );
+
+      batch.set(
+        participantRef,
+        {
+          uid,
+
+          name:
+            createdByName,
+
+          state:
+            "GOING",
+
+          updatedAt:
+            nowMillis,
+
+          updatedAtServer:
+            admin.firestore
+              .FieldValue
+              .serverTimestamp(),
+        }
+      );
+
+      await batch.commit();
+
+      return {
+        success: true,
+
+        sessionId:
+          sessionRef.id,
+
+        branch:
+          safeBranch,
+
+        groupKey:
+          safeGroup,
+      };
+    }
+  );
+
+/**
+ * ====================================================
+ * עדכון סטטוס באימון חופשי – מאובטח
+ *
+ * הלקוח שולח:
+ * - branch
+ * - group
+ * - sessionId
+ * - state
+ *
+ * השרת:
+ * - משתמש רק ב-UID של Firebase Auth
+ * - טוען את האימון האמיתי
+ * - בודק הרשאת Admin / Coach / Trainee
+ * - מאמת התאמה לסניף ולקבוצה
+ * - מעדכן רק את המשתתף המחובר
+ * - מעדכן counters אטומית
+ * ====================================================
+ */
+exports.setSecureFreeSessionParticipantState =
+  functions.https.onCall(
+    async (data, context) => {
+
+      const uid =
+        String(
+          context.auth &&
+          context.auth.uid ||
+          ""
+        ).trim();
+
+      if (!uid) {
+        throw new functions.https.HttpsError(
+          "unauthenticated",
+          "User must be signed in."
+        );
+      }
+
+      const branch =
+        String(
+          data &&
+          data.branch ||
+          ""
+        )
+          .trim()
+          .slice(0, 160);
+
+      const group =
+        String(
+          data &&
+          data.group ||
+          ""
+        )
+          .trim()
+          .slice(0, 160);
+
+      const sessionId =
+        String(
+          data &&
+          data.sessionId ||
+          ""
+        )
+          .trim()
+          .slice(0, 200);
+
+      const state =
+        String(
+          data &&
+          data.state ||
+          ""
+        )
+          .trim()
+          .toUpperCase();
+
+      const allowedStates =
+        new Set([
+          "GOING",
+          "ON_WAY",
+          "ARRIVED",
+          "CANT",
+        ]);
+
+      if (
+        !branch ||
+        !group ||
+        !sessionId ||
+        !allowedStates.has(state)
+      ) {
+        throw new functions.https.HttpsError(
+          "invalid-argument",
+          "Invalid free session participant state request."
+        );
+      }
+
+      function freeSessionStatePathSegment(
+        value
+      ) {
+        const clean =
+          String(value || "")
+            .trim()
+            .replace(/\s+/g, " ");
+
+        if (!clean) {
+          return "general";
+        }
+
+        return clean
+          .replace(
+            /[\/\\#?\[\]*~]/g,
+            "_"
+          )
+          .trim() ||
+          "general";
+      }
+
+      const safeBranch =
+        freeSessionStatePathSegment(
+          branch
+        );
+
+      const safeGroup =
+        freeSessionStatePathSegment(
+          group
+        );
+
+      const sessionRef =
+        db.collection("branches")
+          .doc(safeBranch)
+          .collection("groups")
+          .doc(safeGroup)
+          .collection("free_sessions")
+          .doc(sessionId);
+
+      const [
+        sessionSnapshot,
+        adminSnapshot,
+        coachSnapshot,
+        userSnapshot,
+      ] =
+        await Promise.all([
+          sessionRef.get(),
+
+          db.collection("admins")
+            .doc(uid)
+            .get(),
+
+          db.collection("authorizedCoaches")
+            .doc(uid)
+            .get(),
+
+          db.collection("users")
+            .doc(uid)
+            .get(),
+        ]);
+
+      if (!sessionSnapshot.exists) {
+        throw new functions.https.HttpsError(
+          "not-found",
+          "Free session was not found."
+        );
+      }
+
+      const session =
+        sessionSnapshot.data() || {};
+
+      const realBranch =
+        String(
+          session.branch ||
+          branch
+        ).trim();
+
+      const realGroup =
+        String(
+          session.groupKey ||
+          group
+        ).trim();
+
+      const normalizedBranch =
+        normalizeTrainingTargetText(
+          realBranch
+        );
+
+      const normalizedGroup =
+        normalizeTrainingTargetText(
+          realGroup
+        );
+
+      if (
+        !normalizedBranch ||
+        !normalizedGroup
+      ) {
+        throw new functions.https.HttpsError(
+          "permission-denied",
+          "Free session scope is invalid."
+        );
+      }
+
+      const adminData =
+        adminSnapshot.exists
+          ? adminSnapshot.data() || {}
+          : {};
+
+      const coachData =
+        coachSnapshot.exists
+          ? coachSnapshot.data() || {}
+          : {};
+
+      const userData =
+        userSnapshot.exists
+          ? userSnapshot.data() || {}
+          : {};
+
+      const isAdminUser =
+        adminData.enabled === true;
+
+      const isActiveCoach =
+        coachSnapshot.exists &&
+        coachData.active === true &&
+        String(
+          coachData.role || ""
+        )
+          .trim()
+          .toLowerCase() === "coach";
+
+      let coachAuthorizedForPair =
+        false;
+
+      if (isActiveCoach) {
+
+        const authorizedPairs =
+          Array.isArray(
+            coachData.authorizedBranchGroups
+          )
+            ? coachData.authorizedBranchGroups
+            : [];
+
+        coachAuthorizedForPair =
+          authorizedPairs.some(
+            (rawPair) => {
+
+              const pair =
+                String(rawPair || "")
+                  .trim();
+
+              const separatorIndex =
+                pair.indexOf("||");
+
+              if (separatorIndex <= 0) {
+                return false;
+              }
+
+              const pairBranch =
+                normalizeTrainingTargetText(
+                  pair.substring(
+                    0,
+                    separatorIndex
+                  )
+                );
+
+              const pairGroup =
+                normalizeTrainingTargetText(
+                  pair.substring(
+                    separatorIndex + 2
+                  )
+                );
+
+              return (
+                pairBranch ===
+                  normalizedBranch &&
+                pairGroup ===
+                  normalizedGroup
+              );
+            }
+          );
+      }
+
+      const traineeBranches =
+        parseUserTargetValues(
+          userData,
+          [
+            "branch",
+            "branches",
+            "branches_json",
+            "branchesCsv",
+            "selected_branches",
+            "selectedBranches",
+            "active_branch",
+            "activeBranch",
+            "branchName",
+          ]
+        );
+
+      const traineeGroups =
+        parseUserTargetValues(
+          userData,
+          [
+            "group",
+            "groups",
+            "groups_json",
+            "groupsCsv",
+            "selected_groups",
+            "selectedGroups",
+            "active_group",
+            "activeGroup",
+            "age_group",
+            "age_groups",
+            "primaryGroup",
+            "groupKey",
+          ]
+        );
+
+      const traineeAuthorizedForPair =
+        traineeBranches.includes(
+          normalizedBranch
+        ) &&
+        traineeGroups.includes(
+          normalizedGroup
+        );
+
+      if (
+        !isAdminUser &&
+        !coachAuthorizedForPair &&
+        !traineeAuthorizedForPair
+      ) {
+        throw new functions.https.HttpsError(
+          "permission-denied",
+          "User is outside this free session scope."
+        );
+      }
+
+      const participantName =
+        String(
+          userData.fullName ||
+          userData.name ||
+          userData.displayName ||
+          userData.full_name ||
+          coachData.fullName ||
+          context.auth.token.name ||
+          context.auth.token.email ||
+          "משתמש"
+        )
+          .trim()
+          .slice(0, 200);
+
+      const participantRef =
+        sessionRef
+          .collection("participants")
+          .doc(uid);
+
+      const counterFieldForState =
+        (value) => {
+          switch (value) {
+            case "GOING":
+              return "goingCount";
+
+            case "ON_WAY":
+              return "onWayCount";
+
+            case "ARRIVED":
+              return "arrivedCount";
+
+            case "CANT":
+              return "cantCount";
+
+            default:
+              return "";
+          }
+        };
+
+      await db.runTransaction(
+        async (transaction) => {
+
+          const [
+            currentSessionSnapshot,
+            currentParticipantSnapshot,
+          ] =
+            await Promise.all([
+              transaction.get(
+                sessionRef
+              ),
+
+              transaction.get(
+                participantRef
+              ),
+            ]);
+
+          if (!currentSessionSnapshot.exists) {
+            throw new functions.https.HttpsError(
+              "not-found",
+              "Free session was not found."
+            );
+          }
+
+          const previousState =
+            currentParticipantSnapshot.exists
+              ? String(
+                  currentParticipantSnapshot
+                    .data()
+                    .state ||
+                  ""
+                )
+                  .trim()
+                  .toUpperCase()
+              : "";
+
+          const nowMillis =
+            Date.now();
+
+          transaction.set(
+            participantRef,
+            {
+              uid,
+
+              name:
+                participantName,
+
+              state,
+
+              updatedAt:
+                nowMillis,
+
+              updatedAtServer:
+                admin.firestore
+                  .FieldValue
+                  .serverTimestamp(),
+            },
+            {
+              merge: true,
+            }
+          );
+
+          if (previousState !== state) {
+
+            const previousCounter =
+              counterFieldForState(
+                previousState
+              );
+
+            const nextCounter =
+              counterFieldForState(
+                state
+              );
+
+            const counterUpdates = {
+              updatedAt:
+                admin.firestore
+                  .FieldValue
+                  .serverTimestamp(),
+            };
+
+            if (previousCounter) {
+              counterUpdates[
+                previousCounter
+              ] =
+                admin.firestore
+                  .FieldValue
+                  .increment(-1);
+            }
+
+            if (nextCounter) {
+              counterUpdates[
+                nextCounter
+              ] =
+                admin.firestore
+                  .FieldValue
+                  .increment(1);
+            }
+
+            transaction.update(
+              sessionRef,
+              counterUpdates
+            );
+          }
+        }
+      );
+
+      return {
+        success: true,
+
+        sessionId,
+
+        uid,
+
+        state,
+      };
+    }
+  );
+
+/**
+ * ====================================================
+ * מחיקת אימון חופשי – מאובטחת
+ *
+ * הלקוח שולח:
+ * - branch
+ * - group
+ * - sessionId
+ *
+ * השרת:
+ * - מאמת Firebase Auth
+ * - מאמת Admin / Coach פעיל
+ * - מאמת branch||group
+ * - רק יוצר האימון או Admin רשאי למחוק
+ * - מוחק participants ואת מסמך האימון
+ * ====================================================
+ */
+exports.deleteSecureFreeSession =
+  functions.https.onCall(
+    async (data, context) => {
+
+      const uid =
+        String(
+          context.auth &&
+          context.auth.uid ||
+          ""
+        ).trim();
+
+      if (!uid) {
+        throw new functions.https.HttpsError(
+          "unauthenticated",
+          "User must be signed in."
+        );
+      }
+
+      const branch =
+        String(
+          data &&
+          data.branch ||
+          ""
+        )
+          .trim()
+          .slice(0, 160);
+
+      const group =
+        String(
+          data &&
+          data.group ||
+          ""
+        )
+          .trim()
+          .slice(0, 160);
+
+      const sessionId =
+        String(
+          data &&
+          data.sessionId ||
+          ""
+        )
+          .trim()
+          .slice(0, 200);
+
+      if (
+        !branch ||
+        !group ||
+        !sessionId
+      ) {
+        throw new functions.https.HttpsError(
+          "invalid-argument",
+          "Invalid free session deletion request."
+        );
+      }
+
+      function freeSessionDeletePathSegment(
+        value
+      ) {
+        const clean =
+          String(value || "")
+            .trim()
+            .replace(/\s+/g, " ");
+
+        if (!clean) {
+          return "general";
+        }
+
+        return clean
+          .replace(
+            /[\/\\#?\[\]*~]/g,
+            "_"
+          )
+          .trim() ||
+          "general";
+      }
+
+      const safeBranch =
+        freeSessionDeletePathSegment(
+          branch
+        );
+
+      const safeGroup =
+        freeSessionDeletePathSegment(
+          group
+        );
+
+      const sessionRef =
+        db.collection("branches")
+          .doc(safeBranch)
+          .collection("groups")
+          .doc(safeGroup)
+          .collection("free_sessions")
+          .doc(sessionId);
+
+      const [
+        sessionSnapshot,
+        adminSnapshot,
+        coachSnapshot,
+      ] =
+        await Promise.all([
+          sessionRef.get(),
+
+          db.collection("admins")
+            .doc(uid)
+            .get(),
+
+          db.collection("authorizedCoaches")
+            .doc(uid)
+            .get(),
+        ]);
+
+      if (!sessionSnapshot.exists) {
+        throw new functions.https.HttpsError(
+          "not-found",
+          "Free session was not found."
+        );
+      }
+
+      const session =
+        sessionSnapshot.data() || {};
+
+      const adminData =
+        adminSnapshot.exists
+          ? adminSnapshot.data() || {}
+          : {};
+
+      const coachData =
+        coachSnapshot.exists
+          ? coachSnapshot.data() || {}
+          : {};
+
+      const isAdminUser =
+        adminData.enabled === true;
+
+      const isActiveCoach =
+        coachSnapshot.exists &&
+        coachData.active === true &&
+        String(
+          coachData.role || ""
+        )
+          .trim()
+          .toLowerCase() === "coach";
+
+      if (
+        !isAdminUser &&
+        !isActiveCoach
+      ) {
+        throw new functions.https.HttpsError(
+          "permission-denied",
+          "User is not allowed to delete free sessions."
+        );
+      }
+
+      const realBranch =
+        String(
+          session.branch ||
+          branch
+        ).trim();
+
+      const realGroup =
+        String(
+          session.groupKey ||
+          group
+        ).trim();
+
+      const normalizedBranch =
+        normalizeTrainingTargetText(
+          realBranch
+        );
+
+      const normalizedGroup =
+        normalizeTrainingTargetText(
+          realGroup
+        );
+
+      if (
+        !normalizedBranch ||
+        !normalizedGroup
+      ) {
+        throw new functions.https.HttpsError(
+          "permission-denied",
+          "Free session scope is invalid."
+        );
+      }
+
+      if (!isAdminUser) {
+
+        const authorizedPairKeys =
+          new Set(
+            (
+              Array.isArray(
+                coachData.authorizedBranchGroups
+              )
+                ? coachData.authorizedBranchGroups
+                : []
+            )
+              .map((rawPair) => {
+
+                const pair =
+                  String(rawPair || "")
+                    .trim();
+
+                const separatorIndex =
+                  pair.indexOf("||");
+
+                if (separatorIndex <= 0) {
+                  return "";
+                }
+
+                const pairBranch =
+                  normalizeTrainingTargetText(
+                    pair.substring(
+                      0,
+                      separatorIndex
+                    )
+                  );
+
+                const pairGroup =
+                  normalizeTrainingTargetText(
+                    pair.substring(
+                      separatorIndex + 2
+                    )
+                  );
+
+                if (
+                  !pairBranch ||
+                  !pairGroup
+                ) {
+                  return "";
+                }
+
+                return `${pairBranch}||${pairGroup}`;
+              })
+              .filter(Boolean)
+          );
+
+        const requestedPair =
+          `${normalizedBranch}||${normalizedGroup}`;
+
+        if (
+          !authorizedPairKeys.has(
+            requestedPair
+          )
+        ) {
+          throw new functions.https.HttpsError(
+            "permission-denied",
+            "Coach is not authorized for this branch and group."
+          );
+        }
+
+        const createdByUid =
+          String(
+            session.createdByUid ||
+            ""
+          ).trim();
+
+        if (
+          !createdByUid ||
+          createdByUid !== uid
+        ) {
+          throw new functions.https.HttpsError(
+            "permission-denied",
+            "Only the session creator can delete this free session."
+          );
+        }
+      }
+
+      const participantsRef =
+        sessionRef.collection(
+          "participants"
+        );
+
+      while (true) {
+
+        const snapshot =
+          await participantsRef
+            .limit(450)
+            .get();
+
+        if (snapshot.empty) {
+          break;
+        }
+
+        const batch =
+          db.batch();
+
+        snapshot.docs.forEach(
+          (document) => {
+            batch.delete(
+              document.ref
+            );
+          }
+        );
+
+        await batch.commit();
+      }
+
+      await sessionRef.delete();
+
+      return {
+        success: true,
+        sessionId,
+      };
+    }
+  );
+
+/**
+ * ====================================================
+ * סגירת אימון חופשי – מאובטחת
+ *
+ * הלקוח שולח:
+ * - branch
+ * - group
+ * - sessionId
+ *
+ * השרת:
+ * - מאמת Firebase Auth
+ * - מאמת Admin / Coach פעיל
+ * - מאמת branch||group
+ * - רק יוצר האימון או Admin רשאי לסגור
+ * ====================================================
+ */
+exports.closeSecureFreeSession =
+  functions.https.onCall(
+    async (data, context) => {
+
+      const uid =
+        String(
+          context.auth &&
+          context.auth.uid ||
+          ""
+        ).trim();
+
+      if (!uid) {
+        throw new functions.https.HttpsError(
+          "unauthenticated",
+          "User must be signed in."
+        );
+      }
+
+      const branch =
+        String(
+          data &&
+          data.branch ||
+          ""
+        )
+          .trim()
+          .slice(0, 160);
+
+      const group =
+        String(
+          data &&
+          data.group ||
+          ""
+        )
+          .trim()
+          .slice(0, 160);
+
+      const sessionId =
+        String(
+          data &&
+          data.sessionId ||
+          ""
+        )
+          .trim()
+          .slice(0, 200);
+
+      if (
+        !branch ||
+        !group ||
+        !sessionId
+      ) {
+        throw new functions.https.HttpsError(
+          "invalid-argument",
+          "Invalid free session close request."
+        );
+      }
+
+      function freeSessionClosePathSegment(
+        value
+      ) {
+        const clean =
+          String(value || "")
+            .trim()
+            .replace(/\s+/g, " ");
+
+        if (!clean) {
+          return "general";
+        }
+
+        return clean
+          .replace(
+            /[\/\\#?\[\]*~]/g,
+            "_"
+          )
+          .trim() ||
+          "general";
+      }
+
+      const safeBranch =
+        freeSessionClosePathSegment(
+          branch
+        );
+
+      const safeGroup =
+        freeSessionClosePathSegment(
+          group
+        );
+
+      const sessionRef =
+        db.collection("branches")
+          .doc(safeBranch)
+          .collection("groups")
+          .doc(safeGroup)
+          .collection("free_sessions")
+          .doc(sessionId);
+
+      const [
+        sessionSnapshot,
+        adminSnapshot,
+        coachSnapshot,
+      ] =
+        await Promise.all([
+          sessionRef.get(),
+
+          db.collection("admins")
+            .doc(uid)
+            .get(),
+
+          db.collection("authorizedCoaches")
+            .doc(uid)
+            .get(),
+        ]);
+
+      if (!sessionSnapshot.exists) {
+        throw new functions.https.HttpsError(
+          "not-found",
+          "Free session was not found."
+        );
+      }
+
+      const session =
+        sessionSnapshot.data() || {};
+
+      const adminData =
+        adminSnapshot.exists
+          ? adminSnapshot.data() || {}
+          : {};
+
+      const coachData =
+        coachSnapshot.exists
+          ? coachSnapshot.data() || {}
+          : {};
+
+      const isAdminUser =
+        adminData.enabled === true;
+
+      const isActiveCoach =
+        coachSnapshot.exists &&
+        coachData.active === true &&
+        String(
+          coachData.role || ""
+        )
+          .trim()
+          .toLowerCase() === "coach";
+
+      if (
+        !isAdminUser &&
+        !isActiveCoach
+      ) {
+        throw new functions.https.HttpsError(
+          "permission-denied",
+          "User is not allowed to close free sessions."
+        );
+      }
+
+      const realBranch =
+        String(
+          session.branch ||
+          branch
+        ).trim();
+
+      const realGroup =
+        String(
+          session.groupKey ||
+          group
+        ).trim();
+
+      const normalizedBranch =
+        normalizeTrainingTargetText(
+          realBranch
+        );
+
+      const normalizedGroup =
+        normalizeTrainingTargetText(
+          realGroup
+        );
+
+      if (!isAdminUser) {
+
+        const authorizedPairKeys =
+          new Set(
+            (
+              Array.isArray(
+                coachData.authorizedBranchGroups
+              )
+                ? coachData.authorizedBranchGroups
+                : []
+            )
+              .map((rawPair) => {
+
+                const pair =
+                  String(rawPair || "")
+                    .trim();
+
+                const separatorIndex =
+                  pair.indexOf("||");
+
+                if (separatorIndex <= 0) {
+                  return "";
+                }
+
+                const pairBranch =
+                  normalizeTrainingTargetText(
+                    pair.substring(
+                      0,
+                      separatorIndex
+                    )
+                  );
+
+                const pairGroup =
+                  normalizeTrainingTargetText(
+                    pair.substring(
+                      separatorIndex + 2
+                    )
+                  );
+
+                if (
+                  !pairBranch ||
+                  !pairGroup
+                ) {
+                  return "";
+                }
+
+                return `${pairBranch}||${pairGroup}`;
+              })
+              .filter(Boolean)
+          );
+
+        const requestedPair =
+          `${normalizedBranch}||${normalizedGroup}`;
+
+        if (
+          !authorizedPairKeys.has(
+            requestedPair
+          )
+        ) {
+          throw new functions.https.HttpsError(
+            "permission-denied",
+            "Coach is not authorized for this branch and group."
+          );
+        }
+
+        const createdByUid =
+          String(
+            session.createdByUid ||
+            ""
+          ).trim();
+
+        if (
+          !createdByUid ||
+          createdByUid !== uid
+        ) {
+          throw new functions.https.HttpsError(
+            "permission-denied",
+            "Only the session creator can close this free session."
+          );
+        }
+      }
+
+      await sessionRef.update({
+        status:
+          "CLOSED",
+
+        closedAt:
+          Date.now(),
+
+        closedAtServer:
+          admin.firestore
+            .FieldValue
+            .serverTimestamp(),
+
+        closedByUid:
+          uid,
+      });
+
+      return {
+        success: true,
+        sessionId,
+      };
+    }
+  );
+
+/**
+ * ====================================================
+ * טעינת אימונים חופשיים – מאובטחת
+ *
+ * הלקוח שולח:
+ * - branch
+ * - group
+ *
+ * השרת:
+ * - מאמת Firebase Auth
+ * - Admin: רשאי לקרוא
+ * - Coach: חייב להיות מורשה ל-branch||group
+ * - Trainee: חייב להשתייך לאותו branch||group
+ * - מחזיר רק אימונים OPEN ועתידיים
+ * ====================================================
+ */
+exports.loadSecureFreeSessions =
+  functions.https.onCall(
+    async (data, context) => {
+
+      const uid =
+        String(
+          context.auth &&
+          context.auth.uid ||
+          ""
+        ).trim();
+
+      if (!uid) {
+        throw new functions.https.HttpsError(
+          "unauthenticated",
+          "User must be signed in."
+        );
+      }
+
+      const requestedBranch =
+        String(
+          data &&
+          data.branch ||
+          ""
+        )
+          .trim()
+          .slice(0, 160);
+
+      const requestedGroup =
+        String(
+          data &&
+          data.group ||
+          ""
+        )
+          .trim()
+          .slice(0, 160);
+
+      if (
+        !requestedBranch ||
+        !requestedGroup
+      ) {
+        throw new functions.https.HttpsError(
+          "invalid-argument",
+          "Invalid branch or group."
+        );
+      }
+
+      const normalizedBranch =
+        normalizeTrainingTargetText(
+          requestedBranch
+        );
+
+      const normalizedGroup =
+        normalizeTrainingTargetText(
+          requestedGroup
+        );
+
+      if (
+        !normalizedBranch ||
+        !normalizedGroup
+      ) {
+        throw new functions.https.HttpsError(
+          "invalid-argument",
+          "Invalid branch or group."
+        );
+      }
+
+      const [
+        adminSnapshot,
+        coachSnapshot,
+        userSnapshot,
+      ] =
+        await Promise.all([
+          db.collection("admins")
+            .doc(uid)
+            .get(),
+
+          db.collection("authorizedCoaches")
+            .doc(uid)
+            .get(),
+
+          db.collection("users")
+            .doc(uid)
+            .get(),
+        ]);
+
+      const adminData =
+        adminSnapshot.exists
+          ? adminSnapshot.data() || {}
+          : {};
+
+      const coachData =
+        coachSnapshot.exists
+          ? coachSnapshot.data() || {}
+          : {};
+
+      const userData =
+        userSnapshot.exists
+          ? userSnapshot.data() || {}
+          : {};
+
+      const isAdminUser =
+        adminData.enabled === true;
+
+      const isActiveCoach =
+        coachSnapshot.exists &&
+        coachData.active === true &&
+        String(
+          coachData.role || ""
+        )
+          .trim()
+          .toLowerCase() === "coach";
+
+      /*
+       * Coach:
+       * מאמתים אך ורק מול authorizedCoaches.
+       */
+      let coachAuthorizedForPair =
+        false;
+
+      if (isActiveCoach) {
+
+        const authorizedPairs =
+          Array.isArray(
+            coachData.authorizedBranchGroups
+          )
+            ? coachData.authorizedBranchGroups
+            : [];
+
+        coachAuthorizedForPair =
+          authorizedPairs.some(
+            (rawPair) => {
+
+              const pair =
+                String(rawPair || "")
+                  .trim();
+
+              const separatorIndex =
+                pair.indexOf("||");
+
+              if (separatorIndex <= 0) {
+                return false;
+              }
+
+              const pairBranch =
+                normalizeTrainingTargetText(
+                  pair.substring(
+                    0,
+                    separatorIndex
+                  )
+                );
+
+              const pairGroup =
+                normalizeTrainingTargetText(
+                  pair.substring(
+                    separatorIndex + 2
+                  )
+                );
+
+              return (
+                pairBranch ===
+                  normalizedBranch &&
+                pairGroup ===
+                  normalizedGroup
+              );
+            }
+          );
+      }
+
+      /*
+       * Trainee:
+       * בודקים את מסמך users של המשתמש עצמו.
+       */
+      const traineeBranches =
+        parseUserTargetValues(
+          userData,
+          [
+            "branch",
+            "branches",
+            "branches_json",
+            "branchesCsv",
+            "selected_branches",
+            "selectedBranches",
+            "active_branch",
+            "activeBranch",
+            "branchName",
+          ]
+        );
+
+      const traineeGroups =
+        parseUserTargetValues(
+          userData,
+          [
+            "group",
+            "groups",
+            "groups_json",
+            "groupsCsv",
+            "selected_groups",
+            "selectedGroups",
+            "active_group",
+            "activeGroup",
+            "age_group",
+            "age_groups",
+            "primaryGroup",
+            "groupKey",
+          ]
+        );
+
+      const traineeAuthorizedForPair =
+        traineeBranches.includes(
+          normalizedBranch
+        ) &&
+        traineeGroups.includes(
+          normalizedGroup
+        );
+
+      if (
+        !isAdminUser &&
+        !coachAuthorizedForPair &&
+        !traineeAuthorizedForPair
+      ) {
+        throw new functions.https.HttpsError(
+          "permission-denied",
+          "User is outside this free session scope."
+        );
+      }
+
+      function freeSessionLoadPathSegment(
+        value
+      ) {
+        const clean =
+          String(value || "")
+            .trim()
+            .replace(/\s+/g, " ");
+
+        if (!clean) {
+          return "general";
+        }
+
+        return clean
+          .replace(
+            /[\/\\#?\[\]*~]/g,
+            "_"
+          )
+          .trim() ||
+          "general";
+      }
+
+      const safeBranch =
+        freeSessionLoadPathSegment(
+          requestedBranch
+        );
+
+      const safeGroup =
+        freeSessionLoadPathSegment(
+          requestedGroup
+        );
+
+      const nowMillis =
+        Date.now();
+
+      const snapshot =
+        await db
+          .collection("branches")
+          .doc(safeBranch)
+          .collection("groups")
+          .doc(safeGroup)
+          .collection("free_sessions")
+          .where(
+            "startsAt",
+            ">=",
+            nowMillis
+          )
+          .orderBy(
+            "startsAt",
+            "asc"
+          )
+          .limit(200)
+          .get();
+
+      const items =
+        snapshot.docs
+          .map((document) => {
+
+            const session =
+              document.data() || {};
+
+            const status =
+              String(
+                session.status ||
+                "OPEN"
+              )
+                .trim()
+                .toUpperCase();
+
+            if (status !== "OPEN") {
+              return null;
+            }
+
+            const startsAt =
+              Number(
+                session.startsAt ||
+                0
+              );
+
+            if (
+              !Number.isFinite(startsAt) ||
+              startsAt < nowMillis
+            ) {
+              return null;
+            }
+
+            return {
+              id:
+                String(
+                  session.id ||
+                  document.id
+                ).trim(),
+
+              branch:
+                requestedBranch,
+
+              groupKey:
+                requestedGroup,
+
+              title:
+                String(
+                  session.title ||
+                  ""
+                ).trim(),
+
+              locationName:
+                session.locationName == null
+                  ? null
+                  : String(
+                      session.locationName
+                    ).trim(),
+
+              lat:
+                Number.isFinite(
+                  Number(session.lat)
+                )
+                  ? Number(session.lat)
+                  : null,
+
+              lng:
+                Number.isFinite(
+                  Number(session.lng)
+                )
+                  ? Number(session.lng)
+                  : null,
+
+              startsAt,
+
+              createdAt:
+                Number(
+                  session.createdAt ||
+                  0
+                ),
+
+              createdByUid:
+                String(
+                  session.createdByUid ||
+                  ""
+                ).trim(),
+
+              createdByName:
+                String(
+                  session.createdByName ||
+                  ""
+                ).trim(),
+
+              status,
+
+              goingCount:
+                Math.max(
+                  0,
+                  Number(
+                    session.goingCount ||
+                    0
+                  )
+                ),
+
+              onWayCount:
+                Math.max(
+                  0,
+                  Number(
+                    session.onWayCount ||
+                    0
+                  )
+                ),
+
+              arrivedCount:
+                Math.max(
+                  0,
+                  Number(
+                    session.arrivedCount ||
+                    0
+                  )
+                ),
+
+              cantCount:
+                Math.max(
+                  0,
+                  Number(
+                    session.cantCount ||
+                    0
+                  )
+                ),
+            };
+          })
+          .filter(Boolean);
+
+      return {
+        success: true,
+
+        branch:
+          requestedBranch,
+
+        group:
+          requestedGroup,
+
+        items,
+      };
+    }
+  );
+
+/**
+ * ====================================================
+ * טעינת משתתפי אימון חופשי – מאובטחת
+ *
+ * הלקוח שולח:
+ * - branch
+ * - group
+ * - sessionId
+ *
+ * השרת:
+ * - מאמת Firebase Auth
+ * - Admin: רשאי לקרוא
+ * - Coach: חייב להיות מורשה ל-branch||group
+ * - Trainee: חייב להשתייך לאותו branch||group
+ * - מאמת שהאימון עצמו נמצא באותו scope
+ * - מחזיר רק נתוני משתתפים הדרושים למסך
+ * ====================================================
+ */
+exports.loadSecureFreeSessionParticipants =
+  functions.https.onCall(
+    async (data, context) => {
+
+      const uid =
+        String(
+          context.auth &&
+          context.auth.uid ||
+          ""
+        ).trim();
+
+      if (!uid) {
+        throw new functions.https.HttpsError(
+          "unauthenticated",
+          "User must be signed in."
+        );
+      }
+
+      const requestedBranch =
+        String(
+          data &&
+          data.branch ||
+          ""
+        )
+          .trim()
+          .slice(0, 160);
+
+      const requestedGroup =
+        String(
+          data &&
+          data.group ||
+          ""
+        )
+          .trim()
+          .slice(0, 160);
+
+      const sessionId =
+        String(
+          data &&
+          data.sessionId ||
+          ""
+        )
+          .trim()
+          .slice(0, 200);
+
+      if (
+        !requestedBranch ||
+        !requestedGroup ||
+        !sessionId
+      ) {
+        throw new functions.https.HttpsError(
+          "invalid-argument",
+          "Invalid free session participant request."
+        );
+      }
+
+      const normalizedBranch =
+        normalizeTrainingTargetText(
+          requestedBranch
+        );
+
+      const normalizedGroup =
+        normalizeTrainingTargetText(
+          requestedGroup
+        );
+
+      if (
+        !normalizedBranch ||
+        !normalizedGroup
+      ) {
+        throw new functions.https.HttpsError(
+          "invalid-argument",
+          "Invalid branch or group."
+        );
+      }
+
+      const [
+        adminSnapshot,
+        coachSnapshot,
+        userSnapshot,
+      ] =
+        await Promise.all([
+          db.collection("admins")
+            .doc(uid)
+            .get(),
+
+          db.collection("authorizedCoaches")
+            .doc(uid)
+            .get(),
+
+          db.collection("users")
+            .doc(uid)
+            .get(),
+        ]);
+
+      const adminData =
+        adminSnapshot.exists
+          ? adminSnapshot.data() || {}
+          : {};
+
+      const coachData =
+        coachSnapshot.exists
+          ? coachSnapshot.data() || {}
+          : {};
+
+      const userData =
+        userSnapshot.exists
+          ? userSnapshot.data() || {}
+          : {};
+
+      const isAdminUser =
+        adminData.enabled === true;
+
+      const isActiveCoach =
+        coachSnapshot.exists &&
+        coachData.active === true &&
+        String(
+          coachData.role || ""
+        )
+          .trim()
+          .toLowerCase() === "coach";
+
+      let coachAuthorizedForPair =
+        false;
+
+      if (isActiveCoach) {
+
+        const authorizedPairs =
+          Array.isArray(
+            coachData.authorizedBranchGroups
+          )
+            ? coachData.authorizedBranchGroups
+            : [];
+
+        coachAuthorizedForPair =
+          authorizedPairs.some(
+            (rawPair) => {
+
+              const pair =
+                String(rawPair || "")
+                  .trim();
+
+              const separatorIndex =
+                pair.indexOf("||");
+
+              if (separatorIndex <= 0) {
+                return false;
+              }
+
+              const pairBranch =
+                normalizeTrainingTargetText(
+                  pair.substring(
+                    0,
+                    separatorIndex
+                  )
+                );
+
+              const pairGroup =
+                normalizeTrainingTargetText(
+                  pair.substring(
+                    separatorIndex + 2
+                  )
+                );
+
+              return (
+                pairBranch ===
+                  normalizedBranch &&
+                pairGroup ===
+                  normalizedGroup
+              );
+            }
+          );
+      }
+
+      const traineeBranches =
+        parseUserTargetValues(
+          userData,
+          [
+            "branch",
+            "branches",
+            "branches_json",
+            "branchesCsv",
+            "selected_branches",
+            "selectedBranches",
+            "active_branch",
+            "activeBranch",
+            "branchName",
+          ]
+        );
+
+      const traineeGroups =
+        parseUserTargetValues(
+          userData,
+          [
+            "group",
+            "groups",
+            "groups_json",
+            "groupsCsv",
+            "selected_groups",
+            "selectedGroups",
+            "active_group",
+            "activeGroup",
+            "age_group",
+            "age_groups",
+            "primaryGroup",
+            "groupKey",
+          ]
+        );
+
+      const traineeAuthorizedForPair =
+        traineeBranches.includes(
+          normalizedBranch
+        ) &&
+        traineeGroups.includes(
+          normalizedGroup
+        );
+
+      if (
+        !isAdminUser &&
+        !coachAuthorizedForPair &&
+        !traineeAuthorizedForPair
+      ) {
+        throw new functions.https.HttpsError(
+          "permission-denied",
+          "User is outside this free session scope."
+        );
+      }
+
+      function freeSessionParticipantsPathSegment(
+        value
+      ) {
+        const clean =
+          String(value || "")
+            .trim()
+            .replace(/\s+/g, " ");
+
+        if (!clean) {
+          return "general";
+        }
+
+        return clean
+          .replace(
+            /[\/\\#?\[\]*~]/g,
+            "_"
+          )
+          .trim() ||
+          "general";
+      }
+
+      const safeBranch =
+        freeSessionParticipantsPathSegment(
+          requestedBranch
+        );
+
+      const safeGroup =
+        freeSessionParticipantsPathSegment(
+          requestedGroup
+        );
+
+      const sessionRef =
+        db.collection("branches")
+          .doc(safeBranch)
+          .collection("groups")
+          .doc(safeGroup)
+          .collection("free_sessions")
+          .doc(sessionId);
+
+      const sessionSnapshot =
+        await sessionRef.get();
+
+      if (!sessionSnapshot.exists) {
+        throw new functions.https.HttpsError(
+          "not-found",
+          "Free session was not found."
+        );
+      }
+
+      const session =
+        sessionSnapshot.data() || {};
+
+      /*
+       * הגנה נוספת:
+       * גם תוכן מסמך האימון חייב להתאים
+       * לסניף ולקבוצה שהתבקשו.
+       */
+      const sessionBranch =
+        normalizeTrainingTargetText(
+          session.branch ||
+          requestedBranch
+        );
+
+      const sessionGroup =
+        normalizeTrainingTargetText(
+          session.groupKey ||
+          requestedGroup
+        );
+
+      if (
+        sessionBranch !== normalizedBranch ||
+        sessionGroup !== normalizedGroup
+      ) {
+        throw new functions.https.HttpsError(
+          "permission-denied",
+          "Free session scope does not match."
+        );
+      }
+
+    const [
+      participantsSnapshot,
+      allUsersSnapshot,
+    ] =
+      await Promise.all([
+        sessionRef
+          .collection("participants")
+          .orderBy(
+            "updatedAt",
+            "desc"
+          )
+          .limit(500)
+          .get(),
+
+        db.collection("users")
+          .get(),
+      ]);
+
+    /*
+     * בונים מפת זהות גלובלית:
+     * כל UID / documentId של אותו אדם
+     * מקבל אותו identityKey.
+     */
+    const userIdentityGroups =
+      groupUsersByIdentity(
+        allUsersSnapshot.docs.map(
+          (document) => ({
+            id:
+              document.id,
+
+            user:
+              document.data() || {},
+          })
+        )
+      );
+
+    const identityKeyByUid =
+      new Map();
+
+    userIdentityGroups.forEach(
+      (entries, groupIndex) => {
+
+        const identityKey =
+          `person:${groupIndex}`;
+
+        entries.forEach(
+          (entry) => {
+
+            const user =
+              entry.user || {};
+
+            [
+              entry.id,
+              user.uid,
+              user.authUid,
+              user.userDocId,
+              user.traineeId,
+            ]
+              .map((value) =>
+                String(value || "")
+                  .trim()
+              )
+              .filter(Boolean)
+              .forEach((value) => {
+                identityKeyByUid.set(
+                  value,
+                  identityKey
+                );
+              });
+          }
+        );
+      }
+    );
+
+    const rawItems =
+      participantsSnapshot.docs
+          .map((document) => {
+
+            const participant =
+              document.data() || {};
+
+            const participantUid =
+              String(
+                participant.uid ||
+                document.id ||
+                ""
+              ).trim();
+
+            const name =
+              String(
+                participant.name ||
+                ""
+              )
+                .trim()
+                .slice(0, 200);
+
+            const state =
+              String(
+                participant.state ||
+                ""
+              )
+                .trim()
+                .toUpperCase();
+
+            const allowedStates =
+              new Set([
+                "GOING",
+                "ON_WAY",
+                "ARRIVED",
+                "CANT",
+                "INVITED",
+              ]);
+
+            if (
+              !participantUid ||
+              !name ||
+              !allowedStates.has(state)
+            ) {
+              return null;
+            }
+
+            const updatedAt =
+              Number(
+                participant.updatedAt ||
+                0
+              );
+
+            return {
+              uid:
+                participantUid,
+
+              name,
+
+              state,
+
+              updatedAt:
+                Number.isFinite(updatedAt)
+                  ? updatedAt
+                  : 0,
+            };
+                 })
+                 .filter(Boolean);
+
+       /*
+        * מאחדים משתתפים כפולים לפי הזהות הגלובלית.
+        *
+        * אם אותו אדם מופיע תחת כמה UID-ים,
+        * נשמרת הרשומה העדכנית ביותר.
+        */
+       const items =
+         Array.from(
+           rawItems.reduce(
+             (map, participant) => {
+
+               const identityKey =
+                 identityKeyByUid.get(
+                   participant.uid
+                 ) ||
+                 `uid:${participant.uid}`;
+
+               const existing =
+                 map.get(identityKey);
+
+               if (
+                 !existing ||
+                 participant.updatedAt >
+                   existing.updatedAt
+               ) {
+                 map.set(
+                   identityKey,
+                   participant
+                 );
+               }
+
+               return map;
+             },
+             new Map()
+           ).values()
+         )
+           .sort(
+             (a, b) =>
+               b.updatedAt -
+               a.updatedAt
+           );
+
+       return {
+         success: true,
+
+         sessionId,
+
+         items,
+       };
+    }
+  );
+
+/**
+ * ====================================================
+ * טעינת משתתפי פורום – מאובטחת
+ *
+ * הלקוח שולח:
+ * - branch
+ * - group
+ *
+ * השרת:
+ * - מאמת Firebase Auth
+ * - Admin רשאי לקרוא
+ * - Coach חייב להיות מורשה ל-branch||group
+ * - Trainee חייב להשתייך ל-branch||group
+ * - קורא users רק בצד השרת
+ * - מאחד כפילויות לפי UID / אימייל / טלפון
+ * - מחזיר ללקוח רק uid + name
+ * ====================================================
+ */
+exports.loadSecureForumParticipants =
+  functions.https.onCall(
+    async (data, context) => {
+
+      const uid =
+        String(
+          context.auth &&
+          context.auth.uid ||
+          ""
+        ).trim();
+
+      if (!uid) {
+        throw new functions.https.HttpsError(
+          "unauthenticated",
+          "User must be signed in."
+        );
+      }
+
+      const requestedBranch =
+        String(
+          data &&
+          data.branch ||
+          ""
+        )
+          .trim()
+          .slice(0, 160);
+
+      const requestedGroup =
+        String(
+          data &&
+          data.group ||
+          ""
+        )
+          .trim()
+          .slice(0, 160);
+
+      if (
+        !requestedBranch ||
+        !requestedGroup
+      ) {
+        throw new functions.https.HttpsError(
+          "invalid-argument",
+          "Invalid branch or group."
+        );
+      }
+
+      const normalizedBranch =
+        normalizeTrainingTargetText(
+          requestedBranch
+        );
+
+      const normalizedGroup =
+        normalizeTrainingTargetText(
+          requestedGroup
+        );
+
+      if (
+        !normalizedBranch ||
+        !normalizedGroup
+      ) {
+        throw new functions.https.HttpsError(
+          "invalid-argument",
+          "Invalid branch or group."
+        );
+      }
+
+      const [
+        adminSnapshot,
+        coachSnapshot,
+        userSnapshot,
+      ] =
+        await Promise.all([
+          db.collection("admins")
+            .doc(uid)
+            .get(),
+
+          db.collection("authorizedCoaches")
+            .doc(uid)
+            .get(),
+
+          db.collection("users")
+            .doc(uid)
+            .get(),
+        ]);
+
+      const adminData =
+        adminSnapshot.exists
+          ? adminSnapshot.data() || {}
+          : {};
+
+      const coachData =
+        coachSnapshot.exists
+          ? coachSnapshot.data() || {}
+          : {};
+
+      const userData =
+        userSnapshot.exists
+          ? userSnapshot.data() || {}
+          : {};
+
+      const isAdminUser =
+        adminData.enabled === true;
+
+      const isActiveCoach =
+        coachSnapshot.exists &&
+        coachData.active === true &&
+        String(
+          coachData.role || ""
+        )
+          .trim()
+          .toLowerCase() === "coach";
+
+      let coachAuthorizedForPair =
+        false;
+
+      if (isActiveCoach) {
+        const authorizedPairs =
+          Array.isArray(
+            coachData.authorizedBranchGroups
+          )
+            ? coachData.authorizedBranchGroups
+            : [];
+
+        coachAuthorizedForPair =
+          authorizedPairs.some(
+            (rawPair) => {
+
+              const pair =
+                String(rawPair || "")
+                  .trim();
+
+              const separatorIndex =
+                pair.indexOf("||");
+
+              if (separatorIndex <= 0) {
+                return false;
+              }
+
+              const pairBranch =
+                normalizeTrainingTargetText(
+                  pair.substring(
+                    0,
+                    separatorIndex
+                  )
+                );
+
+              const pairGroup =
+                normalizeTrainingTargetText(
+                  pair.substring(
+                    separatorIndex + 2
+                  )
+                );
+
+              return (
+                pairBranch === normalizedBranch &&
+                pairGroup === normalizedGroup
+              );
+            }
+          );
+      }
+
+      const traineeBranches =
+        parseUserTargetValues(
+          userData,
+          [
+            "branch",
+            "branches",
+            "branches_json",
+            "branchesCsv",
+            "selected_branches",
+            "selectedBranches",
+            "active_branch",
+            "activeBranch",
+            "branchName",
+          ]
+        );
+
+      const traineeGroups =
+        parseUserTargetValues(
+          userData,
+          [
+            "group",
+            "groups",
+            "groups_json",
+            "groupsCsv",
+            "selected_groups",
+            "selectedGroups",
+            "active_group",
+            "activeGroup",
+            "age_group",
+            "age_groups",
+            "primaryGroup",
+            "groupKey",
+          ]
+        );
+
+      const traineeAuthorizedForPair =
+        traineeBranches.includes(
+          normalizedBranch
+        ) &&
+        traineeGroups.includes(
+          normalizedGroup
+        );
+
+      if (
+        !isAdminUser &&
+        !coachAuthorizedForPair &&
+        !traineeAuthorizedForPair
+      ) {
+        throw new functions.https.HttpsError(
+          "permission-denied",
+          "User is outside this forum scope."
+        );
+      }
+
+      const usersSnapshot =
+        await db
+          .collection("users")
+          .get();
+
+const coachesSnapshot =
+  await db
+    .collection("authorizedCoaches")
+    .get();
+
+      /*
+     /*
+      * קודם מאחדים את כל מסמכי המשתמשים
+      * לפי הזהות הגלובלית.
+      *
+      * רק לאחר האיחוד בודקים פעילות,
+      * סניף וקבוצה.
+      */
+     const allForumUserEntries =
+       usersSnapshot.docs
+         .map((document) => ({
+           id:
+             document.id,
+
+           user:
+             document.data() || {},
+         }));
+
+     const identityGroups =
+       groupUsersByIdentity(
+         allForumUserEntries
+       )
+         .filter((entries) => {
+
+           if (
+             !Array.isArray(entries) ||
+             entries.length === 0
+           ) {
+             return false;
+           }
+
+           const activeEntries =
+             entries.filter((entry) => {
+
+               const user =
+                 entry.user || {};
+
+               const status =
+                 String(
+                   user.status ||
+                   user.active ||
+                   ""
+                 )
+                   .trim()
+                   .toLowerCase();
+
+               return (
+                 user.isActive !== false &&
+                 status !== "inactive" &&
+                 status !== "disabled" &&
+                 status !== "blocked" &&
+                 status !== "לא פעיל"
+               );
+             });
+
+           if (activeEntries.length === 0) {
+             return false;
+           }
+
+           const branches =
+             Array.from(
+               new Set(
+                 activeEntries
+                   .flatMap((entry) =>
+                     parseUserTargetValues(
+                       entry.user || {},
+                       [
+                         "branch",
+                         "branches",
+                         "branches_json",
+                         "branchesCsv",
+                         "selected_branches",
+                         "selectedBranches",
+                         "active_branch",
+                         "activeBranch",
+                         "branchName",
+                       ]
+                     )
+                   )
+                   .filter(Boolean)
+               )
+             );
+
+           const groups =
+             Array.from(
+               new Set(
+                 activeEntries
+                   .flatMap((entry) =>
+                     parseUserTargetValues(
+                       entry.user || {},
+                       [
+                         "group",
+                         "groups",
+                         "groups_json",
+                         "groupsCsv",
+                         "selected_groups",
+                         "selectedGroups",
+                         "active_group",
+                         "activeGroup",
+                         "age_group",
+                         "age_groups",
+                         "primaryGroup",
+                         "groupKey",
+                       ]
+                     )
+                   )
+                   .filter(Boolean)
+               )
+             );
+
+           return (
+             branches.includes(
+               normalizedBranch
+             ) &&
+             groups.includes(
+               normalizedGroup
+             )
+           );
+         });
+
+const coachItems =
+  coachesSnapshot.docs
+    .map((document) => {
+
+      const coach =
+        document.data() || {};
+
+      const active =
+        coach.active === true &&
+        String(
+          coach.role || ""
+        )
+          .trim()
+          .toLowerCase() === "coach";
+
+      if (!active) {
+        return null;
+      }
+
+      const authorizedPairs =
+        Array.isArray(
+          coach.authorizedBranchGroups
+        )
+          ? coach.authorizedBranchGroups
+          : [];
+
+      const belongsToRoom =
+        authorizedPairs.some(
+          (rawPair) => {
+
+            const pair =
+              String(rawPair || "")
+                .trim();
+
+            const separatorIndex =
+              pair.indexOf("||");
+
+            if (separatorIndex <= 0) {
+              return false;
+            }
+
+            const pairBranch =
+              normalizeTrainingTargetText(
+                pair.substring(
+                  0,
+                  separatorIndex
+                )
+              );
+
+            const pairGroup =
+              normalizeTrainingTargetText(
+                pair.substring(
+                  separatorIndex + 2
+                )
+              );
+
+            return (
+              pairBranch === normalizedBranch &&
+              pairGroup === normalizedGroup
+            );
+          }
+        );
+
+      if (!belongsToRoom) {
+        return null;
+      }
+
+      const coachUid =
+        String(
+          document.id || ""
+        ).trim();
+
+      const coachName =
+        String(
+          coach.fullName ||
+          coach.name ||
+          coach.displayName ||
+          coach.email ||
+          ""
+        )
+          .trim()
+          .replace(
+            /\s+/g,
+            " "
+          )
+          .slice(0, 200);
+
+      if (
+        !coachUid ||
+        !coachName
+      ) {
+        return null;
+      }
+
+      return {
+        uid:
+          coachUid,
+
+        name:
+          coachName,
+      };
+    })
+    .filter(Boolean);
+
+      const items =
+        identityGroups
+          .map((entries) => {
+
+            if (
+              !Array.isArray(entries) ||
+              entries.length === 0
+            ) {
+              return null;
+            }
+
+            /*
+             * אם המשתמש המחובר נמצא בקבוצה,
+             * מעדיפים את הזהות הנוכחית שלו.
+             */
+            const currentUserEntry =
+              entries.find((entry) => {
+
+                const user =
+                  entry.user || {};
+
+                return [
+                  entry.id,
+                  user.uid,
+                  user.authUid,
+                  user.userDocId,
+                  user.traineeId,
+                ]
+                  .map((value) =>
+                    String(value || "")
+                      .trim()
+                  )
+                  .filter(Boolean)
+                  .includes(uid);
+              });
+
+            const primary =
+              currentUserEntry ||
+              entries.find((entry) => {
+
+                const user =
+                  entry.user || {};
+
+                return String(
+                  user.fullName ||
+                  user.name ||
+                  user.displayName ||
+                  user.full_name ||
+                  ""
+                ).trim().length > 0;
+              }) ||
+              entries[0];
+
+            if (!primary) {
+              return null;
+            }
+
+            const primaryUser =
+              primary.user || {};
+
+            const participantUid =
+              currentUserEntry
+                ? uid
+                : globalUserUid(
+                    primary.id,
+                    primaryUser
+                  );
+
+            const participantName =
+              entries
+                .map((entry) => {
+
+                  const user =
+                    entry.user || {};
+
+                  return String(
+                    user.fullName ||
+                    user.name ||
+                    user.displayName ||
+                    user.full_name ||
+                    ""
+                  )
+                    .trim()
+                    .replace(
+                      /\s+/g,
+                      " "
+                    )
+                    .slice(0, 200);
+                })
+                .find(Boolean) ||
+              "";
+
+            if (
+              !participantUid ||
+              !participantName
+            ) {
+              return null;
+            }
+
+            return {
+              uid:
+                participantUid,
+
+              name:
+                participantName,
+            };
+          })
+          .filter(Boolean)
+          .sort(
+            (a, b) =>
+              String(
+                a.name || ""
+              ).localeCompare(
+                String(
+                  b.name || ""
+                ),
+                "he"
+              )
+          );
+
+     const mergedItems =
+       Array.from(
+         new Map(
+           items
+             .concat(coachItems)
+             .map((item) => [
+               String(
+                 item.uid || ""
+               ).trim(),
+               item,
+             ])
+         ).values()
+       )
+         .filter(
+           (item) =>
+             item &&
+             item.uid &&
+             item.name
+         )
+         .sort(
+           (a, b) =>
+             String(
+               a.name || ""
+             ).localeCompare(
+               String(
+                 b.name || ""
+               ),
+               "he"
+             )
+         );
+
+     return {
+       success:
+         true,
+
+       branch:
+         requestedBranch,
+
+       group:
+         requestedGroup,
+
+       items:
+         mergedItems,
+     };
+    }
+  );
+
+/**
+ * ====================================================
+ * יצירה / עריכה של הודעת פורום – מאובטח
+ *
+ * הלקוח שולח:
+ * - branch
+ * - group
+ * - text
+ * - mediaUrl
+ * - mediaType
+ * - messageId
+ *
+ * השרת:
+ * - מאמת Firebase Auth
+ * - מאמת הרשאה ל-branch||group
+ * - קובע UID ושם שולח בצד השרת
+ * - ביצירה יוצר messageId חדש
+ * - בעריכה מאפשר רק לבעל ההודעה או Admin
+ * - מאחד participantIds לפי זהות גלובלית
+ * ====================================================
+ */
+ /**
+  * ====================================================
+  * טעינת הודעות פורום – מאובטחת
+  *
+  * הלקוח שולח:
+  * - branch
+  * - group
+  *
+  * השרת:
+  * - מאמת Firebase Auth
+  * - Admin רשאי לקרוא
+  * - Coach חייב להיות מורשה ל-branch||group
+  * - Trainee חייב להשתייך ל-branch||group
+  * - מחשב את roomId בשרת
+  * - מחזיר רק את שדות ההודעה הדרושים למסך
+  * ====================================================
+  */
+ exports.loadSecureForumMessages =
+   functions.https.onCall(
+     async (data, context) => {
+
+       const uid =
+         String(
+           context.auth &&
+           context.auth.uid ||
+           ""
+         ).trim();
+
+       if (!uid) {
+         throw new functions.https.HttpsError(
+           "unauthenticated",
+           "User must be signed in."
+         );
+       }
+
+       const requestedBranch =
+         String(
+           data &&
+           data.branch ||
+           ""
+         )
+           .trim()
+           .slice(0, 160);
+
+       const requestedGroup =
+         String(
+           data &&
+           data.group ||
+           ""
+         )
+           .trim()
+           .slice(0, 160);
+
+       if (
+         !requestedBranch ||
+         !requestedGroup ||
+         requestedBranch.includes("/")
+       ) {
+         throw new functions.https.HttpsError(
+           "invalid-argument",
+           "Invalid branch or group."
+         );
+       }
+
+       const normalizedBranch =
+         normalizeTrainingTargetText(
+           requestedBranch
+         );
+
+       const normalizedGroup =
+         normalizeTrainingTargetText(
+           requestedGroup
+         );
+
+       if (
+         !normalizedBranch ||
+         !normalizedGroup
+       ) {
+         throw new functions.https.HttpsError(
+           "invalid-argument",
+           "Invalid branch or group."
+         );
+       }
+
+       const [
+         adminSnapshot,
+         coachSnapshot,
+         userSnapshot,
+       ] =
+         await Promise.all([
+           db.collection("admins")
+             .doc(uid)
+             .get(),
+
+           db.collection("authorizedCoaches")
+             .doc(uid)
+             .get(),
+
+           db.collection("users")
+             .doc(uid)
+             .get(),
+         ]);
+
+       const adminData =
+         adminSnapshot.exists
+           ? adminSnapshot.data() || {}
+           : {};
+
+       const coachData =
+         coachSnapshot.exists
+           ? coachSnapshot.data() || {}
+           : {};
+
+       const userData =
+         userSnapshot.exists
+           ? userSnapshot.data() || {}
+           : {};
+
+       const isAdminUser =
+         adminData.enabled === true;
+
+       const isActiveCoach =
+         coachSnapshot.exists &&
+         coachData.active === true &&
+         String(
+           coachData.role || ""
+         )
+           .trim()
+           .toLowerCase() === "coach";
+
+       let coachAuthorizedForPair =
+         false;
+
+       if (isActiveCoach) {
+
+         const authorizedPairs =
+           Array.isArray(
+             coachData.authorizedBranchGroups
+           )
+             ? coachData.authorizedBranchGroups
+             : [];
+
+         coachAuthorizedForPair =
+           authorizedPairs.some(
+             (rawPair) => {
+
+               const pair =
+                 String(rawPair || "")
+                   .trim();
+
+               const separatorIndex =
+                 pair.indexOf("||");
+
+               if (separatorIndex <= 0) {
+                 return false;
+               }
+
+               const pairBranch =
+                 normalizeTrainingTargetText(
+                   pair.substring(
+                     0,
+                     separatorIndex
+                   )
+                 );
+
+               const pairGroup =
+                 normalizeTrainingTargetText(
+                   pair.substring(
+                     separatorIndex + 2
+                   )
+                 );
+
+               return (
+                 pairBranch === normalizedBranch &&
+                 pairGroup === normalizedGroup
+               );
+             }
+           );
+       }
+
+   const allForumUsersSnapshot =
+     await db
+       .collection("users")
+       .get();
+
+   const allForumUserEntries =
+     allForumUsersSnapshot.docs.map(
+       (document) => ({
+         id:
+           document.id,
+
+         user:
+           document.data() || {},
+       })
+     );
+
+   const currentIdentityGroup =
+     groupUsersByIdentity(
+       allForumUserEntries
+     )
+       .find(
+         (entries) =>
+           entries.some(
+             (entry) => {
+
+               const user =
+                 entry.user || {};
+
+               return [
+                 entry.id,
+                 user.uid,
+                 user.authUid,
+                 user.userDocId,
+                 user.traineeId,
+               ]
+                 .map((value) =>
+                   String(value || "")
+                     .trim()
+                 )
+                 .filter(Boolean)
+                 .includes(uid);
+             }
+           )
+       ) || [];
+
+   const traineeBranches =
+     Array.from(
+       new Set(
+         currentIdentityGroup
+           .flatMap(
+             (entry) =>
+               parseUserTargetValues(
+                 entry.user || {},
+                 [
+                   "branch",
+                   "branches",
+                   "branches_json",
+                   "branchesCsv",
+                   "selected_branches",
+                   "selectedBranches",
+                   "active_branch",
+                   "activeBranch",
+                   "branchName",
+                 ]
+               )
+           )
+           .filter(Boolean)
+       )
+     );
+
+   const traineeGroups =
+     Array.from(
+       new Set(
+         currentIdentityGroup
+           .flatMap(
+             (entry) =>
+               parseUserTargetValues(
+                 entry.user || {},
+                 [
+                   "group",
+                   "groups",
+                   "groups_json",
+                   "groupsCsv",
+                   "selected_groups",
+                   "selectedGroups",
+                   "active_group",
+                   "activeGroup",
+                   "age_group",
+                   "age_groups",
+                   "primaryGroup",
+                   "groupKey",
+                 ]
+               )
+           )
+           .filter(Boolean)
+       )
+     );
+
+   const traineeAuthorizedForPair =
+     traineeBranches.includes(
+       normalizedBranch
+     ) &&
+     traineeGroups.includes(
+       normalizedGroup
+     );
+
+       if (
+         !isAdminUser &&
+         !coachAuthorizedForPair &&
+         !traineeAuthorizedForPair
+       ) {
+         throw new functions.https.HttpsError(
+           "permission-denied",
+           "User is outside this forum scope."
+         );
+       }
+
+       function forumServerSafeDocId(
+         value
+       ) {
+         return String(value || "")
+           .trim()
+           .toLowerCase()
+           .replace(/[־–—]/g, "-")
+           .replace(/\s+/g, "_")
+           .replace(/[^a-z0-9א-ת_\-]+/g, "_")
+           .replace(/^_+|_+$/g, "") ||
+           "default";
+       }
+
+       const roomId =
+         `room_${forumServerSafeDocId(requestedBranch)}` +
+         `_${forumServerSafeDocId(requestedGroup)}`;
+
+       const messagesSnapshot =
+         await db
+           .collection("branches")
+           .doc(requestedBranch)
+           .collection("forumRooms")
+           .doc(roomId)
+           .collection("messages")
+           .orderBy(
+             "createdAt",
+             "desc"
+           )
+           .limit(200)
+           .get();
+
+       const items =
+         messagesSnapshot.docs
+           .map((document) => {
+
+             const message =
+               document.data() || {};
+
+             const authorUid =
+               String(
+                 message.authorUid ||
+                 ""
+               )
+                 .trim()
+                 .slice(0, 200);
+
+             const authorName =
+               String(
+                 message.authorName ||
+                 message.fullName ||
+                 message.name ||
+                 message.displayName ||
+                 ""
+               )
+                 .trim()
+                 .slice(0, 200);
+
+             const text =
+               String(
+                 message.text ||
+                 ""
+               )
+                 .trim()
+                 .slice(0, 10000);
+
+             const createdAtMillisRaw =
+               Number(
+                 message.createdAtMillis ||
+                 (
+                   message.createdAt &&
+                   typeof message.createdAt.toMillis ===
+                     "function"
+                     ? message.createdAt.toMillis()
+                     : 0
+                 )
+               );
+
+             const updatedAtMillisRaw =
+               Number(
+                 message.updatedAtMillis ||
+                 0
+               );
+
+             const mediaUrl =
+               message.mediaUrl == null
+                 ? null
+                 : String(
+                     message.mediaUrl
+                   )
+                     .trim()
+                     .slice(0, 3000);
+
+             const mediaType =
+               message.mediaType == null
+                 ? null
+                 : String(
+                     message.mediaType
+                   )
+                     .trim()
+                     .toLowerCase()
+                     .slice(0, 30);
+
+             if (
+               !authorUid ||
+               !Number.isFinite(
+                 createdAtMillisRaw
+               ) ||
+               createdAtMillisRaw <= 0
+             ) {
+               return null;
+             }
+
+             return {
+               id:
+                 document.id,
+
+               messageId:
+                 String(
+                   message.messageId ||
+                   document.id
+                 )
+                   .trim()
+                   .slice(0, 200),
+
+               branch:
+                 requestedBranch,
+
+               groupKey:
+                 requestedGroup,
+
+               authorUid,
+
+               authorName,
+
+               text,
+
+               createdAtMillis:
+                 createdAtMillisRaw,
+
+               updatedAtMillis:
+                 Number.isFinite(
+                   updatedAtMillisRaw
+                 )
+                   ? updatedAtMillisRaw
+                   : 0,
+
+               mediaUrl,
+
+               mediaType,
+             };
+           })
+           .filter(Boolean);
+
+       return {
+         success: true,
+
+         branch:
+           requestedBranch,
+
+         group:
+           requestedGroup,
+
+         roomId,
+
+         items,
+       };
+     }
+   );
+
+exports.saveSecureForumMessage =
+  functions.https.onCall(
+    async (data, context) => {
+
+      const uid =
+        String(
+          context.auth &&
+          context.auth.uid ||
+          ""
+        ).trim();
+
+      if (!uid) {
+        throw new functions.https.HttpsError(
+          "unauthenticated",
+          "User must be signed in."
+        );
+      }
+
+      const branch =
+        String(
+          data &&
+          data.branch ||
+          ""
+        )
+          .trim()
+          .slice(0, 160);
+
+      const group =
+        String(
+          data &&
+          data.group ||
+          ""
+        )
+          .trim()
+          .slice(0, 160);
+
+      const text =
+        String(
+          data &&
+          data.text ||
+          ""
+        )
+          .trim()
+          .slice(0, 10000);
+
+      const requestedMessageId =
+        String(
+          data &&
+          data.messageId ||
+          ""
+        )
+          .trim()
+          .slice(0, 200);
+
+      const mediaUrl =
+        String(
+          data &&
+          data.mediaUrl ||
+          ""
+        )
+          .trim()
+          .slice(0, 3000);
+
+      const mediaType =
+        String(
+          data &&
+          data.mediaType ||
+          ""
+        )
+          .trim()
+          .toLowerCase()
+          .slice(0, 30);
+
+      if (
+        !branch ||
+        !group
+      ) {
+        throw new functions.https.HttpsError(
+          "invalid-argument",
+          "Invalid branch or group."
+        );
+      }
+
+     if (
+       !requestedMessageId &&
+       !text &&
+       !mediaUrl
+     ) {
+       throw new functions.https.HttpsError(
+         "invalid-argument",
+         "Forum message is empty."
+       );
+     }
+
+      if (
+        mediaUrl &&
+        mediaType !== "image" &&
+        mediaType !== "video"
+      ) {
+        throw new functions.https.HttpsError(
+          "invalid-argument",
+          "Invalid media type."
+        );
+      }
+
+      const normalizedBranch =
+        normalizeTrainingTargetText(
+          branch
+        );
+
+      const normalizedGroup =
+        normalizeTrainingTargetText(
+          group
+        );
+
+      if (
+        !normalizedBranch ||
+        !normalizedGroup
+      ) {
+        throw new functions.https.HttpsError(
+          "invalid-argument",
+          "Invalid forum scope."
+        );
+      }
+
+      const [
+        adminSnapshot,
+        coachSnapshot,
+        userSnapshot,
+      ] =
+        await Promise.all([
+          db.collection("admins")
+            .doc(uid)
+            .get(),
+
+          db.collection("authorizedCoaches")
+            .doc(uid)
+            .get(),
+
+          db.collection("users")
+            .doc(uid)
+            .get(),
+        ]);
+
+      const adminData =
+        adminSnapshot.exists
+          ? adminSnapshot.data() || {}
+          : {};
+
+      const coachData =
+        coachSnapshot.exists
+          ? coachSnapshot.data() || {}
+          : {};
+
+      const userData =
+        userSnapshot.exists
+          ? userSnapshot.data() || {}
+          : {};
+
+      const isAdminUser =
+        adminData.enabled === true;
+
+      const isActiveCoach =
+        coachSnapshot.exists &&
+        coachData.active === true &&
+        String(
+          coachData.role || ""
+        )
+          .trim()
+          .toLowerCase() === "coach";
+
+      let coachAuthorizedForPair =
+        false;
+
+      if (isActiveCoach) {
+        const authorizedPairs =
+          Array.isArray(
+            coachData.authorizedBranchGroups
+          )
+            ? coachData.authorizedBranchGroups
+            : [];
+
+        coachAuthorizedForPair =
+          authorizedPairs.some(
+            (rawPair) => {
+
+              const pair =
+                String(rawPair || "")
+                  .trim();
+
+              const separatorIndex =
+                pair.indexOf("||");
+
+              if (separatorIndex <= 0) {
+                return false;
+              }
+
+              const pairBranch =
+                normalizeTrainingTargetText(
+                  pair.substring(
+                    0,
+                    separatorIndex
+                  )
+                );
+
+              const pairGroup =
+                normalizeTrainingTargetText(
+                  pair.substring(
+                    separatorIndex + 2
+                  )
+                );
+
+              return (
+                pairBranch === normalizedBranch &&
+                pairGroup === normalizedGroup
+              );
+            }
+          );
+      }
+
+    const allForumUsersSnapshot =
+      await db
+        .collection("users")
+        .get();
+
+    const allForumUserEntries =
+      allForumUsersSnapshot.docs.map(
+        (document) => ({
+          id:
+            document.id,
+
+          user:
+            document.data() || {},
+        })
+      );
+
+    const currentIdentityGroup =
+      groupUsersByIdentity(
+        allForumUserEntries
+      )
+        .find(
+          (entries) =>
+            entries.some(
+              (entry) => {
+
+                const user =
+                  entry.user || {};
+
+                return [
+                  entry.id,
+                  user.uid,
+                  user.authUid,
+                  user.userDocId,
+                  user.traineeId,
+                ]
+                  .map((value) =>
+                    String(value || "")
+                      .trim()
+                  )
+                  .filter(Boolean)
+                  .includes(uid);
+              }
+            )
+        ) || [];
+
+    const userBranches =
+      Array.from(
+        new Set(
+          currentIdentityGroup
+            .flatMap(
+              (entry) =>
+                parseUserTargetValues(
+                  entry.user || {},
+                  [
+                    "branch",
+                    "branches",
+                    "branches_json",
+                    "branchesCsv",
+                    "selected_branches",
+                    "selectedBranches",
+                    "active_branch",
+                    "activeBranch",
+                    "branchName",
+                  ]
+                )
+            )
+            .filter(Boolean)
+        )
+      );
+
+    const userGroups =
+      Array.from(
+        new Set(
+          currentIdentityGroup
+            .flatMap(
+              (entry) =>
+                parseUserTargetValues(
+                  entry.user || {},
+                  [
+                    "group",
+                    "groups",
+                    "groups_json",
+                    "groupsCsv",
+                    "selected_groups",
+                    "selectedGroups",
+                    "active_group",
+                    "activeGroup",
+                    "age_group",
+                    "age_groups",
+                    "primaryGroup",
+                    "groupKey",
+                  ]
+                )
+            )
+            .filter(Boolean)
+        )
+      );
+
+    const traineeAuthorizedForPair =
+      userBranches.includes(
+        normalizedBranch
+      ) &&
+      userGroups.includes(
+        normalizedGroup
+      );
+
+      if (
+        !isAdminUser &&
+        !coachAuthorizedForPair &&
+        !traineeAuthorizedForPair
+      ) {
+        throw new functions.https.HttpsError(
+          "permission-denied",
+          "User is outside this forum scope."
+        );
+      }
+
+      function secureForumSafeDocId(
+        value
+      ) {
+        return String(value || "")
+          .trim()
+          .toLowerCase()
+          .replace(/[־–—]/g, "-")
+          .replace(/\s+/g, "_")
+          .replace(/[^a-z0-9א-ת_\-]+/g, "_")
+          .replace(/^_+|_+$/g, "") ||
+          "default";
+      }
+
+      const roomId =
+        `room_${secureForumSafeDocId(branch)}` +
+        `_${secureForumSafeDocId(group)}`;
+
+      const roomRef =
+        db.collection("branches")
+          .doc(branch)
+          .collection("forumRooms")
+          .doc(roomId);
+
+     const identityAuthorName =
+       currentIdentityGroup
+         .map((entry) => {
+
+           const user =
+             entry.user || {};
+
+           return String(
+             user.fullName ||
+             user.name ||
+             user.displayName ||
+             user.full_name ||
+             ""
+           )
+             .trim()
+             .replace(
+               /\s+/g,
+               " "
+             );
+         })
+         .find(Boolean) ||
+       "";
+
+     const authorName =
+       String(
+         identityAuthorName ||
+         coachData.fullName ||
+         context.auth.token.name ||
+         context.auth.token.email ||
+         "משתתף"
+       )
+         .trim()
+         .slice(0, 200);
+
+      const nowMillis =
+        Date.now();
+
+      const messagePreview =
+        text
+          ? text.slice(0, 120)
+          : (
+              mediaType === "image"
+                ? "תמונה חדשה"
+                : mediaType === "video"
+                  ? "סרטון חדש"
+                  : "הודעה חדשה"
+            );
+
+      /*
+       * בניית רשימת משתתפי החדר ואיחוד כפילויות
+       * לפי UID / אימייל / טלפון.
+       */
+     const forumIdentityGroups =
+       groupUsersByIdentity(
+         allForumUserEntries
+       )
+       .filter((entries) => {
+
+         if (
+           !Array.isArray(entries) ||
+           entries.length === 0
+         ) {
+           return false;
+         }
+
+         const activeEntries =
+           entries.filter((entry) => {
+
+             const user =
+               entry.user || {};
+
+             const status =
+               String(
+                 user.status ||
+                 user.active ||
+                 ""
+               )
+                 .trim()
+                 .toLowerCase();
+
+             return (
+               user.isActive !== false &&
+               status !== "inactive" &&
+               status !== "disabled" &&
+               status !== "blocked" &&
+               status !== "לא פעיל"
+             );
+           });
+
+         if (activeEntries.length === 0) {
+           return false;
+         }
+
+         const branches =
+           Array.from(
+             new Set(
+               activeEntries
+                 .flatMap((entry) =>
+                   parseUserTargetValues(
+                     entry.user || {},
+                     [
+                       "branch",
+                       "branches",
+                       "branches_json",
+                       "branchesCsv",
+                       "selected_branches",
+                       "selectedBranches",
+                       "active_branch",
+                       "activeBranch",
+                       "branchName",
+                     ]
+                   )
+                 )
+                 .filter(Boolean)
+             )
+           );
+
+         const groups =
+           Array.from(
+             new Set(
+               activeEntries
+                 .flatMap((entry) =>
+                   parseUserTargetValues(
+                     entry.user || {},
+                     [
+                       "group",
+                       "groups",
+                       "groups_json",
+                       "groupsCsv",
+                       "selected_groups",
+                       "selectedGroups",
+                       "active_group",
+                       "activeGroup",
+                       "age_group",
+                       "age_groups",
+                       "primaryGroup",
+                       "groupKey",
+                     ]
+                   )
+                 )
+                 .filter(Boolean)
+             )
+           );
+
+         return (
+           branches.includes(
+             normalizedBranch
+           ) &&
+           groups.includes(
+             normalizedGroup
+           )
+         );
+       });
+
+      const participantIds =
+        [];
+
+      const participantNames =
+        [];
+
+      forumIdentityGroups.forEach(
+        (entries) => {
+
+          if (
+            !Array.isArray(entries) ||
+            entries.length === 0
+          ) {
+            return;
+          }
+
+          const currentUserEntry =
+            entries.find((entry) => {
+
+              const user =
+                entry.user || {};
+
+              return [
+                entry.id,
+                user.uid,
+                user.authUid,
+                user.userDocId,
+                user.traineeId,
+              ]
+                .map((value) =>
+                  String(value || "")
+                    .trim()
+                )
+                .filter(Boolean)
+                .includes(uid);
+            });
+
+          const primary =
+            currentUserEntry ||
+            entries.find((entry) => {
+
+              const user =
+                entry.user || {};
+
+              return String(
+                user.fullName ||
+                user.name ||
+                user.displayName ||
+                user.full_name ||
+                ""
+              ).trim().length > 0;
+            }) ||
+            entries[0];
+
+          if (!primary) {
+            return;
+          }
+
+          const primaryUser =
+            primary.user || {};
+
+          const participantUid =
+            currentUserEntry
+              ? uid
+              : globalUserUid(
+                  primary.id,
+                  primaryUser
+                );
+
+          const participantName =
+            entries
+              .map((entry) => {
+
+                const user =
+                  entry.user || {};
+
+                return String(
+                  user.fullName ||
+                  user.name ||
+                  user.displayName ||
+                  user.full_name ||
+                  ""
+                )
+                  .trim()
+                  .replace(
+                    /\s+/g,
+                    " "
+                  )
+                  .slice(0, 200);
+              })
+              .find(Boolean) ||
+            "";
+
+          if (participantUid) {
+            participantIds.push(
+              participantUid
+            );
+          }
+
+          if (participantName) {
+            participantNames.push(
+              participantName
+            );
+          }
+        }
+      );
+
+const authorizedCoachesSnapshot =
+  await db
+    .collection("authorizedCoaches")
+    .get();
+
+authorizedCoachesSnapshot.docs.forEach(
+  (document) => {
+
+    const coach =
+      document.data() || {};
+
+    const active =
+      coach.active === true &&
+      String(
+        coach.role || ""
+      )
+        .trim()
+        .toLowerCase() === "coach";
+
+    if (!active) {
+      return;
+    }
+
+    const authorizedPairs =
+      Array.isArray(
+        coach.authorizedBranchGroups
+      )
+        ? coach.authorizedBranchGroups
+        : [];
+
+    const belongsToRoom =
+      authorizedPairs.some(
+        (rawPair) => {
+
+          const pair =
+            String(rawPair || "")
+              .trim();
+
+          const separatorIndex =
+            pair.indexOf("||");
+
+          if (separatorIndex <= 0) {
+            return false;
+          }
+
+          const pairBranch =
+            normalizeTrainingTargetText(
+              pair.substring(
+                0,
+                separatorIndex
+              )
+            );
+
+          const pairGroup =
+            normalizeTrainingTargetText(
+              pair.substring(
+                separatorIndex + 2
+              )
+            );
+
+          return (
+            pairBranch === normalizedBranch &&
+            pairGroup === normalizedGroup
+          );
+        }
+      );
+
+    if (!belongsToRoom) {
+      return;
+    }
+
+    const coachUid =
+      String(
+        document.id || ""
+      ).trim();
+
+    const coachName =
+      String(
+        coach.fullName ||
+        coach.name ||
+        coach.displayName ||
+        coach.email ||
+        ""
+      )
+        .trim()
+        .replace(
+          /\s+/g,
+          " "
+        )
+        .slice(0, 200);
+
+    if (coachUid) {
+      participantIds.push(
+        coachUid
+      );
+    }
+
+    if (coachName) {
+      participantNames.push(
+        coachName
+      );
+    }
+  }
+);
+
+      /*
+       * יצירת הודעה חדשה.
+       */
+      if (!requestedMessageId) {
+
+        const messageRef =
+          roomRef
+            .collection("messages")
+            .doc();
+
+        const expiresAt =
+          admin.firestore.Timestamp.fromMillis(
+            nowMillis +
+            90 * 24 * 60 * 60 * 1000
+          );
+
+        await db.runTransaction(
+          async (transaction) => {
+
+            transaction.set(
+              roomRef,
+              {
+                roomId,
+
+                branch,
+
+                groupKey:
+                  group,
+
+              participantCount:
+                participantIds.length,
+
+              participantIds:
+                Array.from(
+                  new Set(
+                    participantIds
+                  )
+                ).slice(0, 500),
+
+              participantNames:
+                Array.from(
+                  new Set(
+                    participantNames
+                  )
+                ).slice(0, 500),
+
+                participantSource:
+                  "server_forum_scope",
+
+                pushEnabled:
+                  true,
+
+                pushTarget:
+                  "forum_room_participants",
+
+                lastMessageId:
+                  messageRef.id,
+
+                lastMessagePreview:
+                  messagePreview,
+
+                lastMessageAuthorUid:
+                  uid,
+
+                lastMessageAuthorName:
+                  authorName,
+
+                lastMessageAt:
+                  admin.firestore
+                    .FieldValue
+                    .serverTimestamp(),
+
+                lastMessageAtMillis:
+                  nowMillis,
+
+                updatedAt:
+                  admin.firestore
+                    .FieldValue
+                    .serverTimestamp(),
+
+                updatedAtMillis:
+                  nowMillis,
+
+                source:
+                  "server_secure_forum",
+              },
+              {
+                merge:
+                  true,
+              }
+            );
+
+            transaction.set(
+              messageRef,
+              {
+                messageId:
+                  messageRef.id,
+
+                roomId,
+
+                branch,
+
+                groupKey:
+                  group,
+
+                authorUid:
+                  uid,
+
+                authorName,
+
+                text,
+
+                messagePreview,
+
+                hasMedia:
+                  Boolean(mediaUrl),
+
+                mediaUrl:
+                  mediaUrl || null,
+
+                mediaType:
+                  mediaUrl
+                    ? mediaType
+                    : null,
+
+                expiresAt,
+
+                retentionDays:
+                  90,
+
+                isPinned:
+                  false,
+
+                pushStatus:
+                  "pending",
+
+                pushCreatedBy:
+                  "saveSecureForumMessage",
+
+                createdAt:
+                  admin.firestore
+                    .FieldValue
+                    .serverTimestamp(),
+
+                createdAtMillis:
+                  nowMillis,
+
+                updatedAtMillis:
+                  nowMillis,
+
+                source:
+                  "server_secure_forum",
+              }
+            );
+          }
+        );
+
+        return {
+          success:
+            true,
+
+          created:
+            true,
+
+          roomId,
+
+          messageId:
+            messageRef.id,
+        };
+      }
+
+      /*
+       * עריכת הודעה קיימת.
+       */
+      const messageRef =
+        roomRef
+          .collection("messages")
+          .doc(requestedMessageId);
+
+      const messageSnapshot =
+        await messageRef.get();
+
+      if (!messageSnapshot.exists) {
+        throw new functions.https.HttpsError(
+          "not-found",
+          "Forum message was not found."
+        );
+      }
+
+    const existingMessage =
+      messageSnapshot.data() || {};
+
+    const existingMediaUrl =
+      String(
+        existingMessage.mediaUrl ||
+        ""
+      ).trim();
+
+    if (
+      !text &&
+      !mediaUrl &&
+      !existingMediaUrl
+    ) {
+      throw new functions.https.HttpsError(
+        "invalid-argument",
+        "Forum message is empty."
+      );
+    }
+
+    const existingAuthorUid =
+        String(
+          existingMessage.authorUid ||
+          ""
+        ).trim();
+
+      if (
+        !isAdminUser &&
+        existingAuthorUid !== uid
+      ) {
+        throw new functions.https.HttpsError(
+          "permission-denied",
+          "Only the message author can edit this message."
+        );
+      }
+
+      await db.runTransaction(
+        async (transaction) => {
+
+          const messageUpdates = {
+            text,
+
+            messagePreview,
+
+            edited:
+              true,
+
+            updatedAt:
+              admin.firestore
+                .FieldValue
+                .serverTimestamp(),
+
+            updatedAtMillis:
+              nowMillis,
+
+            source:
+              "server_secure_forum",
+          };
+
+          /*
+           * אם נשלחה מדיה חדשה בזמן העריכה,
+           * מחליפים אותה.
+           * אחרת המדיה הקיימת נשארת ללא שינוי.
+           */
+          if (mediaUrl) {
+            messageUpdates.hasMedia =
+              true;
+
+            messageUpdates.mediaUrl =
+              mediaUrl;
+
+            messageUpdates.mediaType =
+              mediaType;
+          }
+
+          transaction.set(
+            messageRef,
+            messageUpdates,
+            {
+              merge:
+                true,
+            }
+          );
+
+          transaction.set(
+            roomRef,
+            {
+              lastMessagePreview:
+                messagePreview,
+
+              lastMessageAuthorUid:
+                existingAuthorUid,
+
+              lastMessageAuthorName:
+                String(
+                  existingMessage.authorName ||
+                  authorName
+                )
+                  .trim()
+                  .slice(0, 200),
+
+              lastMessageEditedAt:
+                admin.firestore
+                  .FieldValue
+                  .serverTimestamp(),
+
+              lastMessageEditedAtMillis:
+                nowMillis,
+
+              updatedAt:
+                admin.firestore
+                  .FieldValue
+                  .serverTimestamp(),
+
+              updatedAtMillis:
+                nowMillis,
+            },
+            {
+              merge:
+                true,
+            }
+          );
+        }
+      );
+
+      return {
+        success:
+          true,
+
+        created:
+          false,
+
+        roomId,
+
+        messageId:
+          requestedMessageId,
+      };
+    }
+  );
+
+/**
+ * ====================================================
+ * מחיקת הודעת פורום – מאובטחת
+ *
+ * הלקוח שולח:
+ * - branch
+ * - group
+ * - messageId
+ *
+ * השרת:
+ * - מאמת Firebase Auth
+ * - מאמת הרשאה לחדר
+ * - מאפשר מחיקה רק למחבר ההודעה או Admin
+ * - מעדכן metadata של החדר
+ * ====================================================
+ */
+exports.deleteSecureForumMessage =
+  functions.https.onCall(
+    async (data, context) => {
+
+      const uid =
+        String(
+          context.auth &&
+          context.auth.uid ||
+          ""
+        ).trim();
+
+      if (!uid) {
+        throw new functions.https.HttpsError(
+          "unauthenticated",
+          "User must be signed in."
+        );
+      }
+
+      const branch =
+        String(
+          data &&
+          data.branch ||
+          ""
+        )
+          .trim()
+          .slice(0, 160);
+
+      const group =
+        String(
+          data &&
+          data.group ||
+          ""
+        )
+          .trim()
+          .slice(0, 160);
+
+      const messageId =
+        String(
+          data &&
+          data.messageId ||
+          ""
+        )
+          .trim()
+          .slice(0, 200);
+
+      if (
+        !branch ||
+        !group ||
+        !messageId
+      ) {
+        throw new functions.https.HttpsError(
+          "invalid-argument",
+          "Missing forum delete parameters."
+        );
+      }
+
+      const normalizedBranch =
+        normalizeTrainingTargetText(
+          branch
+        );
+
+      const normalizedGroup =
+        normalizeTrainingTargetText(
+          group
+        );
+
+      if (
+        !normalizedBranch ||
+        !normalizedGroup
+      ) {
+        throw new functions.https.HttpsError(
+          "invalid-argument",
+          "Invalid forum scope."
+        );
+      }
+
+      const [
+        adminSnapshot,
+        coachSnapshot,
+        userSnapshot,
+      ] =
+        await Promise.all([
+          db.collection("admins")
+            .doc(uid)
+            .get(),
+
+          db.collection("authorizedCoaches")
+            .doc(uid)
+            .get(),
+
+          db.collection("users")
+            .doc(uid)
+            .get(),
+        ]);
+
+      const adminData =
+        adminSnapshot.exists
+          ? adminSnapshot.data() || {}
+          : {};
+
+      const coachData =
+        coachSnapshot.exists
+          ? coachSnapshot.data() || {}
+          : {};
+
+      const userData =
+        userSnapshot.exists
+          ? userSnapshot.data() || {}
+          : {};
+
+      const isAdminUser =
+        adminData.enabled === true;
+
+      const isActiveCoach =
+        coachSnapshot.exists &&
+        coachData.active === true &&
+        String(
+          coachData.role || ""
+        )
+          .trim()
+          .toLowerCase() === "coach";
+
+      let coachAuthorizedForPair =
+        false;
+
+      if (isActiveCoach) {
+        const authorizedPairs =
+          Array.isArray(
+            coachData.authorizedBranchGroups
+          )
+            ? coachData.authorizedBranchGroups
+            : [];
+
+        coachAuthorizedForPair =
+          authorizedPairs.some(
+            (rawPair) => {
+
+              const pair =
+                String(rawPair || "")
+                  .trim();
+
+              const separatorIndex =
+                pair.indexOf("||");
+
+              if (separatorIndex <= 0) {
+                return false;
+              }
+
+              const pairBranch =
+                normalizeTrainingTargetText(
+                  pair.substring(
+                    0,
+                    separatorIndex
+                  )
+                );
+
+              const pairGroup =
+                normalizeTrainingTargetText(
+                  pair.substring(
+                    separatorIndex + 2
+                  )
+                );
+
+              return (
+                pairBranch === normalizedBranch &&
+                pairGroup === normalizedGroup
+              );
+            }
+          );
+      }
+
+   const allDeleteForumUsersSnapshot =
+     await db
+       .collection("users")
+       .get();
+
+   const allDeleteForumUserEntries =
+     allDeleteForumUsersSnapshot.docs.map(
+       (document) => ({
+         id:
+           document.id,
+
+         user:
+           document.data() || {},
+       })
+     );
+
+   const deleteForumIdentityGroup =
+     groupUsersByIdentity(
+       allDeleteForumUserEntries
+     )
+       .find(
+         (entries) =>
+           entries.some(
+             (entry) => {
+
+               const user =
+                 entry.user || {};
+
+               return [
+                 entry.id,
+                 user.uid,
+                 user.authUid,
+                 user.userDocId,
+                 user.traineeId,
+               ]
+                 .map((value) =>
+                   String(value || "")
+                     .trim()
+                 )
+                 .filter(Boolean)
+                 .includes(uid);
+             }
+           )
+       ) || [];
+
+   const userBranches =
+     Array.from(
+       new Set(
+         deleteForumIdentityGroup
+           .flatMap(
+             (entry) =>
+               parseUserTargetValues(
+                 entry.user || {},
+                 [
+                   "branch",
+                   "branches",
+                   "branches_json",
+                   "branchesCsv",
+                   "selected_branches",
+                   "selectedBranches",
+                   "active_branch",
+                   "activeBranch",
+                   "branchName",
+                 ]
+               )
+           )
+           .filter(Boolean)
+       )
+     );
+
+   const userGroups =
+     Array.from(
+       new Set(
+         deleteForumIdentityGroup
+           .flatMap(
+             (entry) =>
+               parseUserTargetValues(
+                 entry.user || {},
+                 [
+                   "group",
+                   "groups",
+                   "groups_json",
+                   "groupsCsv",
+                   "selected_groups",
+                   "selectedGroups",
+                   "active_group",
+                   "activeGroup",
+                   "age_group",
+                   "age_groups",
+                   "primaryGroup",
+                   "groupKey",
+                 ]
+               )
+           )
+           .filter(Boolean)
+       )
+     );
+
+   const traineeAuthorizedForPair =
+     userBranches.includes(
+       normalizedBranch
+     ) &&
+     userGroups.includes(
+       normalizedGroup
+     );
+
+      if (
+        !isAdminUser &&
+        !coachAuthorizedForPair &&
+        !traineeAuthorizedForPair
+      ) {
+        throw new functions.https.HttpsError(
+          "permission-denied",
+          "User is outside this forum scope."
+        );
+      }
+
+      function secureForumDeleteSafeDocId(
+        value
+      ) {
+        return String(value || "")
+          .trim()
+          .toLowerCase()
+          .replace(/[־–—]/g, "-")
+          .replace(/\s+/g, "_")
+          .replace(/[^a-z0-9א-ת_\-]+/g, "_")
+          .replace(/^_+|_+$/g, "") ||
+          "default";
+      }
+
+      const roomId =
+        `room_${secureForumDeleteSafeDocId(branch)}` +
+        `_${secureForumDeleteSafeDocId(group)}`;
+
+      const roomRef =
+        db.collection("branches")
+          .doc(branch)
+          .collection("forumRooms")
+          .doc(roomId);
+
+      const messageRef =
+        roomRef
+          .collection("messages")
+          .doc(messageId);
+
+      const messageSnapshot =
+        await messageRef.get();
+
+      if (!messageSnapshot.exists) {
+        throw new functions.https.HttpsError(
+          "not-found",
+          "Forum message was not found."
+        );
+      }
+
+      const message =
+        messageSnapshot.data() || {};
+
+      const authorUid =
+        String(
+          message.authorUid ||
+          ""
+        ).trim();
+
+      if (
+        !isAdminUser &&
+        authorUid !== uid
+      ) {
+        throw new functions.https.HttpsError(
+          "permission-denied",
+          "Only the message author can delete this message."
+        );
+      }
+
+      const nowMillis =
+        Date.now();
+
+      await db.runTransaction(
+        async (transaction) => {
+
+          transaction.delete(
+            messageRef
+          );
+
+          transaction.set(
+            roomRef,
+            {
+              updatedAt:
+                admin.firestore
+                  .FieldValue
+                  .serverTimestamp(),
+
+              updatedAtMillis:
+                nowMillis,
+
+              lastModerationAction:
+                "message_deleted",
+
+              lastModerationByUid:
+                uid,
+
+              lastDeletedMessageId:
+                messageId,
+
+              lastDeletedAt:
+                admin.firestore
+                  .FieldValue
+                  .serverTimestamp(),
+
+              lastDeletedAtMillis:
+                nowMillis,
+            },
+            {
+              merge:
+                true,
+            }
+          );
+        }
+      );
+
+      return {
+        success:
+          true,
+
+        roomId,
+
+        messageId,
+      };
+    }
+  );
+
+/**
+ * ====================================================
  * Progress Stats – סטטיסטיקת התקדמות לפי חגורה
  *
  * מאזין ל:
@@ -5629,34 +11463,53 @@ async function applyProgressDeltasToBeltStats(transaction, deltasByBeltId) {
     const statsSnap = snapsByBeltId[beltId];
     const delta = deltasByBeltId[beltId] || {};
 
-    const current = statsSnap.exists
-      ? { ...emptyBeltStats(beltId), ...(statsSnap.data() || {}) }
-      : emptyBeltStats(beltId);
+ const current =
+   statsSnap.exists
+     ? Object.assign(
+         {},
+         emptyBeltStats(beltId),
+         statsSnap.data() || {}
+       )
+     : emptyBeltStats(beltId);
 
-    const nextUsersCount = Math.max(
-      0,
-      safeNumber(current.usersCount) + safeNumber(delta.usersCount)
-    );
+ const nextUsersCount = Math.max(
+   0,
+   safeNumber(current.usersCount) +
+     safeNumber(delta.usersCount)
+ );
 
-    const nextTotalKnownPercentSum = Math.max(
-      0,
-      safeNumber(current.totalKnownPercentSum) + safeNumber(delta.knownPercent)
-    );
+ const nextTotalKnownPercentSum = Math.max(
+   0,
+   safeNumber(current.totalKnownPercentSum) +
+     safeNumber(delta.knownPercent)
+ );
 
-    const nextAverageKnownPercent =
-      nextUsersCount <= 0
-        ? 0
-        : Math.round(nextTotalKnownPercentSum / nextUsersCount);
+ const nextAverageKnownPercent =
+   nextUsersCount <= 0
+     ? 0
+     : Math.round(
+         nextTotalKnownPercentSum /
+           nextUsersCount
+       );
 
-    const nextData = {
-      ...current,
-      beltId,
-      usersCount: nextUsersCount,
-      totalKnownPercentSum: nextTotalKnownPercentSum,
-      averageKnownPercent: nextAverageKnownPercent,
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-      updatedAtMillis: Date.now(),
-    };
+ const nextData =
+   Object.assign(
+     {},
+     current,
+     {
+       beltId,
+       usersCount:
+         nextUsersCount,
+       totalKnownPercentSum:
+         nextTotalKnownPercentSum,
+       averageKnownPercent:
+         nextAverageKnownPercent,
+       updatedAt:
+         admin.firestore.FieldValue.serverTimestamp(),
+       updatedAtMillis:
+         Date.now(),
+     }
+   );
 
     const bucketDeltas = delta.bucketDeltas || {};
     Object.keys(bucketDeltas).forEach((field) => {
@@ -5777,9 +11630,9 @@ function extractFcmTokensFromUser(user) {
     });
   }
 
-  // תמיכה במבנה החדש של Android:
-  // fcmTokens: { tokenKey: { token: "...", platform: "android" } }
-  if (fcmTokens && typeof fcmTokens === "object" && !Array.isArray(fcmTokens)) {
+// תמיכה במבנה החדש של Android:
+// fcmTokens נשמר כמפה של רשומות טוקן לפי מפתח פנימי.
+if (fcmTokens && typeof fcmTokens === "object" && !Array.isArray(fcmTokens)) {
     Object.values(fcmTokens).forEach((entry) => {
       if (typeof entry === "string") {
         const clean = entry.trim();
@@ -5791,7 +11644,11 @@ function extractFcmTokensFromUser(user) {
     });
   }
 
-  return [...new Set(tokens)];
+return Array.from(
+  new Set(
+    tokens
+  )
+);
 }
 
 /**
@@ -5898,56 +11755,378 @@ exports.onForumMessageCreated = functions.firestore
       return null;
     }
 
-    const participantIds = Array.isArray(room.participantIds)
-      ? room.participantIds
-          .map((v) => (v || "").toString().trim())
-          .filter((v) => v.length > 0)
-      : [];
+const participantIds =
+  Array.isArray(
+    room.participantIds
+  )
+    ? room.participantIds
+        .map((value) =>
+          String(
+            value || ""
+          ).trim()
+        )
+        .filter(
+          (value) =>
+            value.length > 0
+        )
+    : [];
 
-    const targetUids = [...new Set(
-      participantIds.filter((uid) => uid && uid !== authorUid)
-    )];
+/*
+ * מוציאים את המחבר עצמו לפני בניית
+ * קבוצות הזהות.
+ */
+const requestedTargetIdentities =
+  participantIds.filter(
+    (participantUid) =>
+      participantUid &&
+      participantUid !== authorUid
+  );
 
-    if (targetUids.length === 0) {
-      console.log("No target participants for forum push", {
-        branchId,
-        roomId,
-        messageId,
-        participantCount: participantIds.length,
-      });
+if (
+  requestedTargetIdentities.length === 0
+) {
+  console.log(
+    "No target participants for forum push",
+    {
+      branchId,
+      roomId,
+      messageId,
+      participantCount:
+        participantIds.length,
+    }
+  );
 
-      await snap.ref.update({
-        pushStatus: "no_targets",
-        pushTargetCount: 0,
-        pushCheckedAt: admin.firestore.FieldValue.serverTimestamp(),
-      }).catch(() => null);
+  await snap.ref.update({
+    pushStatus:
+      "no_targets",
 
-      return null;
+    pushTargetCount:
+      0,
+
+    pushCheckedAt:
+      admin.firestore
+        .FieldValue
+        .serverTimestamp(),
+  }).catch(() => null);
+
+  return null;
+}
+
+/*
+ * קוראים users פעם אחת בלבד.
+ *
+ * כך אפשר לזהות גם חדרים ישנים שבהם
+ * אותו אדם שמור תחת כמה UID-ים.
+ */
+const allUsersSnapshot =
+  await db
+    .collection("users")
+    .get();
+
+const allUserEntries =
+  allUsersSnapshot.docs.map(
+    (document) => ({
+      id:
+        document.id,
+
+      user:
+        document.data() || {},
+    })
+  );
+
+const userIdentityGroups =
+  groupUsersByIdentity(
+    allUserEntries
+  );
+
+/*
+ * ממפים כל UID מוכר לקבוצת הזהות
+ * שאליה הוא שייך.
+ */
+const identityGroupByUid =
+  new Map();
+
+userIdentityGroups.forEach(
+  (entries) => {
+
+    entries.forEach(
+      (entry) => {
+
+        const user =
+          entry.user || {};
+
+        const identityValues =
+          [
+            entry.id,
+            user.uid,
+            user.authUid,
+            user.userDocId,
+            user.traineeId,
+          ]
+            .map((value) =>
+              String(
+                value || ""
+              ).trim()
+            )
+            .filter(Boolean);
+
+        identityValues.forEach(
+          (identityValue) => {
+            identityGroupByUid.set(
+              identityValue,
+              entries
+            );
+          }
+        );
+      }
+    );
+  }
+);
+
+/*
+ * כל אדם נכנס פעם אחת בלבד.
+ */
+const selectedIdentityGroups =
+  [];
+
+const seenIdentityGroups =
+  new Set();
+
+requestedTargetIdentities.forEach(
+  (requestedUid) => {
+
+    const entries =
+      identityGroupByUid.get(
+        requestedUid
+      );
+
+    if (
+      !Array.isArray(entries) ||
+      entries.length === 0
+    ) {
+      return;
     }
 
-    const tokenResults = await Promise.all(
-      targetUids.map(async (uid) => {
-        try {
-          const userDoc = await db.collection("users").doc(uid).get();
+    const identityKey =
+      entries
+        .map((entry) =>
+          String(
+            entry.id || ""
+          ).trim()
+        )
+        .filter(Boolean)
+        .sort()
+        .join("|");
 
-          if (!userDoc.exists) {
-            console.log("Forum push target user not found", { uid });
-            return [];
-          }
+    if (
+      !identityKey ||
+      seenIdentityGroups.has(
+        identityKey
+      )
+    ) {
+      return;
+    }
 
-          const user = userDoc.data() || {};
-          return extractFcmTokensFromUser(user);
-        } catch (e) {
-          console.error("Failed reading forum target user", {
-            uid,
-            error: String(e),
-          });
-          return [];
-        }
-      })
+    seenIdentityGroups.add(
+      identityKey
     );
 
-    const tokens = [...new Set(tokenResults.flat())];
+    selectedIdentityGroups.push(
+      entries
+    );
+  }
+);
+
+/*
+ * אם המחבר מופיע באותה קבוצת זהות
+ * תחת UID ישן נוסף, מסירים את כל
+ * קבוצת הזהות שלו מהיעדים.
+ */
+const authorIdentityGroup =
+  identityGroupByUid.get(
+    authorUid
+  );
+
+const authorIdentityIds =
+  new Set();
+
+if (
+  Array.isArray(
+    authorIdentityGroup
+  )
+) {
+  authorIdentityGroup.forEach(
+    (entry) => {
+
+      const user =
+        entry.user || {};
+
+      [
+        entry.id,
+        user.uid,
+        user.authUid,
+        user.userDocId,
+        user.traineeId,
+      ]
+        .map((value) =>
+          String(
+            value || ""
+          ).trim()
+        )
+        .filter(Boolean)
+        .forEach(
+          (identityValue) => {
+            authorIdentityIds.add(
+              identityValue
+            );
+          }
+        );
+    }
+  );
+}
+
+const finalIdentityGroups =
+  selectedIdentityGroups.filter(
+    (entries) => {
+
+      return !entries.some(
+        (entry) => {
+
+          const user =
+            entry.user || {};
+
+          const identityValues =
+            [
+              entry.id,
+              user.uid,
+              user.authUid,
+              user.userDocId,
+              user.traineeId,
+            ]
+              .map((value) =>
+                String(
+                  value || ""
+                ).trim()
+              )
+              .filter(Boolean);
+
+          return identityValues.some(
+            (identityValue) =>
+              authorIdentityIds.has(
+                identityValue
+              )
+          );
+        }
+      );
+    }
+  );
+
+/*
+ * targetUids משמש רק לספירה וללוגים.
+ * לכל אדם בוחרים UID מייצג אחד.
+ */
+const targetUids =
+  finalIdentityGroups
+    .map((entries) => {
+
+      const primary =
+        entries[0];
+
+      if (!primary) {
+        return "";
+      }
+
+      return globalUserUid(
+        primary.id,
+        primary.user || {}
+      );
+    })
+    .filter(Boolean);
+
+if (
+  targetUids.length === 0
+) {
+  console.log(
+    "No target participants for forum push",
+    {
+      branchId,
+      roomId,
+      messageId,
+      participantCount:
+        participantIds.length,
+    }
+  );
+
+  await snap.ref.update({
+    pushStatus:
+      "no_targets",
+
+    pushTargetCount:
+      0,
+
+    pushCheckedAt:
+      admin.firestore
+        .FieldValue
+        .serverTimestamp(),
+  }).catch(() => null);
+
+  return null;
+}
+
+/*
+ * אוספים את כל טוקני ה-FCM מכל
+ * הרשומות של כל אדם מאוחד.
+ */
+const tokenResults =
+  finalIdentityGroups.map(
+    (entries) => {
+
+      const identityTokens =
+        [];
+
+      entries.forEach(
+        (entry) => {
+
+          const user =
+            entry.user || {};
+
+          const userTokens =
+            extractFcmTokensFromUser(
+              user
+            );
+
+          userTokens.forEach(
+            (token) => {
+
+              const cleanToken =
+                String(
+                  token || ""
+                ).trim();
+
+              if (cleanToken) {
+                identityTokens.push(
+                  cleanToken
+                );
+              }
+            }
+          );
+        }
+      );
+
+      return Array.from(
+        new Set(
+          identityTokens
+        )
+      );
+    }
+  );
+
+const tokens =
+  Array.from(
+    new Set(
+      tokenResults.flat()
+    )
+  );
 
     if (tokens.length === 0) {
       console.log("No FCM tokens found for forum room participants", {
@@ -6100,13 +12279,32 @@ const authorUid = (
   ""
 ).toString();
 
-    const targetUidsRaw = Array.isArray(data.targetUids) ? data.targetUids : [];
-    const targetUids = [...new Set(
-      targetUidsRaw
-        .map((v) => (v || "").toString().trim())
-        .filter((v) => v.length > 0)
-        .filter((v) => v !== authorUid)
-    )];
+   const targetUidsRaw =
+     Array.isArray(
+       data.targetUids
+     )
+       ? data.targetUids
+       : [];
+
+   const targetUids =
+     Array.from(
+       new Set(
+         targetUidsRaw
+           .map((value) =>
+             String(
+               value || ""
+             ).trim()
+           )
+           .filter(
+             (value) =>
+               value.length > 0
+           )
+           .filter(
+             (value) =>
+               value !== authorUid
+           )
+       )
+     );
 
     console.log("New coach broadcast created:", {
       broadcastId,
@@ -6212,30 +12410,138 @@ const authorUid = (
       }
     );
 
-    // ===== 2. שליפת fcmToken לפי targetUids =====
-    const tokenResults = await Promise.all(
-      targetUids.map(async (uid) => {
-        try {
-          const userDoc = await db.collection("users").doc(uid).get();
+ // ===== 2. שליפת fcmToken לפי זהות גלובלית =====
+ const allUsersSnapshot =
+   await db
+     .collection("users")
+     .get();
 
-          if (!userDoc.exists) {
-            console.log("Target user not found", { uid });
-            return [];
-          }
+ const allUserEntries =
+   allUsersSnapshot.docs.map(
+     (document) => ({
+       id:
+         document.id,
 
-          const user = userDoc.data() || {};
-          return extractFcmTokensFromUser(user);
-        } catch (e) {
-          console.error("Failed reading target user for coach broadcast", {
-            uid,
-            error: String(e),
-          });
-          return [];
-        }
-      })
-    );
+       user:
+         document.data() || {},
+     })
+   );
 
-    const tokens = [...new Set(tokenResults.flat())];
+ const userIdentityGroups =
+   groupUsersByIdentity(
+     allUserEntries
+   );
+
+ const identityGroupByUid =
+   new Map();
+
+ userIdentityGroups.forEach(
+   (entries) => {
+
+     entries.forEach(
+       (entry) => {
+
+         const user =
+           entry.user || {};
+
+         [
+           entry.id,
+           user.uid,
+           user.authUid,
+           user.userDocId,
+           user.traineeId,
+         ]
+           .map((value) =>
+             String(value || "")
+               .trim()
+           )
+           .filter(Boolean)
+           .forEach(
+             (identityValue) => {
+
+               identityGroupByUid.set(
+                 identityValue,
+                 entries
+               );
+             }
+           );
+       }
+     );
+   }
+ );
+
+ const tokenResults =
+   targetUids.map(
+     (targetUid) => {
+
+       const identityEntries =
+         identityGroupByUid.get(
+           targetUid
+         );
+
+       if (
+         !Array.isArray(
+           identityEntries
+         ) ||
+         identityEntries.length === 0
+       ) {
+         console.log(
+           "Target user identity not found",
+           {
+             uid:
+               targetUid,
+           }
+         );
+
+         return [];
+       }
+
+       const identityTokens =
+         [];
+
+       identityEntries.forEach(
+         (entry) => {
+
+           const user =
+             entry.user || {};
+
+           const userTokens =
+             extractFcmTokensFromUser(
+               user
+             );
+
+           userTokens.forEach(
+             (token) => {
+
+               const cleanToken =
+                 String(
+                   token || ""
+                 ).trim();
+
+               if (cleanToken) {
+                 identityTokens.push(
+                   cleanToken
+                 );
+               }
+             }
+           );
+         }
+       );
+
+       return Array.from(
+         new Set(
+           identityTokens
+         )
+       );
+     }
+   );
+
+ const tokens =
+   Array.from(
+     new Set(
+       tokenResults.flat()
+     )
+   );
 
     if (tokens.length === 0) {
       console.log("No FCM tokens found for coach broadcast targets", {
@@ -6252,10 +12558,10 @@ const authorUid = (
     }
 
   // ===== 2. בניית הודעת Push =====
-  const body =
-    text.length > 120
-      ? `${text.slice(0, 120)}...`
-      : text;
+ const body =
+   text.length > 120
+     ? `${text.slice(0, 120)}…`
+     : text;
 
   try {
     const res =
@@ -6433,6 +12739,7 @@ function parseUserTargetValues(user, keys) {
         .filter(Boolean)
         .forEach((entry) => result.push(entry));
     } else if (value && typeof value === "object") {
+
       /*
        * שכבת תמיכה למבנים שבהם נשמרים ערכים כמפתחות
        * או כאובייקטים פנימיים.
@@ -6456,11 +12763,13 @@ function parseUserTargetValues(user, keys) {
     }
   }
 
-  return [...new Set(
-    result
-      .map(normalizeTrainingTargetText)
-      .filter(Boolean)
-  )];
+ return Array.from(
+   new Set(
+     result
+       .map(normalizeTrainingTargetText)
+       .filter(Boolean)
+   )
+ );
 }
 
 function userMatchesTrainingOverride(user, branch, group) {
@@ -6697,71 +13006,156 @@ exports.onTrainingOverrideWritten = functions.firestore
     const usersSnapshot =
       await db.collection("users").get();
 
-    const targetUsers =
-      usersSnapshot.docs
-        .map((doc) => ({
-          uid: doc.id,
-          data: doc.data() || {},
-        }))
-        .filter(({ uid, data: user }) => {
-          /*
-           * לא שולחים למאמן שביצע את השינוי.
-           */
-          if (changedByUid && uid === changedByUid) {
-            return false;
-          }
+const eligibleTargetEntries =
+  usersSnapshot.docs
+    .map((document) => ({
+      id:
+        document.id,
 
-          const role =
-            String(
-              user.role ||
-              user.userRole ||
-              user.userType ||
-              ""
+      user:
+        document.data() || {},
+    }))
+    .filter(({ id, user }) => {
+
+      /*
+       * לא שולחים למאמן שביצע את השינוי.
+       */
+      if (changedByUid) {
+        const identityValues =
+          [
+            id,
+            user.uid,
+            user.authUid,
+            user.userDocId,
+            user.traineeId,
+          ]
+            .map((value) =>
+              String(value || "")
+                .trim()
             )
-              .trim()
-              .toLowerCase();
+            .filter(Boolean);
 
-          /*
-           * מונעים שליחה למאמנים אחרים.
-           * משתמש ללא role מפורש עדיין יכול להיות מתאמן ותיק.
-           */
-          if (
-            role === "coach" ||
-            role === "trainer" ||
-            role === "מאמן" ||
-            user.isCoach === true
-          ) {
-            return false;
-          }
+        if (
+          identityValues.includes(
+            changedByUid
+          )
+        ) {
+          return false;
+        }
+      }
 
-          return userMatchesTrainingOverride(
-            user,
-            branch,
-            group
-          );
-        });
+      const role =
+        String(
+          user.role ||
+          user.userRole ||
+          user.userType ||
+          ""
+        )
+          .trim()
+          .toLowerCase();
 
-    const tokenResults =
-      await Promise.all(
-        targetUsers.map(async ({ uid, data: user }) => {
+      /*
+       * מונעים שליחה למאמנים אחרים.
+       */
+      const isCoach =
+        role === "coach" ||
+        role === "trainer" ||
+        role === "מאמן" ||
+        user.isCoach === true;
+
+      if (isCoach) {
+        return false;
+      }
+
+      return userMatchesTrainingOverride(
+        user,
+        branch,
+        group
+      );
+    });
+
+/*
+ * כל אדם נספר פעם אחת בלבד לפי
+ * UID / אימייל / טלפון.
+ */
+const targetIdentityGroups =
+  groupUsersByIdentity(
+    eligibleTargetEntries
+  );
+
+/*
+ * targetUsers נשמר כמערך קבוצות זהות,
+ * כדי ששאר הפונקציה תוכל להמשיך להשתמש
+ * ב-targetUsers.length כמספר האנשים.
+ */
+const targetUsers =
+  targetIdentityGroups;
+
+const tokenResults =
+  targetIdentityGroups.map(
+    (entries) => {
+
+      const identityTokens =
+        [];
+
+      entries.forEach(
+        (entry) => {
+
+          const user =
+            entry.user || {};
+
           try {
-            return extractFcmTokensFromUser(user);
+            const userTokens =
+              extractFcmTokensFromUser(
+                user
+              );
+
+            userTokens.forEach(
+              (token) => {
+
+                const cleanToken =
+                  String(
+                    token || ""
+                  ).trim();
+
+                if (cleanToken) {
+                  identityTokens.push(
+                    cleanToken
+                  );
+                }
+              }
+            );
           } catch (error) {
             console.error(
               "Failed extracting training target tokens:",
               {
-                uid,
-                error: String(error),
+                userDocId:
+                  String(
+                    entry.id || ""
+                  ),
+
+                error:
+                  String(error),
               }
             );
-
-            return [];
           }
-        })
+        }
       );
 
-    const tokens =
-      [...new Set(tokenResults.flat())];
+      return Array.from(
+        new Set(
+          identityTokens
+        )
+      );
+    }
+  );
+
+const tokens =
+  Array.from(
+    new Set(
+      tokenResults.flat()
+    )
+  );
 
     if (targetUsers.length === 0) {
       await change.after.ref.set(
@@ -7718,8 +14112,68 @@ exports.verifyKmiSubscription =
             matchingLineItem
           );
 
-        const nowMillis =
-          Date.now();
+      const nowDate =
+        new Date();
+
+      const jerusalemDateParts =
+        new Intl.DateTimeFormat(
+          "en-CA",
+          {
+            timeZone:
+              "Asia/Jerusalem",
+
+            year:
+              "numeric",
+
+            month:
+              "2-digit",
+
+            day:
+              "2-digit",
+          }
+        )
+          .formatToParts(nowDate);
+
+      const year =
+        Number(
+          jerusalemDateParts
+            .find(
+              (part) =>
+                part.type === "year"
+            )
+            ?.value
+        );
+
+      const month =
+        Number(
+          jerusalemDateParts
+            .find(
+              (part) =>
+                part.type === "month"
+            )
+            ?.value
+        );
+
+      const day =
+        Number(
+          jerusalemDateParts
+            .find(
+              (part) =>
+                part.type === "day"
+            )
+            ?.value
+        );
+
+      const jerusalemMidnight =
+        new Date(
+          `${String(year).padStart(4, "0")}-` +
+          `${String(month).padStart(2, "0")}-` +
+          `${String(day).padStart(2, "0")}` +
+          "T00:00:00+03:00"
+        );
+
+      const nowMillis =
+        jerusalemMidnight.getTime();
 
         const active =
           Boolean(matchingLineItem) &&
@@ -8129,8 +14583,19 @@ async function reserveAiBudget(
           ? entitlementSnapshot.data() || {}
           : {};
 
-      const nowMillis =
-        Date.now();
+     const requestedNowMillis =
+       Number(
+         data &&
+         data.nowMillis
+       );
+
+     const nowMillis =
+       Number.isFinite(
+         requestedNowMillis
+       ) &&
+       requestedNowMillis > 0
+         ? requestedNowMillis
+         : Date.now();
 
       const subscriptionActive =
         entitlement.active === true &&

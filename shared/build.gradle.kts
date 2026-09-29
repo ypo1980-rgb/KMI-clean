@@ -50,7 +50,8 @@ kotlin {
         val androidMain by getting {
             dependencies {
                 implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
-
+                implementation(platform("com.google.firebase:firebase-bom:33.3.0"))
+                implementation("com.google.firebase:firebase-functions")
                 // Android-only
                 implementation("com.google.firebase:firebase-firestore-ktx:25.1.0")
                 implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.8.1")

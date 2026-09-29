@@ -1059,65 +1059,19 @@ match /trainingOccurrences/{occurrenceId} {
     // branches/{branchId}/forumRooms/{roomId}/messages/{messageId}
     // =========================
 match /branches/{branchId}/forumRooms/{roomId} {
-
-  // קריאת חדר
-  allow read: if isSignedIn();
-
-  // יצירת חדר
-  allow create: if
-      isAdmin()
-      || (
-          isCoachLike()
-          && userHasBranch(branchId)
-      );
-
-  // עדכון Metadata בלבד
-  allow update: if
-      (
-        isAdmin()
-        || (
-            isCoachLike()
-            && userHasBranch(branchId)
-        )
-      )
-      &&
-      request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-        "lastMessage",
-        "lastMessageAt",
-        "lastMessageAuthorUid",
-        "lastMessageAuthorName",
-        "participants",
-        "participantsCount",
-        "updatedAt",
-        "pushCounter",
-        "lastSenderUid",
-        "lastSenderName"
-      ]);
-
-  // מחיקה
-  allow delete: if isAdmin();
+  /*
+   * כל גישת הלקוח לנתוני הפורום חסומה.
+   *
+   * קריאת חדרים / הודעות:
+   * דרך Cloud Functions מאובטחות בלבד.
+   *
+   * יצירה / עריכה / מחיקה:
+   * דרך Admin SDK בצד השרת בלבד.
+   */
+  allow read, create, update, delete: if false;
 
   match /messages/{messageId} {
-
-    allow read: if isSignedIn();
-
-    allow create: if
-        isSignedIn()
-        && request.resource.data.authorUid == request.auth.uid;
-
-    allow update: if
-        isSignedIn()
-        && (
-            resource.data.authorUid == request.auth.uid
-            || isAdmin()
-        );
-
-    allow delete: if
-        isSignedIn()
-        && (
-            resource.data.authorUid == request.auth.uid
-            || isAdmin()
-        );
+    allow read, create, update, delete: if false;
   }
 }
 
@@ -1319,47 +1273,26 @@ match /used_numbers/{phone} {
       allow write: if isSignedIn();
     }
 
-    // =========================
-    // Free Sessions – אימונים חופשיים
-    // branches/{branch}/groups/{groupKey}/free_sessions/{sessionId}
-    // =========================
-    match /branches/{branch}/groups/{groupKey}/free_sessions/{sessionId} {
+ // =========================
+ // Free Sessions – אימונים חופשיים
+ // כל הגישה מתבצעת דרך Cloud Functions מאובטחות.
+ // =========================
+ match /branches/{branch}/groups/{groupKey}/free_sessions/{sessionId} {
 
-      // קריאה: כל משתמש מחובר (כדי לראות רשימה)
-      allow read: if isSignedIn();
+   // אין קריאה או כתיבה ישירה מהאפליקציה.
+   allow read, create, update, delete: if false;
+ }
 
-      // יצירה: כל משתמש מחובר יכול ליצור אימון
-      // (אם אתה רוצה להגביל רק למאמנים/אדמין תגיד לי)
-      allow create: if isSignedIn()
-                    && request.resource.data.createdByUid == request.auth.uid;
 
-      // עדכון:
-      // חשוב! אצלך כל שינוי סטטוס של משתתף עושה גם update ל-counters במסמך האימון,
-      // לכן נאפשר update למי שהוא כבר משתתף (או היוצר / אדמין).
-      allow update: if isSignedIn()
-                    && (
-                         isAdmin()
-                         || resource.data.createdByUid == request.auth.uid
-                         || exists(/databases/$(database)/documents/branches/$(branch)/groups/$(groupKey)/free_sessions/$(sessionId)/participants/$(request.auth.uid))
-                       );
+ // =========================
+ // Free Sessions Participants
+ // כל הגישה מתבצעת דרך Cloud Functions מאובטחות.
+ // =========================
+ match /branches/{branch}/groups/{groupKey}/free_sessions/{sessionId}/participants/{uid} {
 
-      // מחיקה: אדמין או יוצר
-      allow delete: if isSignedIn()
-                    && (isAdmin() || resource.data.createdByUid == request.auth.uid);
-    }
-
-      // משתתפים: branches/{branch}/groups/{groupKey}/free_sessions/{sessionId}/participants/{uid}
-    match /branches/{branch}/groups/{groupKey}/free_sessions/{sessionId}/participants/{uid} {
-
-      // קריאה: כל משתמש מחובר (כדי לראות "מי מגיע")
-      allow read: if isSignedIn();
-
-      // כתיבה/עדכון: כל אחד רק על המסמך של עצמו
-      allow create, update: if isSignedIn() && request.auth.uid == uid;
-
-      // מחיקה: המשתמש עצמו או אדמין
-      allow delete: if isSignedIn() && (request.auth.uid == uid || isAdmin());
-    }
+   // אין קריאה או כתיבה ישירה מהאפליקציה.
+   allow read, create, update, delete: if false;
+ }
 
       // =========================
     // Attendance – נוכחות קבוצות
@@ -1786,20 +1719,125 @@ match /reports/{reportId} {
     // =========================
 
    match /internalExamDrafts/{draftId} {
-  allow create, update: if canManageInternalExams()
-    && request.resource.data.coachUid == request.auth.uid;
 
-  allow read, delete: if canManageInternalExams()
-    && resource.data.coachUid == request.auth.uid;
-}
+     // יצירת טיוטה:
+     // המאמן חייב להיות מורשה למבחנים,
+     // המסמך חייב להיות שלו,
+     // והסניף + קבוצה חייבים להיות בתחום ההרשאה שלו.
+     allow create: if
+       isAdmin()
+       || (
+         canManageInternalExams()
 
-match /internalExamResults/{resultId} {
-  allow create: if canManageInternalExams()
-    && request.resource.data.coachUid == request.auth.uid;
+         && request.resource.data.coachUid ==
+            request.auth.uid
 
-  allow read, update, delete: if canManageInternalExams()
-    && resource.data.coachUid == request.auth.uid;
-}
+         && isAuthorizedCoachForBranchGroup(
+              request.resource.data.branch,
+              request.resource.data.group
+            )
+       );
+
+     // עדכון טיוטה:
+     // אי אפשר להעביר את הטיוטה למאמן אחר
+     // או לשנות לה סניף / קבוצה לאחר שנוצרה.
+     allow update: if
+       isAdmin()
+       || (
+         canManageInternalExams()
+
+         && resource.data.coachUid ==
+            request.auth.uid
+
+         && request.resource.data.coachUid ==
+            resource.data.coachUid
+
+         && request.resource.data.branch ==
+            resource.data.branch
+
+         && request.resource.data.group ==
+            resource.data.group
+
+         && isAuthorizedCoachForBranchGroup(
+              resource.data.branch,
+              resource.data.group
+            )
+       );
+
+     // קריאה ומחיקה:
+     // רק המאמן שיצר את הטיוטה ובתחום ההרשאה הנוכחי שלו.
+     allow read, delete: if
+       isAdmin()
+       || (
+         canManageInternalExams()
+
+         && resource.data.coachUid ==
+            request.auth.uid
+
+         && isAuthorizedCoachForBranchGroup(
+              resource.data.branch,
+              resource.data.group
+            )
+       );
+   }
+
+   match /internalExamResults/{resultId} {
+
+     // יצירת תוצאה סופית.
+     allow create: if
+       isAdmin()
+       || (
+         canManageInternalExams()
+
+         && request.resource.data.coachUid ==
+            request.auth.uid
+
+         && isAuthorizedCoachForBranchGroup(
+              request.resource.data.branch,
+              request.resource.data.group
+            )
+       );
+
+     // עדכון תוצאה קיימת:
+     // זהות המאמן והשיוך הארגוני אינם ניתנים לשינוי.
+     allow update: if
+       isAdmin()
+       || (
+         canManageInternalExams()
+
+         && resource.data.coachUid ==
+            request.auth.uid
+
+         && request.resource.data.coachUid ==
+            resource.data.coachUid
+
+         && request.resource.data.branch ==
+            resource.data.branch
+
+         && request.resource.data.group ==
+            resource.data.group
+
+         && isAuthorizedCoachForBranchGroup(
+              resource.data.branch,
+              resource.data.group
+            )
+       );
+
+     // קריאה ומחיקה של תוצאה קיימת.
+     allow read, delete: if
+       isAdmin()
+       || (
+         canManageInternalExams()
+
+         && resource.data.coachUid ==
+            request.auth.uid
+
+         && isAuthorizedCoachForBranchGroup(
+              resource.data.branch,
+              resource.data.group
+            )
+       );
+   }
 
 match /internalExamCoachState/{coachUid} {
   allow read, write: if canManageInternalExams()
@@ -1807,12 +1845,97 @@ match /internalExamCoachState/{coachUid} {
 }
 
 match /internalExamRecentTrainees/{coachUid} {
-  allow read, write: if canManageInternalExams()
-    && request.auth.uid == coachUid;
 
-  match /trainees/{traineeKey} {
-    allow read, write: if canManageInternalExams()
-      && request.auth.uid == coachUid;
+  // מסמך האב אינו מכיל מידע שנדרש לאפליקציה.
+  // הגישה בפועל מתבצעת רק דרך תת־האוסף trainees.
+  allow read, write: if false;
+
+  match /trainees/{traineeDocId} {
+
+    // יצירת נבחן אחרון:
+    // רק המאמן עצמו ורק עבור סניף + קבוצה שמורשים לו.
+    allow create: if
+      isAdmin()
+      || (
+        canManageInternalExams()
+
+        && request.auth.uid == coachUid
+
+        && request.resource.data.coachUid ==
+           request.auth.uid
+
+        && request.resource.data.branch is string
+        && request.resource.data.group is string
+
+        && isAuthorizedCoachForBranchGroup(
+             request.resource.data.branch,
+             request.resource.data.group
+           )
+      );
+
+    // עדכון:
+    // אסור להעביר רשומה למאמן / סניף / קבוצה אחרים.
+    allow update: if
+      isAdmin()
+      || (
+        canManageInternalExams()
+
+        && request.auth.uid == coachUid
+
+        && resource.data.coachUid ==
+           request.auth.uid
+
+        && request.resource.data.coachUid ==
+           resource.data.coachUid
+
+        && request.resource.data.branch ==
+           resource.data.branch
+
+        && request.resource.data.group ==
+           resource.data.group
+
+        && isAuthorizedCoachForBranchGroup(
+             resource.data.branch,
+             resource.data.group
+           )
+      );
+
+    // קריאה:
+    // Query חייב להחזיר רק מסמכים מתוך
+    // branch + group המורשים למאמן.
+    allow read: if
+      isAdmin()
+      || (
+        canManageInternalExams()
+
+        && request.auth.uid == coachUid
+
+        && resource.data.coachUid ==
+           request.auth.uid
+
+        && isAuthorizedCoachForBranchGroup(
+             resource.data.branch,
+             resource.data.group
+           )
+      );
+
+    // מחיקה:
+    // רק מתוך הקבוצה המורשית של המאמן.
+    allow delete: if
+      isAdmin()
+      || (
+        canManageInternalExams()
+
+        && request.auth.uid == coachUid
+
+        && resource.data.coachUid ==
+           request.auth.uid
+
+        && isAuthorizedCoachForBranchGroup(
+             resource.data.branch,
+             resource.data.group
+           )
+      );
   }
 }
 

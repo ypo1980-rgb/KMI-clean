@@ -104,7 +104,6 @@ import kotlinx.coroutines.tasks.await
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
-import com.google.firebase.firestore.Query
 import com.google.firebase.firestore.SetOptions
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.rememberCoroutineScope
@@ -1157,7 +1156,11 @@ fun InternalExamScreen(
 
 // ✅ טוען רשימה ראשונית
     LaunchedEffect(Unit) {
-        recentTrainees = loadRecentTrainees(ctx)
+        recentTrainees = loadRecentTrainees(
+            context = ctx,
+            branch = branch,
+            group = group
+        )
     }
 
     // ✅ האם להציג את בלוק שם הנבחן (נעלם אחרי Done/שמור)
@@ -1167,11 +1170,20 @@ fun InternalExamScreen(
         val name = traineeName.trim()
         if (name.isBlank()) return false
 
-        pushRecentTrainee(ctx, name)
-        saveLastTrainee(ctx, name)
+        pushRecentTrainee(
+            context = ctx,
+            name = name,
+            branch = branch,
+            group = group
+        )
 
         scope.launch {
-            recentTrainees = loadRecentTrainees(ctx)
+            recentTrainees =
+                loadRecentTrainees(
+                    context = ctx,
+                    branch = branch,
+                    group = group
+                )
         }
 
         focusManager.clearFocus()
@@ -1214,7 +1226,14 @@ fun InternalExamScreen(
         if (resumeCheckedKey == key) return@LaunchedEffect
         resumeCheckedKey = key
 
-        val loaded = loadExamDraft(ctx, name, belt)
+        val loaded =
+            loadExamDraft(
+                context = ctx,
+                traineeName = name,
+                belt = belt,
+                branch = branch,
+                group = group
+            )
         if (loaded.isNotEmpty()) {
             pendingLoadedDraft = loaded
             showResumeDialog = true
@@ -1395,7 +1414,11 @@ fun InternalExamScreen(
                                 Button(
                                     onClick = {
                                         scope.launch {
-                                            recentTrainees = loadRecentTrainees(ctx)
+                                            recentTrainees = loadRecentTrainees(
+                                                context = ctx,
+                                                branch = branch,
+                                                group = group
+                                            )
                                             showPickTraineeDialog = true
                                         }
                                     }
@@ -1839,8 +1862,12 @@ fun InternalExamScreen(
                                 branch = branch,
                                 group = group
                             )
-                            pushRecentTrainee(ctx, activeName)
-                            saveLastTrainee(ctx, activeName)
+                            pushRecentTrainee(
+                                context = ctx,
+                                name = activeName,
+                                branch = branch,
+                                group = group
+                            )
                         }
 
                         hasUnsavedChanges = false
@@ -1902,16 +1929,22 @@ fun InternalExamScreen(
                                     val resultId = saveCompletedInternalExamResult(
                                         traineeName = activeName,
                                         belt = belt,
-                                        marksMap = marksMap
+                                        marksMap = marksMap,
+                                        branch = branch,
+                                        group = group
                                     )
 
                                     deleteExamDraftAfterCompletion(
                                         traineeName = activeName,
-                                        belt = belt
+                                        belt = belt,
+                                        branch = branch,
+                                        group = group
                                     )
 
                                     removeRecentTraineeAfterCompletion(
-                                        traineeName = activeName
+                                        traineeName = activeName,
+                                        branch = branch,
+                                        group = group
                                     )
 
                                     resultId
@@ -2146,8 +2179,12 @@ fun InternalExamScreen(
                                 branch = branch,
                                 group = group
                             )
-                            pushRecentTrainee(ctx, name)
-                            saveLastTrainee(ctx, name)
+                            pushRecentTrainee(
+                                context = ctx,
+                                name = name,
+                                branch = branch,
+                                group = group
+                            )
                         }
                         hasUnsavedChanges = false
                         showExitDialog = false
@@ -2593,14 +2630,45 @@ fun InternalExamEntryScreen(
     LaunchedEffect(Unit) {
         // לא בוחרים נבחן אוטומטית.
         // המשתמש צריך לבחור נבחן מהרשימה או ללחוץ על "נבחן חדש".
-        recentTrainees = loadRecentTrainees(ctx)
-        recentCompletedResults = loadRecentCompletedExamResults(limit = 20)
+        recentTrainees = loadRecentTrainees(
+    context = ctx,
+    branch = selectedBranch,
+    group = selectedGroup
+)
+        recentCompletedResults = loadRecentCompletedExamResults(
+    branch = selectedBranch,
+    group = selectedGroup,
+    limit = 20
+)
     }
 
     LaunchedEffect(expanded) {
         if (expanded) {
-            recentTrainees = loadRecentTrainees(ctx)
+            recentTrainees = loadRecentTrainees(
+    context = ctx,
+    branch = selectedBranch,
+    group = selectedGroup
+)
         }
+    }
+
+    LaunchedEffect(
+        selectedBranch,
+        selectedGroup
+    ) {
+        recentTrainees =
+            loadRecentTrainees(
+                context = ctx,
+                branch = selectedBranch,
+                group = selectedGroup
+            )
+
+        recentCompletedResults =
+            loadRecentCompletedExamResults(
+                branch = selectedBranch,
+                group = selectedGroup,
+                limit = 20
+            )
     }
 
     val exercises = remember(currentBelt) {
@@ -2718,7 +2786,11 @@ fun InternalExamEntryScreen(
                             isDeletingTrainee = true
 
                             runCatching {
-                                deleteTraineeAndExamHistory(nameToDelete)
+                                deleteTraineeAndExamHistory(
+                                    traineeName = nameToDelete,
+                                    branch = selectedBranch,
+                                    group = selectedGroup
+                                )
                             }.onSuccess {
                                 if (traineeName.trim()
                                         .equals(nameToDelete.trim(), ignoreCase = true)
@@ -2728,8 +2800,16 @@ fun InternalExamEntryScreen(
                                     traineeSessionKey++
                                 }
 
-                                recentTrainees = loadRecentTrainees(ctx)
-                                recentCompletedResults = loadRecentCompletedExamResults(limit = 20)
+                                recentTrainees = loadRecentTrainees(
+    context = ctx,
+    branch = selectedBranch,
+    group = selectedGroup
+)
+                                recentCompletedResults = loadRecentCompletedExamResults(
+    branch = selectedBranch,
+    group = selectedGroup,
+    limit = 20
+)
                                 completedPreviewSession = null
                                 expanded = false
                                 allowTraineeKeyboard = false
@@ -2843,10 +2923,16 @@ fun InternalExamEntryScreen(
 
                             runCatching {
                                 deleteCompletedInternalExamResult(
-                                    resultId = resultToDelete.resultId
+                                    resultId = resultToDelete.resultId,
+                                    branch = selectedBranch,
+                                    group = selectedGroup
                                 )
                             }.onSuccess {
-                                recentCompletedResults = loadRecentCompletedExamResults(limit = 20)
+                                recentCompletedResults = loadRecentCompletedExamResults(
+    branch = selectedBranch,
+    group = selectedGroup,
+    limit = 20
+)
                                 completedPreviewSession = null
                                 examHistoryResultToDelete = null
 
@@ -3034,9 +3120,17 @@ fun InternalExamEntryScreen(
                                         focusManager.clearFocus(force = true)
 
                                         scope.launch {
-                                            recentTrainees = loadRecentTrainees(ctx)
+                                            recentTrainees = loadRecentTrainees(
+    context = ctx,
+    branch = selectedBranch,
+    group = selectedGroup
+)
                                             recentCompletedResults =
-                                                loadRecentCompletedExamResults(limit = 20)
+                                                loadRecentCompletedExamResults(
+    branch = selectedBranch,
+    group = selectedGroup,
+    limit = 20
+)
                                         }
                                     }
                                 },
@@ -3069,7 +3163,11 @@ fun InternalExamEntryScreen(
                                             expanded = true
 
                                             scope.launch {
-                                                recentTrainees = loadRecentTrainees(ctx)
+                                                recentTrainees = loadRecentTrainees(
+    context = ctx,
+    branch = selectedBranch,
+    group = selectedGroup
+)
                                             }
                                         },
                                     singleLine = true,
@@ -3311,19 +3409,25 @@ fun InternalExamEntryScreen(
                                                     traineeName = cleanName
 
                                                     scope.launch {
-                                                        val savedDraft = loadExamDraft(
-                                                            ctx,
-                                                            cleanName,
-                                                            currentBelt
-                                                        )
+                                                        val savedDraft =
+                                                            loadExamDraft(
+                                                                context = ctx,
+                                                                traineeName = cleanName,
+                                                                belt = currentBelt,
+                                                                branch = selectedBranch,
+                                                                group = selectedGroup
+                                                            )
 
                                                         marksMap.clear()
                                                         if (savedDraft.isNotEmpty()) {
                                                             marksMap.putAll(savedDraft)
                                                         }
 
-                                                        saveLastTrainee(ctx, cleanName)
-                                                        recentTrainees = loadRecentTrainees(ctx)
+                                                        recentTrainees = loadRecentTrainees(
+    context = ctx,
+    branch = selectedBranch,
+    group = selectedGroup
+)
 
                                                         traineeSessionKey++
                                                     }
@@ -3485,16 +3589,30 @@ fun InternalExamEntryScreen(
 
                                             scope.launch {
                                                 val savedDraft =
-                                                    loadExamDraft(ctx, cleanName, currentBelt)
+                                                    loadExamDraft(
+                                                        context = ctx,
+                                                        traineeName = cleanName,
+                                                        belt = currentBelt,
+                                                        branch = selectedBranch,
+                                                        group = selectedGroup
+                                                    )
 
                                                 if (savedDraft.isNotEmpty()) {
                                                     marksMap.clear()
                                                     marksMap.putAll(savedDraft)
                                                 }
 
-                                                pushRecentTrainee(ctx, cleanName)
-                                                saveLastTrainee(ctx, cleanName)
-                                                recentTrainees = loadRecentTrainees(ctx)
+                                                pushRecentTrainee(
+                                                    context = ctx,
+                                                    name = cleanName,
+                                                    branch = selectedBranch,
+                                                    group = selectedGroup
+                                                )
+                                                recentTrainees = loadRecentTrainees(
+    context = ctx,
+    branch = selectedBranch,
+    group = selectedGroup
+)
 
                                                 traineeSessionKey++
                                                 examStarted = true
@@ -3534,7 +3652,11 @@ fun InternalExamEntryScreen(
                                                     group = selectedGroup
                                                 )
                                             }.onSuccess {
-                                                recentTrainees = loadRecentTrainees(ctx)
+                                                recentTrainees = loadRecentTrainees(
+    context = ctx,
+    branch = selectedBranch,
+    group = selectedGroup
+)
 
                                                 Toast.makeText(
                                                     ctx,
@@ -3570,6 +3692,8 @@ fun InternalExamEntryScreen(
                             scope.launch {
                                 recentCompletedResults =
                                     loadRecentCompletedExamResults(
+                                        branch = selectedBranch,
+                                        group = selectedGroup,
                                         limit = 20
                                     )
 
@@ -3772,7 +3896,9 @@ fun InternalExamEntryScreen(
 
                                                 runCatching {
                                                     loadCompletedInternalExamSessionForPdf(
-                                                        resultId = result.resultId
+                                                        resultId = result.resultId,
+                                                        branch = selectedBranch,
+                                                        group = selectedGroup
                                                     ) ?: error("Missing completed exam data")
                                                 }.onSuccess { completedSession ->
                                                     showExamHistoryDialog = false
@@ -3876,9 +4002,15 @@ fun InternalExamEntryScreen(
                     examStarted = false
 
                     scope.launch {
-                        recentTrainees = loadRecentTrainees(ctx)
+                        recentTrainees = loadRecentTrainees(
+    context = ctx,
+    branch = selectedBranch,
+    group = selectedGroup
+)
                         recentCompletedResults =
                             loadRecentCompletedExamResults(
+                                branch = selectedBranch,
+                                group = selectedGroup,
                                 limit = 20
                             )
                     }
@@ -6109,12 +6241,56 @@ private fun internalExamTraineeKey(name: String): String {
         .ifBlank { "unknown_trainee" }
 }
 
+private fun internalExamScopeKey(
+    branch: String,
+    group: String
+): String {
+    val cleanBranch = branch.trim()
+    val cleanGroup = group.trim()
+
+    return "$cleanBranch||$cleanGroup"
+}
+
+private fun internalExamRecentTraineeId(
+    traineeName: String,
+    branch: String,
+    group: String
+): String {
+    val branchKey =
+        branch.trim()
+            .lowercase()
+            .replace(Regex("[^a-z0-9א-ת]+"), "_")
+            .trim('_')
+
+    val groupKey =
+        group.trim()
+            .lowercase()
+            .replace(Regex("[^a-z0-9א-ת]+"), "_")
+            .trim('_')
+
+    return "${branchKey}_${groupKey}_${internalExamTraineeKey(traineeName)}"
+}
+
 private fun internalExamDraftId(
     coachUid: String,
     traineeName: String,
-    belt: Belt
+    belt: Belt,
+    branch: String,
+    group: String
 ): String {
-    return "${coachUid}_${belt.name}_${internalExamTraineeKey(traineeName)}"
+    val branchKey =
+        branch.trim()
+            .lowercase()
+            .replace(Regex("[^a-z0-9א-ת]+"), "_")
+            .trim('_')
+
+    val groupKey =
+        group.trim()
+            .lowercase()
+            .replace(Regex("[^a-z0-9א-ת]+"), "_")
+            .trim('_')
+
+    return "${coachUid}_${branchKey}_${groupKey}_${belt.name}_${internalExamTraineeKey(traineeName)}"
 }
 
 private fun saveExamDraft(
@@ -6149,7 +6325,14 @@ private fun saveExamDraft(
         .filterKeys { it.isNotBlank() }
         .mapValues { (_, score) -> clampScore10(score) }
 
-    val docId = internalExamDraftId(coachUid, cleanName, belt)
+    val docId =
+        internalExamDraftId(
+            coachUid = coachUid,
+            traineeName = cleanName,
+            belt = belt,
+            branch = cleanBranch,
+            group = cleanGroup
+        )
 
     val data = hashMapOf(
         "examId" to docId,
@@ -6178,8 +6361,12 @@ private fun saveExamDraft(
         .document(docId)
         .set(data, SetOptions.merge())
 
-    pushRecentTrainee(context, cleanName)
-    saveLastTrainee(context, cleanName)
+    pushRecentTrainee(
+        context = context,
+        name = cleanName,
+        branch = cleanBranch,
+        group = cleanGroup
+    )
 }
 
 private suspend fun saveExamDraftAwait(
@@ -6215,7 +6402,14 @@ private suspend fun saveExamDraftAwait(
         .filterKeys { it.isNotBlank() }
         .mapValues { (_, score) -> clampScore10(score) }
 
-    val docId = internalExamDraftId(coachUid, cleanName, belt)
+    val docId =
+        internalExamDraftId(
+            coachUid = coachUid,
+            traineeName = cleanName,
+            belt = belt,
+            branch = cleanBranch,
+            group = cleanGroup
+        )
 
     val data = hashMapOf(
         "examId" to docId,
@@ -6245,18 +6439,31 @@ private suspend fun saveExamDraftAwait(
         .set(data, SetOptions.merge())
         .await()
 
-    pushRecentTrainee(context, cleanName)
-    saveLastTrainee(context, cleanName)
+    pushRecentTrainee(
+        context = context,
+        name = cleanName,
+        branch = cleanBranch,
+        group = cleanGroup
+    )
 }
 
 private suspend fun saveCompletedInternalExamResult(
     traineeName: String,
     belt: Belt,
-    marksMap: Map<String, Int>
+    marksMap: Map<String, Int>,
+    branch: String,
+    group: String
 ): String {
     val cleanName = traineeName.trim()
-    if (cleanName.isBlank()) {
-        error("Missing trainee name")
+    val cleanBranch = branch.trim()
+    val cleanGroup = group.trim()
+
+    if (
+        cleanName.isBlank() ||
+        cleanBranch.isBlank() ||
+        cleanGroup.isBlank()
+    ) {
+        error("Missing exam scope")
     }
 
     val coachUid = internalExamCoachUid()
@@ -6311,6 +6518,8 @@ private suspend fun saveCompletedInternalExamResult(
     val data = hashMapOf(
         "resultId" to resultId,
         "coachUid" to coachUid,
+        "branch" to cleanBranch,
+        "group" to cleanGroup,
 
         "traineeName" to cleanName,
         "traineeKey" to internalExamTraineeKey(cleanName),
@@ -6349,13 +6558,31 @@ private suspend fun saveCompletedInternalExamResult(
 
 private suspend fun deleteExamDraftAfterCompletion(
     traineeName: String,
-    belt: Belt
+    belt: Belt,
+    branch: String,
+    group: String
 ) {
     val cleanName = traineeName.trim()
-    if (cleanName.isBlank()) return
+    val cleanBranch = branch.trim()
+    val cleanGroup = group.trim()
+
+    if (
+        cleanName.isBlank() ||
+        cleanBranch.isBlank() ||
+        cleanGroup.isBlank()
+    ) {
+        return
+    }
 
     val coachUid = internalExamCoachUid() ?: return
-    val docId = internalExamDraftId(coachUid, cleanName, belt)
+    val docId =
+        internalExamDraftId(
+            coachUid = coachUid,
+            traineeName = cleanName,
+            belt = belt,
+            branch = cleanBranch,
+            group = cleanGroup
+        )
 
     FirebaseFirestore.getInstance()
         .collection("internalExamDrafts")
@@ -6368,13 +6595,31 @@ private suspend fun loadExamDraft(
     @Suppress("UNUSED_PARAMETER")
     context: Context,
     traineeName: String,
-    belt: Belt
+    belt: Belt,
+    branch: String,
+    group: String
 ): Map<String, Int> {
     val cleanName = traineeName.trim()
-    if (cleanName.isBlank()) return emptyMap()
+    val cleanBranch = branch.trim()
+    val cleanGroup = group.trim()
+
+    if (
+        cleanName.isBlank() ||
+        cleanBranch.isBlank() ||
+        cleanGroup.isBlank()
+    ) {
+        return emptyMap()
+    }
 
     val coachUid = internalExamCoachUid() ?: return emptyMap()
-    val docId = internalExamDraftId(coachUid, cleanName, belt)
+    val docId =
+        internalExamDraftId(
+            coachUid = coachUid,
+            traineeName = cleanName,
+            belt = belt,
+            branch = cleanBranch,
+            group = cleanGroup
+        )
 
     return runCatching {
         val snap = FirebaseFirestore.getInstance()
@@ -6452,53 +6697,51 @@ private fun findSubTopicTitleForItemInternal(belt: Belt, topic: String, item: St
     return null
 }
 
-private fun saveLastTrainee(
-    @Suppress("UNUSED_PARAMETER")
-    context: Context,
-    name: String
-) {
-    val clean = name.trim()
-    if (clean.isBlank()) return
-
-    val coachUid = internalExamCoachUid() ?: return
-
-    FirebaseFirestore.getInstance()
-        .collection("internalExamCoachState")
-        .document(coachUid)
-        .set(
-            mapOf(
-                "lastTraineeName" to clean,
-                "lastTraineeKey" to internalExamTraineeKey(clean),
-                "updatedAtMillis" to System.currentTimeMillis(),
-                "updatedAt" to FieldValue.serverTimestamp()
-            ),
-            SetOptions.merge()
-        )
-}
-
 private suspend fun loadRecentTrainees(
     @Suppress("UNUSED_PARAMETER")
-    context: Context
+    context: Context,
+    branch: String,
+    group: String
 ): List<String> {
     val coachUid =
         internalExamCoachUid()
             ?: return emptyList()
 
+    val cleanBranch = branch.trim()
+    val cleanGroup = group.trim()
+
+    if (
+        cleanBranch.isBlank() ||
+        cleanGroup.isBlank()
+    ) {
+        return emptyList()
+    }
+
     return runCatching {
         FirebaseFirestore.getInstance()
-            .collection(
-                "internalExamRecentTrainees"
-            )
+            .collection("internalExamRecentTrainees")
             .document(coachUid)
             .collection("trainees")
-            .orderBy(
-                "updatedAtMillis",
-                Query.Direction.DESCENDING
+            .whereEqualTo(
+                "coachUid",
+                coachUid
             )
-            .limit(20L)
+            .whereEqualTo(
+                "branch",
+                cleanBranch
+            )
+            .whereEqualTo(
+                "group",
+                cleanGroup
+            )
+            .limit(50L)
             .get()
             .await()
             .documents
+            .sortedByDescending { doc ->
+                doc.getLong("updatedAtMillis") ?: 0L
+            }
+            .take(20)
             .mapNotNull { doc ->
                 doc.getString("name")
                     ?.trim()
@@ -6512,14 +6755,24 @@ private suspend fun loadRecentTrainees(
 }
 
 private suspend fun loadRecentCompletedExamResults(
+    branch: String,
+    group: String,
     limit: Int = 8
 ): List<RecentInternalExamResultUi> {
     val coachUid = internalExamCoachUid() ?: return emptyList()
+    val cleanBranch = branch.trim()
+    val cleanGroup = group.trim()
+
+    if (cleanBranch.isBlank() || cleanGroup.isBlank()) {
+        return emptyList()
+    }
 
     return runCatching {
         FirebaseFirestore.getInstance()
             .collection("internalExamResults")
             .whereEqualTo("coachUid", coachUid)
+            .whereEqualTo("branch", cleanBranch)
+            .whereEqualTo("group", cleanGroup)
             .limit(80)
             .get()
             .await()
@@ -6564,10 +6817,23 @@ private suspend fun loadRecentCompletedExamResults(
 }
 
 private suspend fun loadCompletedInternalExamSessionForPdf(
-    resultId: String
+    resultId: String,
+    branch: String,
+    group: String
 ): InternalExamSession? {
     val cleanResultId = resultId.trim()
-    if (cleanResultId.isBlank()) return null
+    val cleanBranch = branch.trim()
+    val cleanGroup = group.trim()
+
+    if (
+        cleanResultId.isBlank() ||
+        cleanBranch.isBlank() ||
+        cleanGroup.isBlank()
+    ) {
+        return null
+    }
+
+    val coachUid = internalExamCoachUid() ?: return null
 
     val snap = FirebaseFirestore.getInstance()
         .collection("internalExamResults")
@@ -6576,6 +6842,28 @@ private suspend fun loadCompletedInternalExamSessionForPdf(
         .await()
 
     if (!snap.exists()) return null
+
+    val docCoachUid =
+        snap.getString("coachUid")
+            .orEmpty()
+
+    val docBranch =
+        snap.getString("branch")
+            ?.trim()
+            .orEmpty()
+
+    val docGroup =
+        snap.getString("group")
+            ?.trim()
+            .orEmpty()
+
+    if (
+        docCoachUid != coachUid ||
+        docBranch != cleanBranch ||
+        docGroup != cleanGroup
+    ) {
+        return null
+    }
 
     val traineeName = snap.getString("traineeName")
         ?.trim()
@@ -6664,24 +6952,48 @@ private suspend fun loadCompletedInternalExamSessionForPdf(
 private fun pushRecentTrainee(
     @Suppress("UNUSED_PARAMETER")
     context: Context,
-    name: String
+    name: String,
+    branch: String,
+    group: String
 ) {
     val clean = name.trim()
-    if (clean.isBlank()) return
+    val cleanBranch = branch.trim()
+    val cleanGroup = group.trim()
+
+    if (
+        clean.isBlank() ||
+        cleanBranch.isBlank() ||
+        cleanGroup.isBlank()
+    ) {
+        return
+    }
 
     val coachUid = internalExamCoachUid() ?: return
     val traineeKey = internalExamTraineeKey(clean)
+
+    val recentTraineeId =
+        internalExamRecentTraineeId(
+            traineeName = clean,
+            branch = cleanBranch,
+            group = cleanGroup
+        )
 
     FirebaseFirestore.getInstance()
         .collection("internalExamRecentTrainees")
         .document(coachUid)
         .collection("trainees")
-        .document(traineeKey)
+        .document(recentTraineeId)
         .set(
             mapOf(
                 "name" to clean,
                 "traineeKey" to traineeKey,
                 "coachUid" to coachUid,
+                "branch" to cleanBranch,
+                "group" to cleanGroup,
+                "scopeKey" to internalExamScopeKey(
+                    cleanBranch,
+                    cleanGroup
+                ),
                 "updatedAtMillis" to System.currentTimeMillis(),
                 "updatedAt" to FieldValue.serverTimestamp()
             ),
@@ -6690,51 +7002,98 @@ private fun pushRecentTrainee(
 }
 
 private suspend fun removeRecentTraineeAfterCompletion(
-    traineeName: String
+    traineeName: String,
+    branch: String,
+    group: String
 ) {
     val cleanName = traineeName.trim()
-    if (cleanName.isBlank()) return
+    val cleanBranch = branch.trim()
+    val cleanGroup = group.trim()
+
+    if (
+        cleanName.isBlank() ||
+        cleanBranch.isBlank() ||
+        cleanGroup.isBlank()
+    ) {
+        return
+    }
 
     val coachUid = internalExamCoachUid() ?: return
-    val traineeKey = internalExamTraineeKey(cleanName)
+
+    val recentTraineeId =
+        internalExamRecentTraineeId(
+            traineeName = cleanName,
+            branch = cleanBranch,
+            group = cleanGroup
+        )
 
     FirebaseFirestore.getInstance()
         .collection("internalExamRecentTrainees")
         .document(coachUid)
         .collection("trainees")
-        .document(traineeKey)
+        .document(recentTraineeId)
         .delete()
         .await()
 }
 
 private suspend fun deleteCompletedInternalExamResult(
-    resultId: String
+    resultId: String,
+    branch: String,
+    group: String
 ) {
     val cleanResultId = resultId.trim()
-    if (cleanResultId.isBlank()) return
+    val cleanBranch = branch.trim()
+    val cleanGroup = group.trim()
+
+    if (
+        cleanResultId.isBlank() ||
+        cleanBranch.isBlank() ||
+        cleanGroup.isBlank()
+    ) {
+        return
+    }
 
     val coachUid = internalExamCoachUid() ?: return
     val db = FirebaseFirestore.getInstance()
 
-    val directRef = db.collection("internalExamResults")
-        .document(cleanResultId)
+    val directRef =
+        db.collection("internalExamResults")
+            .document(cleanResultId)
 
     val directSnap = directRef.get().await()
 
     if (directSnap.exists()) {
-        val docCoachUid = directSnap.getString("coachUid")
+        val docCoachUid =
+            directSnap.getString("coachUid")
 
-        if (docCoachUid == coachUid) {
+        val docBranch =
+            directSnap.getString("branch")
+                ?.trim()
+                .orEmpty()
+
+        val docGroup =
+            directSnap.getString("group")
+                ?.trim()
+                .orEmpty()
+
+        if (
+            docCoachUid == coachUid &&
+            docBranch == cleanBranch &&
+            docGroup == cleanGroup
+        ) {
             directRef.delete().await()
             return
         }
     }
 
-    val querySnap = db.collection("internalExamResults")
-        .whereEqualTo("coachUid", coachUid)
-        .whereEqualTo("resultId", cleanResultId)
-        .get()
-        .await()
+    val querySnap =
+        db.collection("internalExamResults")
+            .whereEqualTo("coachUid", coachUid)
+            .whereEqualTo("resultId", cleanResultId)
+            .whereEqualTo("branch", cleanBranch)
+            .whereEqualTo("group", cleanGroup)
+            .get()
+            .await()
 
     val batch = db.batch()
 
@@ -6746,26 +7105,51 @@ private suspend fun deleteCompletedInternalExamResult(
 }
 
 private suspend fun deleteTraineeAndExamHistory(
-    traineeName: String
+    traineeName: String,
+    branch: String,
+    group: String
 ) {
     val cleanName = traineeName.trim()
-    if (cleanName.isBlank()) return
+    val cleanBranch = branch.trim()
+    val cleanGroup = group.trim()
+
+    if (
+        cleanName.isBlank() ||
+        cleanBranch.isBlank() ||
+        cleanGroup.isBlank()
+    ) {
+        return
+    }
 
     val coachUid = internalExamCoachUid() ?: return
     val traineeKey = internalExamTraineeKey(cleanName)
+
+    val recentTraineeId =
+        internalExamRecentTraineeId(
+            traineeName = cleanName,
+            branch = cleanBranch,
+            group = cleanGroup
+        )
+
     val db = FirebaseFirestore.getInstance()
 
-    val draftsSnap = db.collection("internalExamDrafts")
-        .whereEqualTo("coachUid", coachUid)
-        .whereEqualTo("traineeKey", traineeKey)
-        .get()
-        .await()
+    val draftsSnap =
+        db.collection("internalExamDrafts")
+            .whereEqualTo("coachUid", coachUid)
+            .whereEqualTo("traineeKey", traineeKey)
+            .whereEqualTo("branch", cleanBranch)
+            .whereEqualTo("group", cleanGroup)
+            .get()
+            .await()
 
-    val resultsSnap = db.collection("internalExamResults")
-        .whereEqualTo("coachUid", coachUid)
-        .whereEqualTo("traineeKey", traineeKey)
-        .get()
-        .await()
+    val resultsSnap =
+        db.collection("internalExamResults")
+            .whereEqualTo("coachUid", coachUid)
+            .whereEqualTo("traineeKey", traineeKey)
+            .whereEqualTo("branch", cleanBranch)
+            .whereEqualTo("group", cleanGroup)
+            .get()
+            .await()
 
     val batch = db.batch()
 
@@ -6773,7 +7157,7 @@ private suspend fun deleteTraineeAndExamHistory(
         db.collection("internalExamRecentTrainees")
             .document(coachUid)
             .collection("trainees")
-            .document(traineeKey)
+            .document(recentTraineeId)
     )
 
     draftsSnap.documents.forEach { doc ->

@@ -70,12 +70,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.firestore.DocumentSnapshot
-import com.google.firebase.firestore.FieldPath
-import com.google.firebase.firestore.FirebaseFirestoreException
-import com.google.firebase.firestore.FieldValue
-import com.google.firebase.firestore.Query
-import com.google.firebase.firestore.SetOptions
 import com.google.firebase.firestore.ktx.firestore
 import com.google.firebase.ktx.Firebase
 import com.google.firebase.storage.ktx.storage
@@ -84,7 +78,6 @@ import il.kmi.app.localization.rememberIsEnglish
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import kotlinx.datetime.Instant
-import kotlinx.datetime.toKotlinInstant
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -689,10 +682,6 @@ private fun forumSafeDocId(raw: String): String {
         .ifBlank { "default" }
 }
 
-private fun forumRoomDocId(branch: String, groupKey: String): String {
-    return "room_${forumSafeDocId(branch)}_${forumSafeDocId(groupKey)}"
-}
-
 private fun forumPrefsList(
     sp: SharedPreferences,
     vararg keys: String
@@ -1158,9 +1147,6 @@ fun ForumScreen(
 
     val branch = selectedForumBranch
     val groupKey = selectedForumGroup
-    val forumRoomId = remember(branch, groupKey) {
-        forumRoomDocId(branch, groupKey)
-    }
 
     val openFromPushInitial = remember {
         sp.getBoolean("forum_open_from_push", false)
@@ -1241,8 +1227,7 @@ fun ForumScreen(
         }
     }
 
-    val db = remember { Firebase.firestore }
-    val storage = remember { Firebase.storage }    // 👈 storage זמין
+    val storage = remember { Firebase.storage }
     val scope = rememberCoroutineScope()
 
     var input by remember {
@@ -1253,6 +1238,10 @@ fun ForumScreen(
         mutableStateOf(
             listOf<ForumUiMessage>()
         )
+    }
+
+    var messagesRefreshTick by remember {
+        mutableIntStateOf(0)
     }
 
     /*
@@ -1293,733 +1282,348 @@ fun ForumScreen(
         FirebaseAuth.getInstance()
     }
 
-    // ================== האזנה בזמן אמת ==================
-    DisposableEffect(
+    // ================== טעינת הודעות פורום — מאובטחת מהשרת ==================
+    LaunchedEffect(
         branch,
-        groupKey
+        groupKey,
+        messagesRefreshTick
     ) {
-        /*
-         * בכל מעבר לסניף או לקבוצה מנקים
-         * מיד את ההודעות הישנות ומציגים טעינה.
-         */
         messages = emptyList()
 
+        val cleanBranch =
+            branch.trim()
+
+        val cleanGroup =
+            groupKey.trim()
+
         if (
-            branch.isBlank() ||
-            groupKey.isBlank()
+            cleanBranch.isBlank() ||
+            cleanGroup.isBlank()
         ) {
             isMessagesLoading = false
+            return@LaunchedEffect
+        }
 
-            onDispose { }
-        } else {
-            isMessagesLoading = true
+        isMessagesLoading = true
 
-            val registration =
-                db.collection("branches")
-                    .document(branch)
-                    .collection("forumRooms")
-                    .document(forumRoomId)
-                    .collection("messages")
-                    .orderBy("createdAt", Query.Direction.DESCENDING)
-                    .limit(200)
-                    .addSnapshotListener { snap, error ->
+        val currentUid =
+            FirebaseAuth
+                .getInstance()
+                .currentUser
+                ?.uid
+                .orEmpty()
 
-                        if (error != null) {
-                            isMessagesLoading = false
-                            messages = emptyList()
+        val result =
+            runCatching {
+                com.google.firebase.functions.FirebaseFunctions
+                    .getInstance()
+                    .getHttpsCallable(
+                        "loadSecureForumMessages"
+                    )
+                    .call(
+                        mapOf(
+                            "branch" to cleanBranch,
+                            "group" to cleanGroup
+                        )
+                    )
+                    .await()
+            }
 
-                            return@addSnapshotListener
-                        }
+        if (result.isFailure) {
+            messages = emptyList()
+            isMessagesLoading = false
+            return@LaunchedEffect
+        }
 
-                        val currentUid =
-                            FirebaseAuth
-                                .getInstance()
-                                .currentUser
-                                ?.uid
+        val payload =
+            result
+                .getOrNull()
+                ?.data as? Map<*, *>
 
-                        val uiList = snap?.documents
-                            ?.mapNotNull { doc ->
-                                val rawTs = doc.getTimestamp("createdAt")
-                                val instant = rawTs
-                                    ?.toDate()
-                                    ?.toInstant()
-                                    ?.toKotlinInstant()
-                                    ?: return@mapNotNull null
+        val rawItems =
+            payload
+                ?.get("items")
+                    as? List<*>
+                ?: emptyList<Any>()
 
-                                // 👇 שם השולח – מנסה כמה שדות: authorName / fullName / name / displayName
-                                val authorNameDoc =
-                                    doc.getString("authorName")
-                                        ?: doc.getString("fullName")
-                                        ?: doc.getString("name")
-                                        ?: doc.getString("displayName")
-                                        ?: ""
+        val uiList =
+            rawItems
+                .mapNotNull { rawItem ->
 
-                                val authorEmailDoc = doc.getString("authorEmail") ?: ""
-                                val authorUidDoc = doc.getString("authorUid")
+                    val item =
+                        rawItem as? Map<*, *>
+                            ?: return@mapNotNull null
 
-                                ForumUiMessage(
-                                    id = doc.id,
-                                    messageId = doc.getString("messageId") ?: doc.id,
-                                    branch = doc.getString("branch") ?: branch,
-                                    groupKey = doc.getString("groupKey") ?: groupKey,
-                                    authorName = authorNameDoc,
-                                    authorEmail = authorEmailDoc,
-                                    authorUid = authorUidDoc,
-                                    text = doc.getString("text") ?: "",
-                                    createdAt = instant,
-                                    createdAtMillis = doc.getLong("createdAtMillis")
-                                        ?: instant.toEpochMilliseconds(),
-                                    updatedAtMillis = doc.getLong("updatedAtMillis"),
-                                    mediaUrl = doc.getString("mediaUrl"),
-                                    mediaType = doc.getString("mediaType"),
-                                    isMine = (authorUidDoc != null && authorUidDoc == currentUid)
-                                )
-                            }
-                            ?: emptyList()
+                    val id =
+                        item["id"]
+                            ?.toString()
+                            ?.trim()
+                            .orEmpty()
 
-                        messages = uiList
-                        isMessagesLoading = false
+                    val messageId =
+                        item["messageId"]
+                            ?.toString()
+                            ?.trim()
+                            .orEmpty()
 
-                        scope.launch {
-                            if (
-                                !pendingPushHandled &&
-                                pendingPushMessageId.isNotBlank() &&
-                                uiList.isNotEmpty()
-                            ) {
-                                val targetIndex = uiList.indexOfFirst { msg ->
-                                    msg.id == pendingPushMessageId ||
-                                            msg.messageId == pendingPushMessageId
-                                }
+                    val authorUid =
+                        item["authorUid"]
+                            ?.toString()
+                            ?.trim()
+                            .orEmpty()
 
-                                if (targetIndex >= 0) {
-                                    listState.animateScrollToItem(targetIndex)
-                                    pendingPushHandled = true
+                    val createdAtMillis =
+                        (item["createdAtMillis"] as? Number)
+                            ?.toLong()
+                            ?: 0L
 
-                                    sp.edit {
-                                        putBoolean(
-                                            "forum_open_from_push",
-                                            false
-                                        )
-                                        remove("forum_push_message_id")
-                                        remove("forum_push_room_id")
-                                        remove("forum_push_room_name")
-                                        remove("forum_push_branch_id")
-                                        remove("forum_push_group_key")
-                                        remove("forum_push_sender_id")
-                                        remove("forum_push_received_at")
-                                    }
-
-                                    pendingPushMessageId = ""
-                                    pendingPushRoomId = ""
-                                } else {
-                                    listState.animateScrollToItem(0)
-                                }
-                            } else if (uiList.isNotEmpty()) {
-                                listState.animateScrollToItem(0)
-                            }
-                        }
+                    if (
+                        id.isBlank() ||
+                        messageId.isBlank() ||
+                        authorUid.isBlank() ||
+                        createdAtMillis <= 0L
+                    ) {
+                        return@mapNotNull null
                     }
 
-            onDispose {
-                registration.remove()
-                messages = emptyList()
-                isMessagesLoading = false
+                    val updatedAtMillis =
+                        (item["updatedAtMillis"] as? Number)
+                            ?.toLong()
+                            ?.takeIf {
+                                it > 0L
+                            }
+
+                    ForumUiMessage(
+                        id = id,
+                        messageId = messageId,
+                        branch =
+                            item["branch"]
+                                ?.toString()
+                                ?.trim()
+                                .orEmpty()
+                                .ifBlank {
+                                    cleanBranch
+                                },
+                        groupKey =
+                            item["groupKey"]
+                                ?.toString()
+                                ?.trim()
+                                .orEmpty()
+                                .ifBlank {
+                                    cleanGroup
+                                },
+                        authorName =
+                            item["authorName"]
+                                ?.toString()
+                                ?.trim()
+                                .orEmpty(),
+                        authorEmail = "",
+                        authorUid = authorUid,
+                        text =
+                            item["text"]
+                                ?.toString()
+                                .orEmpty(),
+                        createdAt =
+                            Instant.fromEpochMilliseconds(
+                                createdAtMillis
+                            ),
+                        createdAtMillis =
+                            createdAtMillis,
+                        updatedAtMillis =
+                            updatedAtMillis,
+                        mediaUrl =
+                            item["mediaUrl"]
+                                ?.toString()
+                                ?.trim()
+                                ?.takeIf {
+                                    it.isNotBlank()
+                                },
+                        mediaType =
+                            item["mediaType"]
+                                ?.toString()
+                                ?.trim()
+                                ?.takeIf {
+                                    it.isNotBlank()
+                                },
+                        isMine =
+                            currentUid.isNotBlank() &&
+                                    authorUid == currentUid
+                    )
+                }
+
+        messages = uiList
+        isMessagesLoading = false
+
+        if (
+            !pendingPushHandled &&
+            pendingPushMessageId.isNotBlank() &&
+            uiList.isNotEmpty()
+        ) {
+            val targetIndex =
+                uiList.indexOfFirst { msg ->
+                    msg.id == pendingPushMessageId ||
+                            msg.messageId == pendingPushMessageId
+                }
+
+            if (targetIndex >= 0) {
+                listState.animateScrollToItem(
+                    targetIndex
+                )
+
+                pendingPushHandled = true
+
+                sp.edit {
+                    putBoolean(
+                        "forum_open_from_push",
+                        false
+                    )
+                    remove("forum_push_message_id")
+                    remove("forum_push_room_id")
+                    remove("forum_push_room_name")
+                    remove("forum_push_branch_id")
+                    remove("forum_push_group_key")
+                    remove("forum_push_sender_id")
+                    remove("forum_push_received_at")
+                }
+
+                pendingPushMessageId = ""
+                pendingPushRoomId = ""
+            } else {
+                listState.animateScrollToItem(0)
             }
+        } else if (uiList.isNotEmpty()) {
+            listState.animateScrollToItem(0)
         }
     }
 
-    // ================== משתתפים בפורום — משתמשים אמיתיים מ-Firestore ==================
-    // מסך אמת: אין שימוש ב-DemoTrainees.
-    // חשוב: משתמשים יכולים לשמור סניף ב-branch / branches / branchesCsv,
-    // וגם עם סוגי מקפים שונים. לכן לא מספיק whereEqualTo("branch", branch).
-    LaunchedEffect(branch, groupKey, fullName, email) {
-        // ✅ מיד עם החלפת חדר — מנקים נתונים ישנים ומציגים טעינה
+    // ================== משתתפי הפורום — טעינה מאובטחת מהשרת ==================
+    LaunchedEffect(
+        branch,
+        groupKey
+    ) {
         participantsByUsers = emptyList()
         isParticipantsLoading = true
         isParticipantsExpanded = false
 
-        if (branch.isBlank() || groupKey.isBlank()) {
+        val cleanBranch =
+            branch.trim()
+
+        val cleanGroup =
+            groupKey.trim()
+
+        if (
+            cleanBranch.isBlank() ||
+            cleanGroup.isBlank()
+        ) {
             isParticipantsLoading = false
             return@LaunchedEffect
         }
 
-        val currentUid = FirebaseAuth.getInstance().currentUser?.uid
-        val currentEmail = email.trim()
-        val currentName = fullName.trim()
-
-        fun String.normForum(): String {
-            val t = trim()
-            val sb = StringBuilder(t.length)
-            var lastWasWs = false
-
-            for (ch0 in t) {
-                val ch = when (ch0) {
-                    '-', '–', '—', '־' -> '-'
-                    else -> ch0
-                }
-
-                val ws = ch.isWhitespace()
-                if (ws) {
-                    if (!lastWasWs) sb.append(' ')
-                } else {
-                    sb.append(ch)
-                }
-                lastWasWs = ws
-            }
-
-            return sb.toString().trim()
-        }
-
-        fun String.swapDash(to: Char): String = buildString(length) {
-            for (ch in this@swapDash) {
-                append(
-                    when (ch) {
-                        '-', '–', '—', '־' -> to
-                        else -> ch
-                    }
-                )
-            }
-        }
-
-        fun splitTokensNorm(raw: String?): List<String> {
-            if (raw.isNullOrBlank()) return emptyList()
-
-            return raw
-                .replace(" • ", ",")
-                .replace("|", ",")
-                .replace("\n", ",")
-                .split(',', ';', '；')
-                .map { it.trim() }
-                .filter { it.isNotBlank() }
-                .map { it.normForum() }
-        }
-
-        fun DocumentSnapshot.userNameOrNull(): String? {
-            val full =
-                getString("fullName")
-                    ?: getString("name")
-                    ?: getString("displayName")
-                    ?: getString("email")
-
-            return full?.trim()?.takeIf { it.isNotBlank() }
-        }
-
-        fun DocumentSnapshot.roleText(): String {
-            return (getString("role")
-                ?: getString("userType")
-                ?: getString("type")
-                ?: "")
-                .trim()
-                .lowercase()
-        }
-
-        fun DocumentSnapshot.isAllowedForumRole(): Boolean {
-            val role = roleText()
-
-            return role.isBlank() ||
-                    role.contains("trainee") ||
-                    role.contains("coach") ||
-                    role.contains("trainer") ||
-                    role.contains("instructor") ||
-                    role.contains("מתאמן") ||
-                    role.contains("מאמן")
-        }
-
-        fun DocumentSnapshot.branchTokensNorm(): List<String> {
-            val out = mutableListOf<String>()
-
-            val branchesList = (get("branches") as? List<*>)
-                ?.mapNotNull { it?.toString()?.trim() }
+        val currentUid =
+            FirebaseAuth
+                .getInstance()
+                .currentUser
+                ?.uid
                 .orEmpty()
 
-            out.addAll(branchesList.map { it.normForum() })
-            out.addAll(splitTokensNorm(getString("branchesCsv")))
-            out.addAll(splitTokensNorm(getString("branch")))
-            out.addAll(splitTokensNorm(getString("activeBranch")))
-            out.addAll(splitTokensNorm(getString("active_branch")))
+        val result =
+            runCatching {
+                com.google.firebase.functions.FirebaseFunctions
+                    .getInstance()
+                    .getHttpsCallable(
+                        "loadSecureForumParticipants"
+                    )
+                    .call(
+                        mapOf(
+                            "branch" to cleanBranch,
+                            "group" to cleanGroup
+                        )
+                    )
+                    .await()
+            }
 
-            return out
-                .filter { it.isNotBlank() }
-                .distinct()
+        if (result.isFailure) {
+            participantsByUsers = emptyList()
+            isParticipantsLoading = false
+            return@LaunchedEffect
         }
 
-        fun expandForumGroupAliases(raw: String): List<String> {
-            val n = raw.normForum()
+        val payload =
+            result
+                .getOrNull()
+                ?.data as? Map<*, *>
 
-            return buildList {
-                add(n)
-                addAll(splitTokensNorm(n))
+        val rawItems =
+            payload
+                ?.get("items")
+                    as? List<*>
+                ?: emptyList<Any>()
 
-                if (n.contains("נוער") && n.contains("בוגרים")) {
-                    add("נוער")
-                    add("בוגרים")
-                    add("נוער ובוגרים")
-                    add("נוער + בוגרים")
+        participantsByUsers =
+            rawItems
+                .mapNotNull { rawItem ->
+
+                    val item =
+                        rawItem as? Map<*, *>
+                            ?: return@mapNotNull null
+
+                    val uid =
+                        item["uid"]
+                            ?.toString()
+                            ?.trim()
+                            .orEmpty()
+
+                    val name =
+                        item["name"]
+                            ?.toString()
+                            ?.trim()
+                            ?.replace(
+                                Regex("\\s+"),
+                                " "
+                            )
+                            .orEmpty()
+
+                    if (
+                        uid.isBlank() ||
+                        name.isBlank()
+                    ) {
+                        return@mapNotNull null
+                    }
+
+                    ForumParticipantUi(
+                        id = uid,
+                        name = name,
+                        isMe =
+                            currentUid.isNotBlank() &&
+                                    uid == currentUid
+                    )
                 }
-
-                if (n.contains("children", ignoreCase = true)) add("ילדים")
-                if (n.contains("kids", ignoreCase = true)) add("ילדים")
-                if (n.contains("youth", ignoreCase = true)) add("נוער")
-                if (n.contains("adults", ignoreCase = true)) add("בוגרים")
-                if (n.contains("adult", ignoreCase = true)) add("בוגרים")
-            }
-                .map { it.normForum() }
-                .filter { it.isNotBlank() }
-                .distinct()
-        }
-
-        fun DocumentSnapshot.groupTokensNorm(): List<String> {
-            val groupsList =
-                (get("groups") as? List<*>)
-                    ?.mapNotNull {
-                        it?.toString()?.trim()
-                    }
-                    ?.flatMap {
-                        expandForumGroupAliases(it)
-                    }
-                    .orEmpty()
-
-            return buildList {
-                addAll(groupsList)
-
-                addAll(
-                    splitTokensNorm(
-                        getString("primaryGroup")
-                    ).flatMap {
-                        expandForumGroupAliases(it)
-                    }
-                )
-
-                addAll(
-                    splitTokensNorm(
-                        getString("groupKey")
-                    ).flatMap {
-                        expandForumGroupAliases(it)
-                    }
-                )
-
-                addAll(
-                    splitTokensNorm(
-                        getString("group_key")
-                    ).flatMap {
-                        expandForumGroupAliases(it)
-                    }
-                )
-
-                addAll(
-                    splitTokensNorm(
-                        getString("group")
-                    ).flatMap {
-                        expandForumGroupAliases(it)
-                    }
-                )
-
-                addAll(
-                    splitTokensNorm(
-                        getString("groupName")
-                    ).flatMap {
-                        expandForumGroupAliases(it)
-                    }
-                )
-
-                addAll(
-                    splitTokensNorm(
-                        getString("groupsCsv")
-                    ).flatMap {
-                        expandForumGroupAliases(it)
-                    }
-                )
-
-                addAll(
-                    splitTokensNorm(
-                        getString("groupCsv")
-                    ).flatMap {
-                        expandForumGroupAliases(it)
-                    }
-                )
-
-                addAll(
-                    splitTokensNorm(
-                        getString("age_group")
-                    ).flatMap {
-                        expandForumGroupAliases(it)
-                    }
-                )
-            }
-                .filter { it.isNotBlank() }
-                .distinct()
-        }
-
-        /*
-         * null פירושו שלמשתמש אין עדיין את המבנה החדש,
-         * ולכן צריך להשתמש בשדות הישנים.
-         *
-         * true/false פירושם שהמבנה החדש קיים והוא
-         * מקור האמת היחיד עבור השיוך.
-         */
-        fun DocumentSnapshot.matchesNewForumAssignment(
-            branchCandidates: Set<String>,
-            groupCandidates: Set<String>
-        ): Boolean? {
-
-            val rawAssignments =
-                get("coachBranchAssignments")
-                        as? List<*>
-                    ?: return null
-
-            if (rawAssignments.isEmpty()) {
-                return null
-            }
-
-            return rawAssignments.any { rawAssignment ->
-
-                val assignmentMap =
-                    rawAssignment as? Map<*, *>
-                        ?: return@any false
-
-                val assignmentBranch =
-                    assignmentMap["branch"]
-                        ?.toString()
-                        ?.normForum()
-                        .orEmpty()
-
-                val assignmentGroups =
-                    (
-                            assignmentMap["groups"]
-                                    as? List<*>
-                            )
-                        ?.asSequence()
-                        ?.mapNotNull {
-                            it?.toString()
-                        }
-                        ?.flatMap {
-                            expandForumGroupAliases(it)
-                                .asSequence()
-                        }
-                        ?.map {
-                            it.normForum()
-                        }
-                        ?.filter {
-                            it.isNotBlank()
-                        }
-                        ?.toSet()
-                        .orEmpty()
-
-                val branchMatches =
-                    assignmentBranch.isNotBlank() &&
-                            branchCandidates.any { candidate ->
-
-                                candidate == assignmentBranch
-                            }
-
-                val groupMatches =
-                    groupCandidates.isEmpty() ||
-                            assignmentGroups.any {
-                                it in groupCandidates
-                            }
-
-                branchMatches && groupMatches
-            }
-        }
-
-        fun matchesForumGroup(
-            tokens: List<String>,
-            candidates: Set<String>
-        ): Boolean {
-            if (candidates.isEmpty()) return true
-
-            // אם למשתמש אין שדה קבוצה בכלל, לא נכניס אותו לחדר קבוצה ספציפי.
-            if (tokens.isEmpty()) return false
-
-            return tokens.any { tok ->
-                tok in candidates ||
-                        candidates.any { cand ->
-                            cand.length >= 2 &&
-                                    tok.length >= 2 &&
-                                    (tok.contains(cand) || cand.contains(tok))
-                        }
-            }
-        }
-
-        fun matchesBranch(tokens: List<String>, candidates: Set<String>): Boolean {
-            if (tokens.isEmpty() || candidates.isEmpty()) return false
-
-            return tokens.any { tok ->
-                tok in candidates ||
-                        candidates.any { cand ->
-                            cand.length >= 4 &&
-                                    tok.length >= 4 &&
-                                    (tok.contains(cand) || cand.contains(tok))
-                        }
-            }
-        }
-
-        suspend fun fetchUsersFor(branchValue: String): List<DocumentSnapshot> {
-            val col = db.collection("users")
-            val out = mutableListOf<DocumentSnapshot>()
-
-            runCatching {
-                out.addAll(
-                    col.whereArrayContains("branches", branchValue)
-                        .get()
-                        .await()
-                        .documents
-                )
-            }
-
-            runCatching {
-                out.addAll(
-                    col.whereEqualTo("branchesCsv", branchValue)
-                        .get()
-                        .await()
-                        .documents
-                )
-            }
-
-            runCatching {
-                out.addAll(
-                    col.whereEqualTo("branch", branchValue)
-                        .get()
-                        .await()
-                        .documents
-                )
-            }
-
-            runCatching {
-                out.addAll(
-                    col.whereEqualTo("activeBranch", branchValue)
-                        .get()
-                        .await()
-                        .documents
-                )
-            }
-
-            runCatching {
-                out.addAll(
-                    col.whereEqualTo("active_branch", branchValue)
-                        .get()
-                        .await()
-                        .documents
-                )
-            }
-
-            return out
-        }
-
-        val branchCandidates = listOf(
-            branch,
-            branch.swapDash('-'),
-            branch.swapDash('–'),
-            branch.swapDash('—'),
-            branch.swapDash('־'),
-            branch.replace("  ", " ")
-        ).map { it.trim() }
-            .filter { it.isNotBlank() }
-            .distinct()
-
-        val groupCandidates = expandForumGroupAliases(groupKey)
-            .flatMap { g ->
-                listOf(
-                    g,
-                    g.replace("-", "–"),
-                    g.replace("–", "-"),
-                    g.replace(" + ", " ו"),
-                    g.replace(" ו", " + ")
-                )
-            }
-            .map { it.normForum() }
-            .filter { it.isNotBlank() }
-            .distinct()
-
-        scope.launch {
-            try {
-                var docs = branchCandidates
-                    .flatMap { cand -> fetchUsersFor(cand) }
-                    .distinctBy { it.id }
-
-                if (docs.isEmpty()) {
-                    val all = mutableListOf<DocumentSnapshot>()
-                    val col = db.collection("users")
-
-                    var last: DocumentSnapshot? = null
-
-                    while (true) {
-                        var q = col
-                            .orderBy(FieldPath.documentId())
-                            .limit(1000)
-
-                        last?.let { lastDocument ->
-                            q = q.startAfter(
-                                lastDocument
-                            )
-                        }
-
-                        val snap = q.get().await()
-                        val page = snap.documents
-
-                        if (page.isEmpty()) break
-
-                        all.addAll(page)
-                        last = page.last()
-
-                        if (all.size >= 5000) break
-                    }
-
-                    val candNorm = branchCandidates.map { it.normForum() }.toSet()
-
-                    val groupNorm = groupCandidates.toSet()
-
-                    docs =
-                        all.filter { doc ->
-                            doc.matchesNewForumAssignment(
-                                branchCandidates = candNorm,
-                                groupCandidates = groupNorm
-                            )
-                                ?: (
-                                        matchesBranch(
-                                            doc.branchTokensNorm(),
-                                            candNorm
-                                        ) &&
-                                                matchesForumGroup(
-                                                    doc.groupTokensNorm(),
-                                                    groupNorm
-                                                )
-                                        )
-                        }
-                            .distinctBy {
-                                it.id
-                            }
-                }
-
-                fun normalizeParticipantName(value: String): String {
-                    return value
+                .groupBy { participant ->
+                    participant.name
                         .trim()
+                        .replace(
+                            Regex("\\s+"),
+                            " "
+                        )
                         .lowercase()
-                        .replace("‏", "")
-                        .replace("יובל פולק", "יובל פולק")
-                        .replace(Regex("\\s+"), " ")
+                }
+                .map { (_, duplicates) ->
+                    /*
+                     * אם אותו שם קיים ביותר ממסמך אחד,
+                     * משאירים רשומה אחת בלבד.
+                     *
+                     * אם אחת הרשומות היא המשתמש המחובר,
+                     * מעדיפים אותה כדי לשמור isMe = true.
+                     */
+                    duplicates.firstOrNull {
+                        it.isMe
+                    } ?: duplicates.first()
+                }
+                .sortedBy {
+                    it.name
                 }
 
-                fun DocumentSnapshot.participantUniqueKey(): String {
-                    val docUid = getString("uid")
-                        ?: getString("authUid")
-                        ?: ""
-
-                    val docEmail = (
-                            getString("email")
-                                ?: getString("emailLower")
-                                ?: getString("userEmail")
-                                ?: getString("user_email")
-                                ?: ""
-                            )
-                        .trim()
-                        .lowercase()
-
-                    val docPhone = (
-                            getString("phone")
-                                ?: getString("phoneNumber")
-                                ?: getString("phone_number")
-                                ?: getString("mobile")
-                                ?: ""
-                            )
-                        .filter { it.isDigit() }
-                        .let { digits ->
-                            when {
-                                digits.startsWith("972") && digits.length >= 11 -> "0" + digits.drop(
-                                    3
-                                )
-
-                                digits.startsWith("05") -> digits
-                                digits.length == 9 && digits.startsWith("5") -> "0$digits"
-                                else -> digits
-                            }
-                        }
-
-                    val docName = userNameOrNull().orEmpty()
-
-                    return when {
-                        docEmail.isNotBlank() -> "email:$docEmail"
-                        docPhone.isNotBlank() -> "phone:$docPhone"
-                        docUid.isNotBlank() -> "uid:${docUid.trim()}"
-                        docName.isNotBlank() -> "name:${normalizeParticipantName(docName)}"
-                        else -> "doc:${id}"
-                    }
-                }
-
-                val groupNorm = groupCandidates.toSet()
-
-                val branchNorm =
-                    branchCandidates
-                        .map {
-                            it.normForum()
-                        }
-                        .toSet()
-
-                val realParticipants =
-                    docs
-                        .asSequence()
-                        .filter {
-                            it.isAllowedForumRole()
-                        }
-                        .filter {
-                            it.userNameOrNull()
-                                ?.isNotBlank() == true
-                        }
-                        .filter { doc ->
-                            doc.matchesNewForumAssignment(
-                                branchCandidates =
-                                    branchNorm,
-                                groupCandidates =
-                                    groupNorm
-                            )
-                                ?: (
-                                        matchesBranch(
-                                            doc.branchTokensNorm(),
-                                            branchNorm
-                                        ) &&
-                                                matchesForumGroup(
-                                                    doc.groupTokensNorm(),
-                                                    groupNorm
-                                                )
-                                        )
-                        }
-                        .groupBy {
-                            it.participantUniqueKey()
-                        }
-                        .values
-                        .mapNotNull { samePersonDocs ->
-                            val doc = samePersonDocs.firstOrNull() ?: return@mapNotNull null
-                            val cleanName = doc.userNameOrNull() ?: return@mapNotNull null
-
-                            val docEmail = doc.getString("email").orEmpty().trim()
-                            val docUid =
-                                doc.getString("uid")
-                                    ?: doc.getString("authUid")
-                                    ?: doc.id
-
-                            ForumParticipantUi(
-                                id = docUid.ifBlank { doc.id },
-                                name = cleanName,
-                                isMe = (
-                                        (currentUid != null && docUid == currentUid) ||
-                                                (currentEmail.isNotBlank() && docEmail == currentEmail) ||
-                                                (currentName.isNotBlank() && cleanName.trim() == currentName)
-                                        )
-                            )
-                        }
-                        .distinctBy {
-                            normalizeParticipantName(it.name)
-                        }
-                        .sortedBy { it.name }
-                        .toList()
-
-                participantsByUsers = realParticipants
-                isParticipantsLoading = false
-            } catch (_: Exception) {
-                participantsByUsers = emptyList()
-                isParticipantsLoading = false
-            }
-        }
+        isParticipantsLoading = false
     }
 
     // ---------- בוררי מדיה ----------
@@ -2062,18 +1666,37 @@ fun ForumScreen(
         }
     }
 
-    // ---------- שליחת/עדכון הודעה ----------
+    // ---------- שליחת/עדכון הודעה — מאובטח דרך השרת ----------
     suspend fun sendMessageInternal() {
         try {
-            val text = (if (editingMessage != null) editText else input).trim()
-            val auth = FirebaseAuth.getInstance()
-            val currentUser = auth.currentUser
-            val currentUid = currentUser?.uid
+            val text =
+                if (editingMessage != null) {
+                    editText.trim()
+                } else {
+                    input.trim()
+                }
 
-            if (text.isEmpty() && attachedUri == null) return
-            if (branch.isBlank() || groupKey.isBlank()) return
+            val currentUser =
+                FirebaseAuth
+                    .getInstance()
+                    .currentUser
 
-            if (currentUser == null || currentUid.isNullOrBlank()) {
+            val currentUid =
+                currentUser
+                    ?.uid
+                    .orEmpty()
+
+            if (
+                branch.isBlank() ||
+                groupKey.isBlank()
+            ) {
+                return
+            }
+
+            if (
+                currentUser == null ||
+                currentUid.isBlank()
+            ) {
                 Toast.makeText(
                     ctx,
                     forumTr(
@@ -2083,6 +1706,7 @@ fun ForumScreen(
                     ),
                     Toast.LENGTH_LONG
                 ).show()
+
                 return
             }
 
@@ -2096,219 +1720,95 @@ fun ForumScreen(
                     ),
                     Toast.LENGTH_LONG
                 ).show()
+
                 return
             }
 
-            // העלאת מדיה (אם יש)
+            /*
+             * מדיה עדיין עולה ל-Firebase Storage.
+             * כתיבת מסמך הפורום עצמו עוברת רק דרך Cloud Function.
+             */
             var mediaUrl: String? = null
             val mediaType = attachedMediaType
 
-            if (attachedUri != null && mediaType != null) {
+            if (
+                attachedUri != null &&
+                mediaType != null
+            ) {
                 val path =
-                    "forum_media/${forumSafeDocId(branch)}/${forumSafeDocId(groupKey)}/$currentUid/${System.currentTimeMillis()}"
-                val ref = storage.reference.child(path)
-                ref.putFile(attachedUri!!).await()
-                mediaUrl = ref.downloadUrl.await().toString()
-            }
+                    "forum_media/" +
+                            "${forumSafeDocId(branch)}/" +
+                            "${forumSafeDocId(groupKey)}/" +
+                            "$currentUid/" +
+                            System.currentTimeMillis()
 
-            val messagePreview = when {
-                text.isNotBlank() -> text.take(120)
-                mediaType == "image" -> forumTr(isEnglish, "תמונה חדשה", "New image")
-                mediaType == "video" -> forumTr(isEnglish, "סרטון חדש", "New video")
-                else -> forumTr(isEnglish, "הודעה חדשה", "New message")
-            }
+                val ref =
+                    storage.reference.child(path)
 
-            // דאטה בסיסי להודעה
-            val safeAuthorName = fullName
-                .ifBlank { userSp.getString("displayName", "").orEmpty() }
-                .ifBlank { userSp.getString("name", "").orEmpty() }
-                .ifBlank { email }
-                .ifBlank { forumTr(isEnglish, "משתתף", "Participant") }
-
-            // מבטיח שחדר הפורום קיים כמסמך אמת בשרת.
-            // חשוב:
-            // אם חוקי Firestore לא מאפשרים למשתמש רגיל לעדכן את מסמך החדר,
-            // לא נפיל את שליחת ההודעה. ננסה לעדכן את החדר, ואם אין הרשאה —
-            // נמשיך לשמירת ההודעה עצמה.
-            val roomRef = db.collection("branches")
-                .document(branch)
-                .collection("forumRooms")
-                .document(forumRoomId)
-
-            val canWriteRoomMetadata = runCatching {
-                roomRef.set(
-                    mapOf(
-                        "roomId" to forumRoomId,
-                        "branch" to branch,
-                        "groupKey" to groupKey,
-                        "participantCount" to participantsByUsers.size,
-                        "participantIds" to participantsByUsers.map { it.id }.take(200),
-                        "participantNames" to participantsByUsers.map { it.name }.take(200),
-                        "participantSource" to "users_by_branch_and_group",
-                        "pushEnabled" to true,
-                        "pushTarget" to "forum_room_participants",
-                        "updatedAt" to FieldValue.serverTimestamp(),
-                        "updatedAtMillis" to System.currentTimeMillis(),
-                        "lastMessagePreview" to messagePreview,
-                        "lastMessageAuthorUid" to currentUid,
-                        "lastMessageAuthorName" to safeAuthorName,
-                        "source" to "android_forum"
-                    ),
-                    SetOptions.merge()
+                ref.putFile(
+                    attachedUri!!
                 ).await()
 
-                true
-            }.getOrElse { error ->
-                if (
-                    error is FirebaseFirestoreException &&
-                    error.code == FirebaseFirestoreException.Code.PERMISSION_DENIED
-                ) {
-                    false
-                } else {
-                    throw error
-                }
+                mediaUrl =
+                    ref.downloadUrl
+                        .await()
+                        .toString()
             }
 
-            val expiresAtDate = Date(
-                System.currentTimeMillis() + FORUM_MESSAGE_RETENTION_MILLIS
-            )
-
-            val baseData = mutableMapOf<String, Any?>(
-                "roomId" to forumRoomId,
-                "branch" to branch,
-                "groupKey" to groupKey,
-                "authorName" to safeAuthorName,
-                "authorEmail" to email,
-                "authorUid" to currentUid,
-                "authorIsManager" to isManagerOverride,
-                "text" to text,
-                "messagePreview" to messagePreview,
-                "hasMedia" to (mediaUrl != null),
-                "mediaType" to mediaType,
-                "expiresAt" to com.google.firebase.Timestamp(expiresAtDate),
-                "retentionDays" to FORUM_MESSAGE_RETENTION_DAYS,
-                "isPinned" to false,
-                "pushStatus" to "pending",
-                "pushCreatedBy" to "android_forum",
-                "source" to "android_forum"
-            )
-
-            if (mediaUrl != null) {
-                baseData["mediaUrl"] = mediaUrl
-                baseData["mediaType"] = mediaType
+            /*
+             * הודעה חדשה חייבת לכלול טקסט או מדיה.
+             *
+             * בעריכה מותר טקסט ריק כאשר כבר קיימת
+             * מדיה בהודעה המקורית.
+             */
+            if (
+                editingMessage == null &&
+                text.isBlank() &&
+                mediaUrl.isNullOrBlank()
+            ) {
+                return
             }
 
-            if (editingMessage == null) {
-                // הודעה חדשה — מוגדרת למחיקה אוטומטית אחרי 90 יום דרך Firestore TTL
-                val nowMillis = System.currentTimeMillis()
-                val messageRef = db.collection("branches")
-                    .document(branch)
-                    .collection("forumRooms")
-                    .document(forumRoomId)
-                    .collection("messages")
-                    .document()
+            val payload =
+                mutableMapOf<String, Any>(
+                    "branch" to branch.trim(),
+                    "group" to groupKey.trim(),
+                    "text" to text,
+                    "messageId" to
+                            editingMessage
+                                ?.id
+                                .orEmpty()
+                )
 
-                baseData["messageId"] = messageRef.id
-                baseData["createdAt"] = FieldValue.serverTimestamp()
-                baseData["createdAtMillis"] = nowMillis
-                baseData["updatedAtMillis"] = nowMillis
+            if (!mediaUrl.isNullOrBlank()) {
+                payload["mediaUrl"] =
+                    mediaUrl
 
-                messageRef
-                    .set(baseData.filterValues { it != null }, SetOptions.merge())
-                    .await()
-
-                if (canWriteRoomMetadata) {
-                    runCatching {
-                        roomRef.set(
-                            mapOf(
-                                "lastMessageId" to messageRef.id,
-                                "lastMessagePreview" to messagePreview,
-                                "lastMessageAuthorUid" to currentUid,
-                                "lastMessageAuthorName" to safeAuthorName,
-                                "lastMessageAt" to FieldValue.serverTimestamp(),
-                                "lastMessageAtMillis" to nowMillis,
-                                "lastMessageHasMedia" to (mediaUrl != null),
-                                "lastMessageMediaType" to mediaType,
-                                "pendingPushMessageId" to messageRef.id,
-                                "pendingPushAuthorUid" to currentUid,
-                                "pendingPushPreview" to messagePreview,
-                                "pendingPushAt" to FieldValue.serverTimestamp(),
-                                "pendingPushAtMillis" to nowMillis,
-                                "updatedAt" to FieldValue.serverTimestamp(),
-                                "updatedAtMillis" to nowMillis
-                            ),
-                            SetOptions.merge()
-                        ).await()
-                    }
-                }
-            } else {
-                val msg = editingMessage ?: return
-                val canEditThisMessage = msg.isMine || isManagerOverride
-
-                if (!canEditThisMessage) {
-                    Toast.makeText(
-                        ctx,
-                        forumTr(
-                            isEnglish,
-                            "אין הרשאה לערוך הודעה זו.",
-                            "You do not have permission to edit this message."
-                        ),
-                        Toast.LENGTH_LONG
-                    ).show()
-                    return
-                }
-
-                val nowMillis = System.currentTimeMillis()
-
-                // עדכון הודעה קיימת — לא מאריכים את expiresAt בעריכה
-                baseData.remove("expiresAt")
-                baseData.remove("retentionDays")
-                baseData.remove("isPinned")
-                baseData["messageId"] = msg.messageId
-                baseData["updatedAt"] = FieldValue.serverTimestamp()
-                baseData["updatedAtMillis"] = nowMillis
-                baseData["edited"] = true
-
-                db.collection("branches")
-                    .document(branch)
-                    .collection("forumRooms")
-                    .document(forumRoomId)
-                    .collection("messages")
-                    .document(msg.id)
-                    .set(
-                        baseData.filterValues { it != null },
-                        SetOptions.merge()
-                    )
-                    .await()
-
-                if (canWriteRoomMetadata) {
-                    runCatching {
-                        roomRef.set(
-                            mapOf(
-                                "lastMessagePreview" to messagePreview,
-                                "lastMessageAuthorUid" to currentUid,
-                                "lastMessageAuthorName" to safeAuthorName,
-                                "lastMessageEditedAt" to FieldValue.serverTimestamp(),
-                                "lastMessageEditedAtMillis" to nowMillis,
-                                "updatedAt" to FieldValue.serverTimestamp(),
-                                "updatedAtMillis" to nowMillis
-                            ),
-                            SetOptions.merge()
-                        ).await()
-                    }
-                }
+                payload["mediaType"] =
+                    mediaType.orEmpty()
             }
 
-            // ניקוי מצב אחרי שליחה / עדכון
+            com.google.firebase.functions.FirebaseFunctions
+                .getInstance()
+                .getHttpsCallable(
+                    "saveSecureForumMessage"
+                )
+                .call(payload)
+                .await()
+
             input = ""
             editText = ""
             editingMessage = null
             attachedUri = null
             attachedMediaType = null
 
-            // ✅ אחרי שליחה סוגרים מקלדת ומחזירים שדה ראייה למסך
-            focusManager.clearFocus(force = true)
+            focusManager.clearFocus(
+                force = true
+            )
+
             keyboardController?.hide()
+
+            messagesRefreshTick++
 
         } catch (_: Exception) {
             Toast.makeText(
@@ -3083,49 +2583,39 @@ fun ForumScreen(
                                                             tint = textColor.copy(alpha = 0.72f)
                                                         )
                                                     }
+
                                                     Spacer(Modifier.width(2.dp))
+
                                                     IconButton(
                                                         onClick = {
                                                             scope.launch {
-                                                                val roomIdForMessage = msg.groupKey
-                                                                    .takeIf { it.isNotBlank() }
-                                                                    ?.let {
-                                                                        forumRoomDocId(
-                                                                            msg.branch,
-                                                                            it
+                                                                runCatching {
+                                                                    com.google.firebase.functions.FirebaseFunctions
+                                                                        .getInstance()
+                                                                        .getHttpsCallable(
+                                                                            "deleteSecureForumMessage"
                                                                         )
-                                                                    }
-                                                                    ?: forumRoomId
-
-                                                                db.collection("branches")
-                                                                    .document(msg.branch)
-                                                                    .collection("forumRooms")
-                                                                    .document(roomIdForMessage)
-                                                                    .collection("messages")
-                                                                    .document(msg.id)
-                                                                    .delete()
-                                                                    .await()
-
-                                                                val deleteAtMillis =
-                                                                    System.currentTimeMillis()
-
-                                                                db.collection("branches")
-                                                                    .document(msg.branch)
-                                                                    .collection("forumRooms")
-                                                                    .document(roomIdForMessage)
-                                                                    .set(
-                                                                        mapOf(
-                                                                            "updatedAt" to FieldValue.serverTimestamp(),
-                                                                            "updatedAtMillis" to deleteAtMillis,
-                                                                            "lastModerationAction" to "message_deleted",
-                                                                            "lastModerationByUid" to FirebaseAuth.getInstance().currentUser?.uid.orEmpty(),
-                                                                            "lastDeletedMessageId" to msg.messageId,
-                                                                            "lastDeletedAt" to FieldValue.serverTimestamp(),
-                                                                            "lastDeletedAtMillis" to deleteAtMillis
+                                                                        .call(
+                                                                            mapOf(
+                                                                                "branch" to msg.branch.trim(),
+                                                                                "group" to msg.groupKey.trim(),
+                                                                                "messageId" to msg.id
+                                                                            )
+                                                                        )
+                                                                        .await()
+                                                                }.onSuccess {
+                                                                    messagesRefreshTick++
+                                                                }.onFailure {
+                                                                    Toast.makeText(
+                                                                        ctx,
+                                                                        forumTr(
+                                                                            isEnglish,
+                                                                            "לא ניתן למחוק את ההודעה כרגע.",
+                                                                            "The message cannot be deleted right now."
                                                                         ),
-                                                                        SetOptions.merge()
-                                                                    )
-                                                                    .await()
+                                                                        Toast.LENGTH_LONG
+                                                                    ).show()
+                                                                }
                                                             }
                                                         },
                                                         modifier = Modifier.size(scaledIconSize(18.dp))
@@ -3140,6 +2630,7 @@ fun ForumScreen(
                                                             tint = textColor.copy(alpha = 0.72f)
                                                         )
                                                     }
+
                                                     Spacer(Modifier.width(4.dp))
                                                 }
 

@@ -1,51 +1,22 @@
 package il.kmi.shared.free_sessions.data
 
-import com.google.firebase.firestore.FieldValue
-import com.google.firebase.firestore.FirebaseFirestore
-import com.google.firebase.firestore.Query
-import com.google.firebase.firestore.ktx.firestore
-import com.google.firebase.ktx.Firebase
+import com.google.firebase.functions.FirebaseFunctions
 import il.kmi.shared.free_sessions.model.FreeSession
 import il.kmi.shared.free_sessions.model.FreeSessionPart
 import il.kmi.shared.free_sessions.model.ParticipantState
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 
 actual fun freeSessionsRepository(): FreeSessionsRepository =
-    AndroidFreeSessionsRepository(Firebase.firestore)
+    AndroidFreeSessionsRepository()
 
 actual fun systemNowMillis(): Long = System.currentTimeMillis()
 
-private class AndroidFreeSessionsRepository(
-    private val db: FirebaseFirestore
-) : FreeSessionsRepository {
-
-    private fun safePathSegment(raw: String): String {
-        return raw.trim()
-            .replace(Regex("\\s+"), " ")
-            .map { ch ->
-                when (ch) {
-                    '/', '\\', '#', '?', '[', ']', '*', '~' -> '_'
-                    else -> ch
-                }
-            }
-            .joinToString("")
-            .trim()
-            .ifBlank { "general" }
-    }
-
-    private suspend fun resolveUserName(uid: String): String? {
-        return runCatching {
-            val snap = db.collection("users").document(uid).get().await()
-            // תומך בכמה שמות שדות נפוצים אצלך/במערכות שונות
-            snap.getString("name")
-                ?: snap.getString("fullName")
-                ?: snap.getString("displayName")
-                ?: snap.getString("userName")
-        }.getOrNull()?.trim()?.takeIf { it.isNotBlank() }
-    }
+private class AndroidFreeSessionsRepository :
+    FreeSessionsRepository {
 
     override suspend fun createFreeSession(
         branch: String,
@@ -58,56 +29,74 @@ private class AndroidFreeSessionsRepository(
         createdByUid: String,
         createdByName: String
     ): String {
-        val safeBranch = safePathSegment(branch)
-        val safeGroupKey = safePathSegment(groupKey)
+        val cleanBranch =
+            branch.trim()
 
-        val colPath = FreeSessionsPaths.freeSessionsCol(safeBranch, safeGroupKey)
-        val col = db.collection(colPath)
+        val cleanGroup =
+            groupKey.trim()
 
-        val now = System.currentTimeMillis()
-        val doc = col.document() // id מראש
+        val cleanTitle =
+            title.trim()
 
-        // ✅ FIX: אם השם ריק – נשלוף אותו מהמשתמש ב-Firestore
-        val safeName = createdByName.trim().ifBlank {
-            resolveUserName(createdByUid).orEmpty()
-        }.ifBlank {
-            "משתמש"
+        require(
+            cleanBranch.isNotBlank() &&
+                    cleanGroup.isNotBlank() &&
+                    cleanTitle.isNotBlank()
+        ) {
+            "Missing branch, group or title"
         }
 
-        val data = hashMapOf<String, Any?>(
-            "id" to doc.id,
-            "branch" to branch.trim(),
-            "groupKey" to groupKey.trim(),
-            "title" to title.trim(),
-            "locationName" to locationName?.trim(),
-            "lat" to lat,
-            "lng" to lng,
-            "startsAt" to startsAt,
-            "createdAt" to now,
-            "createdByUid" to createdByUid,
-            "createdByName" to safeName,
-            "status" to "OPEN",
+        val payload =
+            mutableMapOf<String, Any>(
+                "branch" to cleanBranch,
+                "group" to cleanGroup,
+                "title" to cleanTitle,
+                "startsAt" to startsAt
+            )
 
-            // counters (אופציונלי)
-            "goingCount" to 0,
-            "onWayCount" to 0,
-            "arrivedCount" to 0,
-            "cantCount" to 0
-        )
+        locationName
+            ?.trim()
+            ?.takeIf {
+                it.isNotBlank()
+            }
+            ?.let {
+                payload["locationName"] = it
+            }
 
-        doc.set(data).await()
+        lat?.let {
+            payload["lat"] = it
+        }
 
-        // יוצר האימון נסמן כברירת מחדל כ-GOING (אפשר לשנות אם לא רוצים)
-        setParticipantState(
-            branch = safeBranch,
-            groupKey = safeGroupKey,
-            sessionId = doc.id,
-            uid = createdByUid,
-            name = safeName,
-            state = ParticipantState.GOING
-        )
+        lng?.let {
+            payload["lng"] = it
+        }
 
-        return doc.id
+        val result =
+            FirebaseFunctions
+                .getInstance()
+                .getHttpsCallable(
+                    "createSecureFreeSession"
+                )
+                .call(payload)
+                .await()
+
+        val response =
+            result.data as? Map<*, *>
+                ?: error(
+                    "Invalid createSecureFreeSession response"
+                )
+
+        val sessionId =
+            response["sessionId"]
+                ?.toString()
+                ?.trim()
+                .orEmpty()
+
+        check(sessionId.isNotBlank()) {
+            "Missing sessionId from createSecureFreeSession"
+        }
+
+        return sessionId
     }
 
     override fun observeUpcoming(
@@ -115,66 +104,184 @@ private class AndroidFreeSessionsRepository(
         groupKey: String,
         nowMillis: Long
     ): Flow<List<FreeSession>> = callbackFlow {
-        val colPath = FreeSessionsPaths.freeSessionsCol(
-            safePathSegment(branch),
-            safePathSegment(groupKey)
-        )
 
-        // ⚠️ חשוב:
-        // השאילתה עם status + startsAt + orderBy דורשת לפעמים אינדקס קומפוזיט.
-        // כדי להימנע מזה לגמרי – נשאב לפי startsAt בלבד ונפילטר status בצד לקוח.
-        val q = db.collection(colPath)
-            .whereGreaterThanOrEqualTo("startsAt", nowMillis)
-            .orderBy("startsAt", Query.Direction.ASCENDING)
+        val cleanBranch =
+            branch.trim()
 
-        val reg = q.addSnapshotListener { snap, err ->
-            if (err != null) {
-                trySend(emptyList())
-                return@addSnapshotListener
-            }
+        val cleanGroup =
+            groupKey.trim()
 
-            val out = snap?.documents.orEmpty().mapNotNull { d ->
-                val id = d.getString("id") ?: d.id
-                val b = d.getString("branch") ?: branch
-                val g = d.getString("groupKey") ?: groupKey
-                val title = d.getString("title") ?: ""
-                val locationName = d.getString("locationName")
-                val lat = d.getDouble("lat")
-                val lng = d.getDouble("lng")
-                val startsAt = (d.getLong("startsAt") ?: 0L)
-                val createdAt = (d.getLong("createdAt") ?: 0L)
-                val createdByUid = d.getString("createdByUid") ?: ""
-                val createdByName = d.getString("createdByName") ?: ""
-                val status = d.getString("status") ?: "OPEN"
-
-                if (title.isBlank() || createdByUid.isBlank()) return@mapNotNull null
-
-                FreeSession(
-                    id = id,
-                    branch = b,
-                    groupKey = g,
-                    title = title,
-                    locationName = locationName,
-                    lat = lat,
-                    lng = lng,
-                    startsAt = startsAt,
-                    createdAt = createdAt,
-                    createdByUid = createdByUid,
-                    createdByName = createdByName,
-                    status = status,
-                    goingCount = (d.getLong("goingCount") ?: 0L).toInt(),
-                    onWayCount = (d.getLong("onWayCount") ?: 0L).toInt(),
-                    arrivedCount = (d.getLong("arrivedCount") ?: 0L).toInt(),
-                    cantCount = (d.getLong("cantCount") ?: 0L).toInt()
-                )
-            }
-                // ✅ סינון OPEN בצד לקוח (כדי לא לדרוש אינדקס קומפוזיט)
-                .filter { it.status == "OPEN" }
-
-            trySend(out)
+        if (
+            cleanBranch.isBlank() ||
+            cleanGroup.isBlank()
+        ) {
+            trySend(emptyList())
+            close()
+            return@callbackFlow
         }
 
-        awaitClose { reg.remove() }
+        val job =
+            kotlinx.coroutines.CoroutineScope(
+                kotlinx.coroutines.Dispatchers.IO
+            ).launch {
+
+                val result =
+                    runCatching {
+                        FirebaseFunctions
+                            .getInstance()
+                            .getHttpsCallable(
+                                "loadSecureFreeSessions"
+                            )
+                            .call(
+                                mapOf(
+                                    "branch" to cleanBranch,
+                                    "group" to cleanGroup,
+                                    "nowMillis" to nowMillis
+                                )
+                            )
+                            .await()
+                    }
+
+                if (result.isFailure) {
+                    trySend(emptyList())
+                    return@launch
+                }
+
+                val payload =
+                    result.getOrNull()
+                        ?.data as? Map<*, *>
+
+                val rawItems =
+                    payload
+                        ?.get("items")
+                            as? List<*>
+                        ?: emptyList<Any>()
+
+                val items =
+                    rawItems
+                        .mapNotNull { rawItem ->
+
+                            val item =
+                                rawItem as? Map<*, *>
+                                    ?: return@mapNotNull null
+
+                            val id =
+                                item["id"]
+                                    ?.toString()
+                                    ?.trim()
+                                    .orEmpty()
+
+                            val title =
+                                item["title"]
+                                    ?.toString()
+                                    ?.trim()
+                                    .orEmpty()
+
+                            val createdByUid =
+                                item["createdByUid"]
+                                    ?.toString()
+                                    ?.trim()
+                                    .orEmpty()
+
+                            if (
+                                id.isBlank() ||
+                                title.isBlank() ||
+                                createdByUid.isBlank()
+                            ) {
+                                return@mapNotNull null
+                            }
+
+                            FreeSession(
+                                id = id,
+                                branch =
+                                    item["branch"]
+                                        ?.toString()
+                                        ?.trim()
+                                        .orEmpty(),
+
+                                groupKey =
+                                    item["groupKey"]
+                                        ?.toString()
+                                        ?.trim()
+                                        .orEmpty(),
+
+                                title = title,
+
+                                locationName =
+                                    item["locationName"]
+                                        ?.toString()
+                                        ?.trim()
+                                        ?.takeIf {
+                                            it.isNotBlank()
+                                        },
+
+                                lat =
+                                    (item["lat"] as? Number)
+                                        ?.toDouble(),
+
+                                lng =
+                                    (item["lng"] as? Number)
+                                        ?.toDouble(),
+
+                                startsAt =
+                                    (item["startsAt"] as? Number)
+                                        ?.toLong()
+                                        ?: 0L,
+
+                                createdAt =
+                                    (item["createdAt"] as? Number)
+                                        ?.toLong()
+                                        ?: 0L,
+
+                                createdByUid =
+                                    createdByUid,
+
+                                createdByName =
+                                    item["createdByName"]
+                                        ?.toString()
+                                        ?.trim()
+                                        .orEmpty(),
+
+                                status =
+                                    item["status"]
+                                        ?.toString()
+                                        ?.trim()
+                                        .orEmpty()
+                                        .ifBlank {
+                                            "OPEN"
+                                        },
+
+                                goingCount =
+                                    (item["goingCount"] as? Number)
+                                        ?.toInt()
+                                        ?: 0,
+
+                                onWayCount =
+                                    (item["onWayCount"] as? Number)
+                                        ?.toInt()
+                                        ?: 0,
+
+                                arrivedCount =
+                                    (item["arrivedCount"] as? Number)
+                                        ?.toInt()
+                                        ?: 0,
+
+                                cantCount =
+                                    (item["cantCount"] as? Number)
+                                        ?.toInt()
+                                        ?: 0
+                            )
+                        }
+                        .sortedBy {
+                            it.startsAt
+                        }
+
+                trySend(items)
+            }
+
+        awaitClose {
+            job.cancel()
+        }
     }
 
     override fun observeParticipants(
@@ -182,37 +289,117 @@ private class AndroidFreeSessionsRepository(
         groupKey: String,
         sessionId: String
     ): Flow<List<FreeSessionPart>> = callbackFlow {
-        val colPath = FreeSessionsPaths.freeSessionsCol(
-            safePathSegment(branch),
-            safePathSegment(groupKey)
-        )
-        val partsCol = db.collection(colPath)
-            .document(sessionId)
-            .collection(FreeSessionsPaths.COL_PARTICIPANTS)
 
-        val q = partsCol.orderBy("updatedAt", Query.Direction.DESCENDING)
+        val cleanBranch =
+            branch.trim()
 
-        val reg = q.addSnapshotListener { snap, err ->
-            if (err != null) {
-                trySend(emptyList())
-                return@addSnapshotListener
-            }
-            val out = snap?.documents.orEmpty().mapNotNull { d ->
-                val uid = d.getString("uid") ?: d.id
-                val name = d.getString("name") ?: return@mapNotNull null
-                val state = ParticipantState.fromId(d.getString("state"))
-                val updatedAt = d.getLong("updatedAt") ?: 0L
-                FreeSessionPart(
-                    uid = uid,
-                    name = name,
-                    state = state,
-                    updatedAt = updatedAt
-                )
-            }
-            trySend(out)
+        val cleanGroup =
+            groupKey.trim()
+
+        val cleanSessionId =
+            sessionId.trim()
+
+        if (
+            cleanBranch.isBlank() ||
+            cleanGroup.isBlank() ||
+            cleanSessionId.isBlank()
+        ) {
+            trySend(emptyList())
+            close()
+            return@callbackFlow
         }
 
-        awaitClose { reg.remove() }
+        val job =
+            kotlinx.coroutines.CoroutineScope(
+                kotlinx.coroutines.Dispatchers.IO
+            ).launch {
+
+                val result =
+                    runCatching {
+                        FirebaseFunctions
+                            .getInstance()
+                            .getHttpsCallable(
+                                "loadSecureFreeSessionParticipants"
+                            )
+                            .call(
+                                mapOf(
+                                    "branch" to cleanBranch,
+                                    "group" to cleanGroup,
+                                    "sessionId" to cleanSessionId
+                                )
+                            )
+                            .await()
+                    }
+
+                if (result.isFailure) {
+                    trySend(emptyList())
+                    return@launch
+                }
+
+                val payload =
+                    result.getOrNull()
+                        ?.data as? Map<*, *>
+
+                val rawItems =
+                    payload
+                        ?.get("items")
+                            as? List<*>
+                        ?: emptyList<Any>()
+
+                val items =
+                    rawItems
+                        .mapNotNull { rawItem ->
+
+                            val item =
+                                rawItem as? Map<*, *>
+                                    ?: return@mapNotNull null
+
+                            val uid =
+                                item["uid"]
+                                    ?.toString()
+                                    ?.trim()
+                                    .orEmpty()
+
+                            val name =
+                                item["name"]
+                                    ?.toString()
+                                    ?.trim()
+                                    .orEmpty()
+
+                            if (
+                                uid.isBlank() ||
+                                name.isBlank()
+                            ) {
+                                return@mapNotNull null
+                            }
+
+                            FreeSessionPart(
+                                uid = uid,
+
+                                name = name,
+
+                                state =
+                                    ParticipantState.fromId(
+                                        item["state"]
+                                            ?.toString()
+                                    ),
+
+                                updatedAt =
+                                    (item["updatedAt"] as? Number)
+                                        ?.toLong()
+                                        ?: 0L
+                            )
+                        }
+                        .sortedByDescending {
+                            it.updatedAt
+                        }
+
+                trySend(items)
+            }
+
+        awaitClose {
+            job.cancel()
+        }
     }
 
     override suspend fun setParticipantState(
@@ -223,55 +410,37 @@ private class AndroidFreeSessionsRepository(
         name: String,
         state: ParticipantState
     ) {
-        val colPath = FreeSessionsPaths.freeSessionsCol(
-            safePathSegment(branch),
-            safePathSegment(groupKey)
-        )
-        val sessionDoc = db.collection(colPath).document(sessionId)
-        val partDoc = sessionDoc.collection(FreeSessionsPaths.COL_PARTICIPANTS).document(uid)
+        val cleanBranch =
+            branch.trim()
 
-        val now = System.currentTimeMillis()
+        val cleanGroup =
+            groupKey.trim()
 
-        // נשמור משתתף
-        partDoc.set(
-            hashMapOf(
-                "uid" to uid,
-                "name" to name.trim(),
-                "state" to state.name,
-                "updatedAt" to now
-            )
-        ).await()
+        val cleanSessionId =
+            sessionId.trim()
 
-        // ✅ עדכון counters (בלי Transaction כדי להימנע מ-tx.get(Query) אצלך)
-        val partsSnap = sessionDoc
-            .collection(FreeSessionsPaths.COL_PARTICIPANTS)
-            .get()
-            .await()
-
-        var going = 0
-        var onWay = 0
-        var arrived = 0
-        var cant = 0
-
-        for (p in partsSnap.documents) {
-            when (ParticipantState.fromId(raw = p.getString("state"))) {
-                ParticipantState.GOING -> going++
-                ParticipantState.ON_WAY -> onWay++
-                ParticipantState.ARRIVED -> arrived++
-                ParticipantState.CANT -> cant++
-                ParticipantState.INVITED -> Unit
-            }
+        require(
+            cleanBranch.isNotBlank() &&
+                    cleanGroup.isNotBlank() &&
+                    cleanSessionId.isNotBlank()
+        ) {
+            "Missing branch, group or sessionId"
         }
 
-        sessionDoc.update(
-            mapOf(
-                "goingCount" to going,
-                "onWayCount" to onWay,
-                "arrivedCount" to arrived,
-                "cantCount" to cant,
-                "updatedAt" to FieldValue.serverTimestamp()
+        FirebaseFunctions
+            .getInstance()
+            .getHttpsCallable(
+                "setSecureFreeSessionParticipantState"
             )
-        ).await()
+            .call(
+                mapOf(
+                    "branch" to cleanBranch,
+                    "group" to cleanGroup,
+                    "sessionId" to cleanSessionId,
+                    "state" to state.name
+                )
+            )
+            .await()
     }
 
     override suspend fun closeSession(
@@ -279,16 +448,33 @@ private class AndroidFreeSessionsRepository(
         groupKey: String,
         sessionId: String
     ) {
-        val colPath = FreeSessionsPaths.freeSessionsCol(
-            safePathSegment(branch),
-            safePathSegment(groupKey)
-        )
-        db.collection(colPath)
-            .document(sessionId)
-            .update(
+        val cleanBranch =
+            branch.trim()
+
+        val cleanGroup =
+            groupKey.trim()
+
+        val cleanSessionId =
+            sessionId.trim()
+
+        require(
+            cleanBranch.isNotBlank() &&
+                    cleanGroup.isNotBlank() &&
+                    cleanSessionId.isNotBlank()
+        ) {
+            "Missing branch, group or sessionId"
+        }
+
+        FirebaseFunctions
+            .getInstance()
+            .getHttpsCallable(
+                "closeSecureFreeSession"
+            )
+            .call(
                 mapOf(
-                    "status" to "CLOSED",
-                    "closedAt" to System.currentTimeMillis()
+                    "branch" to cleanBranch,
+                    "group" to cleanGroup,
+                    "sessionId" to cleanSessionId
                 )
             )
             .await()
@@ -300,27 +486,36 @@ private class AndroidFreeSessionsRepository(
         groupKey: String,
         sessionId: String
     ) {
-        val colPath = FreeSessionsPaths.freeSessionsCol(
-            safePathSegment(branch),
-            safePathSegment(groupKey)
-        )
-        val sessionDoc = db.collection(colPath).document(sessionId)
-        val partsCol = sessionDoc.collection(FreeSessionsPaths.COL_PARTICIPANTS)
+        val cleanBranch =
+            branch.trim()
 
-        // 1) מוחקים את תת-הקולקציה participants בבאצ'ים (Firestore לא מוחק תת-קולקציות לבד)
-        while (true) {
-            val snap = partsCol.limit(450).get().await() // מתחת ל-500 לבטחון
-            if (snap.isEmpty) break
+        val cleanGroup =
+            groupKey.trim()
 
-            db.runBatch { batch ->
-                for (d in snap.documents) {
-                    batch.delete(d.reference)
-                }
-            }.await()
+        val cleanSessionId =
+            sessionId.trim()
+
+        require(
+            cleanBranch.isNotBlank() &&
+                    cleanGroup.isNotBlank() &&
+                    cleanSessionId.isNotBlank()
+        ) {
+            "Missing branch, group or sessionId"
         }
 
-        // 2) מוחקים את מסמך האימון עצמו
-        sessionDoc.delete().await()
+        FirebaseFunctions
+            .getInstance()
+            .getHttpsCallable(
+                "deleteSecureFreeSession"
+            )
+            .call(
+                mapOf(
+                    "branch" to cleanBranch,
+                    "group" to cleanGroup,
+                    "sessionId" to cleanSessionId
+                )
+            )
+            .await()
     }
 }
 

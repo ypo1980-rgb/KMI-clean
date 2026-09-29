@@ -1,7 +1,6 @@
 package il.kmi.app.free_sessions.ui
 
 import android.content.Context
-import android.content.SharedPreferences
 import android.location.Geocoder
 import android.util.Log
 import android.widget.Toast
@@ -122,14 +121,12 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.tasks.await
-import com.google.firebase.firestore.FirebaseFirestore
 import com.google.android.libraries.places.api.Places
 import com.google.android.libraries.places.api.model.AutocompleteSessionToken
 import com.google.android.libraries.places.api.model.Place
 import com.google.android.libraries.places.api.net.FetchPlaceRequest
 import com.google.android.libraries.places.api.net.FindAutocompletePredictionsRequest
 import il.kmi.app.R
-import il.kmi.app.screens.registration.CoachBranchAssignmentsCodec
 import il.kmi.app.privacy.TraineeDisplayNameMapper
 import il.kmi.app.ui.KmiTypography
 import il.kmi.app.ui.pdf.KmiPdfFooter
@@ -141,6 +138,7 @@ import android.net.Uri
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.core.content.FileProvider
 import androidx.core.net.toUri
+import com.google.firebase.functions.FirebaseFunctions
 import java.io.File
 import java.io.FileOutputStream
 
@@ -428,52 +426,6 @@ private fun FreeSessionsPremiumLoading(
     }
 }
 
-private fun readFreeSessionPrefsList(
-    sp: SharedPreferences,
-    vararg keys: String
-): List<String> {
-    val out = mutableListOf<String>()
-
-    keys.forEach { key ->
-        when (val value = sp.all[key]) {
-            is String -> {
-                val raw = value.trim()
-
-                if (raw.isBlank()) {
-                    // no-op
-                } else if (raw.startsWith("[")) {
-                    runCatching {
-                        val arr = org.json.JSONArray(raw)
-                        for (i in 0 until arr.length()) {
-                            arr.optString(i)
-                                .trim()
-                                .takeIf { it.isNotBlank() }
-                                ?.let { out += it }
-                        }
-                    }
-                } else {
-                    raw.split(',', ';', '|', '\n')
-                        .map { it.trim() }
-                        .filter { it.isNotBlank() }
-                        .forEach { out += it }
-                }
-            }
-
-            is Set<*> -> {
-                value
-                    .mapNotNull { it?.toString()?.trim() }
-                    .filter { it.isNotBlank() }
-                    .forEach { out += it }
-            }
-        }
-    }
-
-    return out
-        .map { it.trim() }
-        .filter { it.isNotBlank() }
-        .distinct()
-}
-
 private fun normalizeFreeSessionText(
     raw: String
 ): String {
@@ -503,55 +455,6 @@ private fun normalizeFreeSessionText(
         )
 }
 
-private fun freeSessionFirestoreKey(raw: String): String {
-    val clean = raw.trim()
-        .replace(Regex("\\s+"), " ")
-
-    if (clean.isBlank()) return "general"
-
-    return clean
-        .map { ch ->
-            when (ch) {
-                '/', '\\', '#', '?', '[', ']', '*', '~' -> '_'
-                else -> ch
-            }
-        }
-        .joinToString("")
-        .trim()
-        .ifBlank { "general" }
-}
-
-private fun splitFreeSessionCsv(raw: String): List<String> {
-    return raw
-        .split(',', ';', '|', '\n')
-        .map { it.trim().trim('"') }
-        .filter { it.isNotBlank() }
-        .distinct()
-}
-
-private fun sanitizeFreeSessionGroupsForBranch(
-    groups: List<String>
-): List<String> {
-    return groups
-        .map { it.trim() }
-        .filter { it.isNotBlank() }
-        .distinct()
-}
-
-private fun readFreeSessionCoachUid(sp: SharedPreferences): String {
-    return listOf(
-        sp.getString("coachUid", null),
-        sp.getString("coach_uid", null),
-        sp.getString("trainerUid", null),
-        sp.getString("trainer_uid", null),
-        sp.getString("instructorUid", null),
-        sp.getString("instructor_uid", null)
-    )
-        .map { it.orEmpty().trim() }
-        .firstOrNull { it.isNotBlank() }
-        .orEmpty()
-}
-
 @OptIn(
     ExperimentalMaterial3Api::class,
     ExperimentalFoundationApi::class
@@ -562,6 +465,7 @@ fun FreeSessionsScreen(
     groupKey: String,
     currentUid: String,
     currentName: String,
+    authorizedBranchGroupPairs: List<Pair<String, String>> = emptyList(),
     selectedCalendarDateIso: String = "",
     onOpenCalendar: () -> Unit = {},
     onCalendarDateConsumed: () -> Unit = {},
@@ -580,12 +484,6 @@ fun FreeSessionsScreen(
     val screenTextAlign = if (isEnglish) TextAlign.Start else TextAlign.Right
     val screenHorizontalEnd = if (isEnglish) Alignment.Start else Alignment.End
 
-    val userSp = remember(ctx) {
-        ctx.getSharedPreferences(
-            "kmi_user",
-            Context.MODE_PRIVATE
-        )
-    }
 
     /*
      * המבנה החדש הוא מקור האמת:
@@ -593,171 +491,67 @@ fun FreeSessionsScreen(
      * כל סניף מחזיק רק את הקבוצות
      * שאליהן המאמן משויך באותו סניף.
      */
-    val coachBranchAssignments =
-        remember(userSp) {
-            CoachBranchAssignmentsCodec.decode(
-                userSp.getString(
-                    "coach_branch_assignments_json",
-                    ""
-                )
-            )
-        }
+    val cleanAuthorizedBranchGroupPairs =
+        remember(authorizedBranchGroupPairs) {
+            authorizedBranchGroupPairs
+                .mapNotNull { (authorizedBranch, authorizedGroup) ->
+                    val cleanBranch =
+                        authorizedBranch.trim()
 
-    val legacyAvailableBranches =
-        remember(
-            userSp,
-            branch
-        ) {
-            (
-                    readFreeSessionPrefsList(
-                        userSp,
-                        "active_branch",
-                        "branch",
-                        "branches",
-                        "branches_json",
-                        "selected_branches",
-                        "branch2",
-                        "branch3"
-                    ) +
-                            listOf(branch)
-                    )
-                .map {
-                    it.trim()
-                }
-                .filter {
-                    it.isNotBlank()
-                }
-                .distinct()
-        }
-
-    val legacyAvailableGroups =
-        remember(
-            userSp,
-            groupKey
-        ) {
-            (
-                    readFreeSessionPrefsList(
-                        userSp,
-                        "active_group",
-                        "group",
-                        "groups",
-                        "groups_json",
-                        "selected_groups",
-                        "age_group",
-                        "age_groups"
-                    ) +
-                            listOf(groupKey)
-                    )
-                .map { rawGroup ->
-                    il.kmi.app.training
-                        .TrainingCatalog
-                        .normalizeGroupName(
-                            rawGroup
-                        )
-                        .ifBlank {
-                            rawGroup
-                        }
-                }
-                .map {
-                    it.trim()
-                }
-                .filter {
-                    it.isNotBlank()
-                }
-                .distinct()
-        }
-
-    /*
-     * כאשר המבנה החדש קיים, לא מערבבים
-     * לתוכו סניפים מהמבנה הישן.
-     */
-    val availableBranches =
-        remember(
-            coachBranchAssignments,
-            legacyAvailableBranches
-        ) {
-            if (
-                coachBranchAssignments
-                    .isNotEmpty()
-            ) {
-                CoachBranchAssignmentsCodec
-                    .flattenBranches(
-                        coachBranchAssignments
-                    )
-                    .map {
-                        it.trim()
-                    }
-                    .filter {
-                        it.isNotBlank()
-                    }
-                    .distinct()
-            } else {
-                legacyAvailableBranches
-            }
-        }
-
-    /*
-     * הרשימה הכללית נשמרת לצורכי fallback
-     * בלבד. בהמשך הבחירה עצמה תסונן לפי
-     * הסניף שנבחר.
-     */
-    val availableGroups =
-        remember(
-            coachBranchAssignments,
-            legacyAvailableGroups
-        ) {
-            if (
-                coachBranchAssignments
-                    .isNotEmpty()
-            ) {
-                CoachBranchAssignmentsCodec
-                    .flattenGroups(
-                        coachBranchAssignments
-                    )
-                    .map { rawGroup ->
+                    val cleanGroup =
                         il.kmi.app.training
                             .TrainingCatalog
                             .normalizeGroupName(
-                                rawGroup
+                                authorizedGroup
                             )
                             .ifBlank {
-                                rawGroup
+                                authorizedGroup
                             }
+                            .trim()
+
+                    if (
+                        cleanBranch.isBlank() ||
+                        cleanGroup.isBlank()
+                    ) {
+                        null
+                    } else {
+                        cleanBranch to cleanGroup
                     }
-                    .map {
-                        it.trim()
-                    }
-                    .filter {
-                        it.isNotBlank()
-                    }
-                    .distinct()
-            } else {
-                legacyAvailableGroups
-            }
+                }
+                .distinct()
         }
 
-    var selectedBranch by rememberSaveable(availableBranches.joinToString("|")) {
+    val availableBranches =
+        remember(cleanAuthorizedBranchGroupPairs) {
+            cleanAuthorizedBranchGroupPairs
+                .map { (authorizedBranch, _) ->
+                    authorizedBranch
+                }
+                .distinct()
+        }
+
+    val availableGroups =
+        remember(cleanAuthorizedBranchGroupPairs) {
+            cleanAuthorizedBranchGroupPairs
+                .map { (_, authorizedGroup) ->
+                    authorizedGroup
+                }
+                .distinct()
+        }
+
+    var selectedBranch by rememberSaveable(
+        availableBranches.joinToString("|")
+    ) {
         mutableStateOf(
-            branch.takeIf { it.isNotBlank() }
+            branch
+                .trim()
+                .takeIf { requestedBranch ->
+                    requestedBranch.isNotBlank() &&
+                            requestedBranch in availableBranches
+                }
                 ?: availableBranches.firstOrNull()
                 ?: ""
         )
-    }
-
-    var serverGroupsByBranch by remember {
-        mutableStateOf<Map<String, List<String>>>(emptyMap())
-    }
-
-    var branchGroupsLoading by remember {
-        mutableStateOf(false)
-    }
-
-    var branchGroupsLoadedOnce by remember {
-        mutableStateOf(false)
-    }
-
-    var resolvedCoachUid by remember {
-        mutableStateOf(readFreeSessionCoachUid(userSp))
     }
 
     fun normalizedBranchKey(
@@ -774,556 +568,55 @@ fun FreeSessionsScreen(
      */
     val localGroupsByBranch =
         remember(
-            coachBranchAssignments
+            cleanAuthorizedBranchGroupPairs
         ) {
-            coachBranchAssignments
-                .associate { assignment ->
-                    normalizedBranchKey(
-                        assignment.branch
-                    ) to
-                            assignment.groups
-                                .map { rawGroup ->
-                                    il.kmi.app.training
-                                        .TrainingCatalog
-                                        .normalizeGroupName(
-                                            rawGroup
-                                        )
-                                        .ifBlank {
-                                            rawGroup
-                                        }
-                                }
-                                .map {
-                                    it.trim()
-                                }
-                                .filter {
-                                    it.isNotBlank()
-                                }
-                                .distinct()
+            cleanAuthorizedBranchGroupPairs
+                .groupBy(
+                    keySelector = { (authorizedBranch, _) ->
+                        normalizedBranchKey(
+                            authorizedBranch
+                        )
+                    },
+                    valueTransform = { (_, authorizedGroup) ->
+                        authorizedGroup
+                    }
+                )
+                .mapValues { (_, groups) ->
+                    groups
+                        .map {
+                            it.trim()
+                        }
+                        .filter {
+                            it.isNotBlank()
+                        }
+                        .distinct()
                 }
                 .filterKeys {
                     it.isNotBlank()
                 }
         }
 
-    LaunchedEffect(
-        currentUid,
-        availableBranches.joinToString("|"),
-        localGroupsByBranch
-    ) {
-        /*
-         * כאשר המבנה החדש קיים אין צורך
-         * לבצע סריקות Firestore כדי לנחש
-         * לאיזה סניף שייכת כל קבוצה.
-         */
-        if (localGroupsByBranch.isNotEmpty()) {
-            serverGroupsByBranch =
-                localGroupsByBranch
-
-            branchGroupsLoading = false
-            branchGroupsLoadedOnce = true
-
-            return@LaunchedEffect
-        }
-
-        if (currentUid.isBlank()) {
-            serverGroupsByBranch = emptyMap()
-            branchGroupsLoading = false
-            branchGroupsLoadedOnce = true
-
-            Log.d(
-                FREE_SESSIONS_DEBUG,
-                "groups_load_skip | reason=currentUid_blank"
-            )
-
-            return@LaunchedEffect
-        }
-
-        branchGroupsLoading = true
-        branchGroupsLoadedOnce = false
-
-        Log.d(
-            FREE_SESSIONS_DEBUG,
-            "groups_load_start | currentUid=$currentUid | availableBranches=${
-                availableBranches.joinToString(
-                    " | "
-                )
-            }"
-        )
-
-        val db = FirebaseFirestore.getInstance()
-
-        fun cleanGroups(rawGroups: List<String>): List<String> {
-            return rawGroups
-                .map {
-                    il.kmi.app.training.TrainingCatalog
-                        .normalizeGroupName(it)
-                        .ifBlank { it }
-                        .trim()
-                }
-                .filter { it.isNotBlank() }
-                .distinct()
-        }
-
-        fun groupsFromAny(value: Any?): List<String> {
-            return when (value) {
-                is String -> splitFreeSessionCsv(value)
-
-                is List<*> -> value
-                    .mapNotNull { it?.toString()?.trim() }
-                    .filter { it.isNotBlank() }
-
-                is Set<*> -> value
-                    .mapNotNull { it?.toString()?.trim() }
-                    .filter { it.isNotBlank() }
-
-                else -> emptyList()
-            }
-        }
-
-        fun branchesFromDoc(doc: com.google.firebase.firestore.DocumentSnapshot): List<String> {
-            val out = mutableListOf<String>()
-
-            listOf(
-                "active_branch",
-                "activeBranch",
-                "branch",
-                "branchName",
-                "branch_name",
-                "branches",
-                "selected_branches",
-                "branches_json"
-            ).forEach { key ->
-                when (val value = doc.get(key)) {
-                    is String -> {
-                        if (value.trim().startsWith("[")) {
-                            runCatching {
-                                val arr = org.json.JSONArray(value)
-                                for (i in 0 until arr.length()) {
-                                    arr.optString(i)
-                                        .trim()
-                                        .takeIf { it.isNotBlank() }
-                                        ?.let { out += it }
-                                }
-                            }
-                        } else {
-                            out += splitFreeSessionCsv(value)
-                        }
-                    }
-
-                    is List<*> -> {
-                        value.mapNotNull { it?.toString()?.trim() }
-                            .filter { it.isNotBlank() }
-                            .forEach { out += it }
-                    }
-
-                    is Set<*> -> {
-                        value.mapNotNull { it?.toString()?.trim() }
-                            .filter { it.isNotBlank() }
-                            .forEach { out += it }
-                    }
-                }
-            }
-
-            return out
-                .map { it.trim() }
-                .filter { it.isNotBlank() }
-                .distinct()
-        }
-
-        fun groupsFromDoc(doc: com.google.firebase.firestore.DocumentSnapshot): List<String> {
-            val out = mutableListOf<String>()
-
-            listOf(
-                "active_group",
-                "activeGroup",
-                "group",
-                "groupKey",
-                "group_key",
-                "primaryGroup",
-                "groups",
-                "groups_json",
-                "selected_groups",
-                "age_group",
-                "age_groups"
-            ).forEach { key ->
-                when (val value = doc.get(key)) {
-                    is String -> {
-                        if (value.trim().startsWith("[")) {
-                            runCatching {
-                                val arr = org.json.JSONArray(value)
-                                for (i in 0 until arr.length()) {
-                                    arr.optString(i)
-                                        .trim()
-                                        .takeIf { it.isNotBlank() }
-                                        ?.let { out += it }
-                                }
-                            }
-                        } else {
-                            out += splitFreeSessionCsv(value)
-                        }
-                    }
-
-                    is List<*> -> {
-                        value.mapNotNull { it?.toString()?.trim() }
-                            .filter { it.isNotBlank() }
-                            .forEach { out += it }
-                    }
-
-                    is Set<*> -> {
-                        value.mapNotNull { it?.toString()?.trim() }
-                            .filter { it.isNotBlank() }
-                            .forEach { out += it }
-                    }
-                }
-            }
-
-            return cleanGroups(out)
-        }
-
-        fun mergeInto(
-            target: MutableMap<String, MutableSet<String>>,
-            branchName: String,
-            groups: List<String>
-        ) {
-            val cleanBranch = branchName.trim()
-
-            val cleanGroupsList =
-                sanitizeFreeSessionGroupsForBranch(
-                    groups = cleanGroups(groups)
-                )
-
-            if (cleanBranch.isBlank() || cleanGroupsList.isEmpty()) return
-
-            val key = normalizedBranchKey(cleanBranch)
-            val set = target.getOrPut(key) { linkedSetOf() }
-            cleanGroupsList.forEach { set += it }
-        }
-
-        db.collection("users")
-            .document(currentUid)
-            .get()
-            .addOnSuccessListener { currentUserDoc ->
-
-                val docCoachUid = listOf(
-                    currentUserDoc.getString("coachUid"),
-                    currentUserDoc.getString("coach_uid"),
-                    currentUserDoc.getString("trainerUid"),
-                    currentUserDoc.getString("trainer_uid"),
-                    currentUserDoc.getString("instructorUid"),
-                    currentUserDoc.getString("instructor_uid")
-                )
-                    .map { it.orEmpty().trim() }
-                    .firstOrNull { it.isNotBlank() }
-                    .orEmpty()
-
-                val effectiveCoachUid = resolvedCoachUid
-                    .ifBlank { docCoachUid }
-                    .ifBlank { currentUid }
-
-                resolvedCoachUid = effectiveCoachUid
-
-                val directResult =
-                    linkedMapOf<String, MutableSet<String>>()
-
-                fun readCoachMapField(
-                    vararg keys: String
-                ) {
-                    keys.forEach { key ->
-                        val value =
-                            currentUserDoc.get(key)
-
-                        val map =
-                            value as? Map<*, *>
-                                ?: return@forEach
-
-                        map.forEach { entry ->
-                            val branchName = entry.key?.toString()?.trim().orEmpty()
-                            val groups = groupsFromAny(entry.value)
-                            mergeInto(directResult, branchName, groups)
-                        }
-                    }
-                }
-
-                readCoachMapField(
-                    "branchGroups",
-                    "groupsByBranch",
-                    "branchToGroups",
-                    "branchesToGroups",
-                    "branch_groups"
-                )
-
-                val coachBranchesValue =
-                    currentUserDoc.get("branches")
-                if (coachBranchesValue is List<*>) {
-                    coachBranchesValue.forEach { item ->
-                        val map = item as? Map<*, *> ?: return@forEach
-
-                        val branchName = listOf(
-                            "name",
-                            "branch",
-                            "branchName",
-                            "branch_name",
-                            "title"
-                        )
-                            .mapNotNull { key -> map[key]?.toString()?.trim() }
-                            .firstOrNull { it.isNotBlank() }
-                            .orEmpty()
-
-                        val groups = listOf(
-                            "groups",
-                            "ageGroups",
-                            "age_groups",
-                            "groupKeys",
-                            "group_keys"
-                        )
-                            .flatMap { key -> groupsFromAny(map[key]) }
-
-                        mergeInto(directResult, branchName, groups)
-                    }
-                }
-
-                if (directResult.isNotEmpty()) {
-                    serverGroupsByBranch = directResult.mapValues { it.value.toList() }
-                    branchGroupsLoading = false
-                    branchGroupsLoadedOnce = true
-
-                    Log.d(
-                        FREE_SESSIONS_DEBUG,
-                        "groups_load_finish | source=coach_direct_fields | map=$serverGroupsByBranch"
-                    )
-
-                    return@addOnSuccessListener
-                }
-
-                fun loadTraineesByBranchesFallback() {
-                    db.collection("users")
-                        .limit(800)
-                        .get()
-                        .addOnSuccessListener { allUsersSnap ->
-
-                            Log.d(
-                                FREE_SESSIONS_DEBUG,
-                                "branches_fallback_start | usersCount=${allUsersSnap.size()} | availableBranches=${
-                                    availableBranches.joinToString(
-                                        " | "
-                                    )
-                                }"
-                            )
-
-                            val wantedBranches = availableBranches
-                                .map { normalizedBranchKey(it) }
-                                .filter { it.isNotBlank() }
-                                .toSet()
-
-                            val fromBranches = linkedMapOf<String, MutableSet<String>>()
-
-                            allUsersSnap.documents.forEach { userDoc ->
-                                val userBranches = branchesFromDoc(userDoc)
-                                val userGroups = groupsFromDoc(userDoc)
-
-                                val matchedBranches = userBranches.filter { userBranch ->
-                                    val cleanUserBranch = normalizedBranchKey(userBranch)
-
-                                    wantedBranches.any { wanted ->
-                                        cleanUserBranch == wanted ||
-                                                cleanUserBranch.contains(wanted) ||
-                                                wanted.contains(cleanUserBranch)
-                                    }
-                                }
-
-                                // חשוב:
-                                // אם למשתמש יש כמה סניפים וכמה קבוצות,
-                                // אין דרך לדעת איזו קבוצה שייכת לאיזה סניף.
-                                // לכן לא משייכים כדי לא לזהם את כל הסניפים.
-                                val isUnambiguous =
-                                    matchedBranches.size == 1 && userGroups.isNotEmpty()
-
-                                if (isUnambiguous) {
-                                    Log.d(
-                                        FREE_SESSIONS_DEBUG,
-                                        "branches_fallback_match | id=${userDoc.id} | branch=${matchedBranches.first()} | groups=${
-                                            userGroups.joinToString(
-                                                " | "
-                                            )
-                                        }"
-                                    )
-
-                                    mergeInto(
-                                        target = fromBranches,
-                                        branchName = matchedBranches.first(),
-                                        groups = userGroups
-                                    )
-                                } else if (matchedBranches.isNotEmpty() && userGroups.isNotEmpty()) {
-                                    Log.d(
-                                        FREE_SESSIONS_DEBUG,
-                                        "branches_fallback_skip_ambiguous | id=${userDoc.id} | branches=${
-                                            userBranches.joinToString(
-                                                " | "
-                                            )
-                                        } | matched=${matchedBranches.joinToString(" | ")} | groups=${
-                                            userGroups.joinToString(
-                                                " | "
-                                            )
-                                        }"
-                                    )
-                                }
-                            }
-
-                            serverGroupsByBranch = fromBranches.mapValues { it.value.toList() }
-                            branchGroupsLoading = false
-                            branchGroupsLoadedOnce = true
-
-                            Log.d(
-                                FREE_SESSIONS_DEBUG,
-                                "groups_load_finish | source=branches_fallback | map=$serverGroupsByBranch"
-                            )
-                        }
-                        .addOnFailureListener { error ->
-                            serverGroupsByBranch = emptyMap()
-                            branchGroupsLoading = false
-                            branchGroupsLoadedOnce = true
-
-                            Log.e(
-                                FREE_SESSIONS_DEBUG,
-                                "groups_load_failed | source=branches_fallback | message=${error.message.orEmpty()}",
-                                error
-                            )
-                        }
-                }
-
-                // ✅ fallback אמיתי מהשרת:
-                // אם במסמך המאמן אין מיפוי branch -> groups,
-                // בונים אותו מהמתאמנים שמשויכים למאמן.
-                fun loadTraineesByCoachField(
-                    fieldName: String,
-                    onEmpty: () -> Unit
-                ) {
-                    db.collection("users")
-                        .whereEqualTo(fieldName, effectiveCoachUid)
-                        .limit(400)
-                        .get()
-                        .addOnSuccessListener { traineesSnap ->
-
-                            Log.d(
-                                FREE_SESSIONS_DEBUG,
-                                "trainees_query_success | field=$fieldName | coachUid=$effectiveCoachUid | count=${traineesSnap.size()}"
-                            )
-
-                            if (traineesSnap.isEmpty) {
-                                onEmpty()
-                                return@addOnSuccessListener
-                            }
-
-                            val fromTrainees = linkedMapOf<String, MutableSet<String>>()
-
-                            traineesSnap.documents.forEach { traineeDoc ->
-                                val traineeBranches = branchesFromDoc(traineeDoc)
-                                val traineeGroups = groupsFromDoc(traineeDoc)
-
-                                Log.d(
-                                    FREE_SESSIONS_DEBUG,
-                                    "trainee_doc | id=${traineeDoc.id} | branches=${
-                                        traineeBranches.joinToString(
-                                            " | "
-                                        )
-                                    } | groups=${traineeGroups.joinToString(" | ")}"
-                                )
-
-                                traineeBranches.forEach { traineeBranch ->
-                                    mergeInto(
-                                        target = fromTrainees,
-                                        branchName = traineeBranch,
-                                        groups = traineeGroups
-                                    )
-                                }
-                            }
-
-                            serverGroupsByBranch = fromTrainees.mapValues { it.value.toList() }
-                            branchGroupsLoading = false
-                            branchGroupsLoadedOnce = true
-
-                            Log.d(
-                                FREE_SESSIONS_DEBUG,
-                                "groups_load_finish | source=trainees_$fieldName | map=$serverGroupsByBranch"
-                            )
-                        }
-                        .addOnFailureListener { error ->
-                            serverGroupsByBranch = emptyMap()
-                            branchGroupsLoading = false
-                            branchGroupsLoadedOnce = true
-
-                            Log.e(
-                                FREE_SESSIONS_DEBUG,
-                                "groups_load_failed | source=trainees_$fieldName | message=${error.message.orEmpty()}",
-                                error
-                            )
-                        }
-                }
-
-                loadTraineesByCoachField(
-                    fieldName = "coachUid",
-                    onEmpty = {
-                        loadTraineesByCoachField(
-                            fieldName = "coach_uid",
-                            onEmpty = {
-                                loadTraineesByBranchesFallback()
-                            }
-                        )
-                    }
-                )
-            }
-            .addOnFailureListener { error ->
-                serverGroupsByBranch = emptyMap()
-                branchGroupsLoading = false
-                branchGroupsLoadedOnce = true
-
-                Log.e(
-                    FREE_SESSIONS_DEBUG,
-                    "groups_load_failed | source=current_user_doc | message=${error.message.orEmpty()}",
-                    error
-                )
-            }
-    }
-
     val groupsForSelectedBranch =
         remember(
             selectedBranch,
-            localGroupsByBranch,
-            serverGroupsByBranch,
-            branchGroupsLoading,
-            branchGroupsLoadedOnce
+            localGroupsByBranch
         ) {
             val normalizedSelectedBranch =
                 normalizedBranchKey(
                     selectedBranch
                 )
 
-            val localGroups =
-                localGroupsByBranch[
-                    normalizedSelectedBranch
-                ]
-                    .orEmpty()
-
-            val serverGroups =
-                serverGroupsByBranch[
-                    normalizedSelectedBranch
-                ]
-                    .orEmpty()
-
-            /*
-             * המבנה החדש קודם תמיד.
-             * Firestore הישן הוא fallback בלבד.
-             */
-            val rawGroups =
-                if (localGroupsByBranch.isNotEmpty()) {
-                    localGroups
-                } else {
-                    serverGroups
+            localGroupsByBranch[
+                normalizedSelectedBranch
+            ]
+                .orEmpty()
+                .map {
+                    it.trim()
                 }
-
-            sanitizeFreeSessionGroupsForBranch(
-                groups = rawGroups
-            )
+                .filter {
+                    it.isNotBlank()
+                }
+                .distinct()
         }
 
     var selectedGroupKey by rememberSaveable(
@@ -1344,20 +637,10 @@ fun FreeSessionsScreen(
         }
     }
 
-    val firestoreBranchKey = remember(selectedBranch) {
-        freeSessionFirestoreKey(selectedBranch)
-    }
-
-    val firestoreGroupKey = remember(selectedGroupKey, selectedBranch) {
-        freeSessionFirestoreKey(
-            selectedGroupKey.ifBlank { selectedBranch.ifBlank { "general" } }
-        )
-    }
-
     LaunchedEffect(selectedBranch, selectedGroupKey, currentUid, currentName) {
         vm.setContext(
-            branch = firestoreBranchKey,
-            groupKey = firestoreGroupKey,
+            branch = selectedBranch,
+            groupKey = selectedGroupKey,
             myUid = currentUid,
             myName = currentName
         )
@@ -1370,351 +653,146 @@ fun FreeSessionsScreen(
         locationName: String?,
         startsAtMillis: Long
     ) {
+        val cleanBranch =
+            selectedBranch.trim()
+
+        val cleanGroup =
+            selectedGroupKey.trim()
+
+        if (
+            cleanBranch.isBlank() ||
+            cleanGroup.isBlank()
+        ) {
+            return
+        }
+
+        val timeText =
+            fmtTime(
+                startsAtMillis,
+                isEnglish
+            )
+
+        val cleanTitle =
+            sessionTitle.trim()
+
+        val locationText =
+            locationName
+                .orEmpty()
+                .trim()
+
+        val bodyText =
+            if (isEnglish) {
+                buildString {
+                    append("New free session")
+
+                    if (cleanTitle.isNotBlank()) {
+                        append(": ")
+                        append(cleanTitle)
+                    }
+
+                    if (locationText.isNotBlank()) {
+                        append(" · ")
+                        append(locationText)
+                    }
+
+                    append(" · ")
+                    append(timeText)
+                }
+            } else {
+                buildString {
+                    append("נפתח אימון חופשי")
+
+                    if (cleanTitle.isNotBlank()) {
+                        append(": ")
+                        append(cleanTitle)
+                    }
+
+                    if (locationText.isNotBlank()) {
+                        append(" · ")
+                        append(locationText)
+                    }
+
+                    append(" · ")
+                    append(timeText)
+                }
+            }
+
         withContext(Dispatchers.IO) {
             runCatching {
-                val db = FirebaseFirestore.getInstance()
+                val functions =
+                    FirebaseFunctions.getInstance()
 
-                data class FreeSessionNotifyTarget(
-                    val uid: String,
-                    val name: String,
-                    val email: String,
-                    val phone: String,
-                    val mergeKey: String
-                )
-
-                fun splitDocValue(value: Any?): List<String> {
-                    return when (value) {
-                        is String -> {
-                            val raw = value.trim()
-
-                            if (raw.startsWith("[")) {
-                                runCatching {
-                                    val arr = org.json.JSONArray(raw)
-                                    (0 until arr.length())
-                                        .mapNotNull { index -> arr.optString(index, null) }
-                                }.getOrDefault(emptyList())
-                            } else {
-                                raw.split(',', ';', '|', '\n')
-                            }
-                        }
-
-                        is List<*> -> value.mapNotNull { it?.toString() }
-                        is Set<*> -> value.mapNotNull { it?.toString() }
-                        else -> emptyList()
-                    }
-                        .map { it.trim() }
-                        .filter { it.isNotBlank() }
-                }
-
-                fun docBranches(doc: com.google.firebase.firestore.DocumentSnapshot): List<String> {
-                    return listOf(
-                        "active_branch",
-                        "activeBranch",
-                        "branch",
-                        "branchName",
-                        "branch_name",
-                        "branches",
-                        "branches_json",
-                        "selected_branches"
-                    )
-                        .flatMap { key -> splitDocValue(doc.get(key)) }
-                        .distinct()
-                }
-
-                fun docGroups(doc: com.google.firebase.firestore.DocumentSnapshot): List<String> {
-                    return listOf(
-                        "active_group",
-                        "activeGroup",
-                        "group",
-                        "groupKey",
-                        "group_key",
-                        "primaryGroup",
-                        "groups",
-                        "groups_json",
-                        "selected_groups",
-                        "age_group",
-                        "age_groups"
-                    )
-                        .flatMap { key -> splitDocValue(doc.get(key)) }
-                        .map {
-                            il.kmi.app.training.TrainingCatalog
-                                .normalizeGroupName(it)
-                                .ifBlank { it }
-                                .trim()
-                        }
-                        .filter { it.isNotBlank() }
-                        .distinct()
-                }
-
-                fun docName(doc: com.google.firebase.firestore.DocumentSnapshot): String {
-                    return listOf(
-                        doc.getString("fullName"),
-                        doc.getString("full_name"),
-                        doc.getString("name"),
-                        doc.getString("displayName"),
-                        doc.getString("display_name"),
-                        doc.getString("user_name"),
-                        doc.getString("email")
-                    )
-                        .map { it.orEmpty().trim() }
-                        .firstOrNull { it.isNotBlank() }
-                        .orEmpty()
-                }
-
-                fun docEmail(doc: com.google.firebase.firestore.DocumentSnapshot): String {
-                    return listOf(
-                        doc.getString("email"),
-                        doc.getString("userEmail"),
-                        doc.getString("user_email")
-                    )
-                        .map { it.orEmpty().trim().lowercase(Locale.US) }
-                        .firstOrNull { it.isNotBlank() }
-                        .orEmpty()
-                }
-
-                fun docPhone(doc: com.google.firebase.firestore.DocumentSnapshot): String {
-                    return listOf(
-                        doc.getString("phone"),
-                        doc.getString("phoneNumber"),
-                        doc.getString("phone_number"),
-                        doc.getString("mobile"),
-                        doc.getString("userPhone"),
-                        doc.getString("user_phone")
-                    )
-                        .map { it.orEmpty().filter { ch -> ch.isDigit() } }
-                        .firstOrNull { it.isNotBlank() }
-                        .orEmpty()
-                }
-
-                fun mergeKey(
-                    uid: String,
-                    name: String,
-                    email: String,
-                    phone: String
-                ): String {
-                    return when {
-                        email.isNotBlank() -> "email:$email"
-                        phone.isNotBlank() -> "phone:$phone"
-                        name.isNotBlank() -> "name:${normalizeFreeSessionText(name)}"
-                        else -> "uid:$uid"
-                    }
-                }
-
-                val wantedBranch = normalizeFreeSessionText(selectedBranch)
-                val wantedGroup = normalizeFreeSessionText(
-                    il.kmi.app.training.TrainingCatalog
-                        .normalizeGroupName(selectedGroupKey)
-                        .ifBlank { selectedGroupKey }
-                )
-
-                val targets = db.collection("users")
-                    .limit(1000)
-                    .get()
-                    .await()
-                    .documents
-                    .filter { doc ->
-                        val userBranches = docBranches(doc)
-                        val userGroups = docGroups(doc)
-
-                        val branchMatch = userBranches.any { branchName ->
-                            val cleanBranch = normalizeFreeSessionText(branchName)
-
-                            cleanBranch == wantedBranch ||
-                                    cleanBranch.contains(wantedBranch) ||
-                                    wantedBranch.contains(cleanBranch)
-                        }
-
-                        val groupMatch = when {
-                            wantedGroup.isBlank() -> true
-
-                            // אם המשתמש רשום לסניף אבל אין לו בכלל שדה קבוצות,
-                            // לא מפילים אותו — ההתראה תישלח לפי הסניף.
-                            userGroups.isEmpty() -> true
-
-                            else -> userGroups.any { groupName ->
-                                val cleanGroup = normalizeFreeSessionText(
-                                    il.kmi.app.training.TrainingCatalog
-                                        .normalizeGroupName(groupName)
-                                        .ifBlank { groupName }
-                                )
-
-                                cleanGroup == wantedGroup ||
-                                        cleanGroup.contains(wantedGroup) ||
-                                        wantedGroup.contains(cleanGroup)
-                            }
-                        }
-
-                        if (branchMatch && groupMatch) {
-                            Log.d(
-                                FREE_SESSIONS_DEBUG,
-                                "free_session_target_match | user=${doc.id} | branch=$selectedBranch | group=$selectedGroupKey | userBranches=${userBranches.joinToString(" | ")} | userGroups=${userGroups.joinToString(" | ")}"
-                            )
-                        } else if (branchMatch) {
-                            Log.d(
-                                FREE_SESSIONS_DEBUG,
-                                "free_session_target_skip_group | user=${doc.id} | branch=$selectedBranch | group=$selectedGroupKey | userBranches=${userBranches.joinToString(" | ")} | userGroups=${userGroups.joinToString(" | ")}"
-                            )
-                        }
-
-                        branchMatch && groupMatch
-                    }
-
-                    .mapNotNull { doc ->
-                        val uid = listOf(
-                            doc.getString("uid"),
-                            doc.getString("authUid"),
-                            doc.id
+                val recipientsResult =
+                    functions
+                        .getHttpsCallable(
+                            "loadSecureCoachBroadcastRecipients"
                         )
-                            .map { it.orEmpty().trim() }
-                            .firstOrNull { it.isNotBlank() }
-                            .orEmpty()
-
-                        val name = docName(doc)
-                        val email = docEmail(doc)
-                        val phone = docPhone(doc)
-
-                        if (uid.isBlank()) {
-                            null
-                        } else {
-                            FreeSessionNotifyTarget(
-                                uid = uid,
-                                name = name,
-                                email = email,
-                                phone = phone,
-                                mergeKey = mergeKey(uid, name, email, phone)
+                        .call(
+                            mapOf(
+                                "branch" to cleanBranch,
+                                "groups" to listOf(cleanGroup)
                             )
-                        }
-                    }
-                    .filter { it.uid != currentUid }
-                    .distinctBy { it.mergeKey }
+                        )
+                        .await()
 
-                if (targets.isEmpty()) {
+                val payload =
+                    recipientsResult.data as? Map<*, *>
+
+                val recipients =
+                    payload
+                        ?.get("recipients")
+                            as? List<*>
+                        ?: emptyList<Any>()
+
+                val targetUids =
+                    recipients
+                        .mapNotNull { rawRecipient ->
+                            val recipient =
+                                rawRecipient as? Map<*, *>
+                                    ?: return@mapNotNull null
+
+                            recipient["uid"]
+                                ?.toString()
+                                ?.trim()
+                                ?.takeIf {
+                                    it.isNotBlank() &&
+                                            it != currentUid
+                                }
+                        }
+                        .distinct()
+
+                if (targetUids.isEmpty()) {
                     Log.d(
                         FREE_SESSIONS_DEBUG,
-                        "free_session_push_skip | reason=no_targets | branch=$selectedBranch | group=$selectedGroupKey | wantedBranch=$wantedBranch | wantedGroup=$wantedGroup"
+                        "free_session_push_skip | reason=no_authorized_targets | branch=$cleanBranch | group=$cleanGroup"
                     )
+
                     return@runCatching
                 }
 
-                val timeText = fmtTime(startsAtMillis, isEnglish)
-                val locationText = locationName.orEmpty().trim()
-
-                val titleText = if (isEnglish) {
-                    "New free session"
-                } else {
-                    "נפתח אימון חופשי"
-                }
-
-                val bodyText = if (isEnglish) {
-                    buildString {
-                        append("A free session was opened")
-                        if (locationText.isNotBlank()) append(" at ").append(locationText)
-                        append(" · ").append(timeText)
-                    }
-                } else {
-                    buildString {
-                        append("נפתח אימון חופשי")
-                        if (locationText.isNotBlank()) append(" במקום ").append(locationText)
-                        append(" בשעה ").append(timeText)
-                    }
-                }
-
-                val broadcastRef = db.collection("coachBroadcasts").document()
-                val broadcastId = broadcastRef.id
-
-                broadcastRef.set(
-                    mapOf(
-                        "type" to "free_session_created",
-                        "broadcastId" to broadcastId,
-                        "broadcast_id" to broadcastId,
-
-                        // שדות קיימים של הודעות מאמן
-                        "text" to bodyText,
-                        "message" to bodyText,
-                        "body" to bodyText,
-                        "title" to titleText,
-                        "coachName" to currentName,
-                        "senderName" to currentName,
-                        "fromName" to currentName,
-                        "authorUid" to currentUid,
-                        "coachUid" to currentUid,
-                        "senderUid" to currentUid,
-
-                        // יעדים — כדי שה־Push הקיים של הודעות מאמן יידע למי לשלוח
-                        "targetUids" to targets.map { it.uid },
-                        "recipientUids" to targets.map { it.uid },
-                        "selectedUids" to targets.map { it.uid },
-                        "uids" to targets.map { it.uid },
-
-                        "targetEmails" to targets.map { it.email }.filter { it.isNotBlank() },
-                        "recipientEmails" to targets.map { it.email }.filter { it.isNotBlank() },
-
-                        "targetPhones" to targets.map { it.phone }.filter { it.isNotBlank() },
-                        "recipientPhones" to targets.map { it.phone }.filter { it.isNotBlank() },
-
-                        "targetNames" to targets.map { it.name }.filter { it.isNotBlank() },
-                        "recipientNames" to targets.map { it.name }.filter { it.isNotBlank() },
-
-                        "targetRecipients" to targets.map { target ->
-                            mapOf(
-                                "uid" to target.uid,
-                                "name" to target.name,
-                                "email" to target.email,
-                                "phone" to target.phone
-                            )
-                        },
-                        "recipients" to targets.map { target ->
-                            mapOf(
-                                "uid" to target.uid,
-                                "name" to target.name,
-                                "email" to target.email,
-                                "phone" to target.phone
-                            )
-                        },
-
-                        "recipients" to targets.map { target ->
-                            mapOf(
-                                "uid" to target.uid,
-                                "name" to target.name,
-                                "email" to target.email,
-                                "phone" to target.phone
-                            )
-                        },
-
-                        // סינון למסך הבית ולכרטיס הודעות מאמן
-                        "branch" to selectedBranch,
-                        "branchName" to selectedBranch,
-                        "selectedBranch" to selectedBranch,
-                        "branches" to listOf(selectedBranch).filter { it.isNotBlank() },
-                        "targetBranches" to listOf(selectedBranch).filter { it.isNotBlank() },
-                        "selectedBranches" to listOf(selectedBranch).filter { it.isNotBlank() },
-
-                        "group" to selectedGroupKey,
-                        "groupKey" to selectedGroupKey,
-                        "selectedGroup" to selectedGroupKey,
-                        "groups" to listOf(selectedGroupKey).filter { it.isNotBlank() },
-                        "targetGroups" to listOf(selectedGroupKey).filter { it.isNotBlank() },
-                        "selectedGroups" to listOf(selectedGroupKey).filter { it.isNotBlank() },
-
-                        // מידע על האימון החופשי
-                        "source" to "free_sessions",
-                        "sessionTitle" to sessionTitle,
-                        "locationName" to locationText,
-                        "startsAt" to startsAtMillis,
-
-                        "createdAt" to com.google.firebase.firestore.FieldValue.serverTimestamp(),
-                        "sentAt" to com.google.firebase.firestore.FieldValue.serverTimestamp()
+                functions
+                    .getHttpsCallable(
+                        "createSecureCoachBroadcast"
                     )
-                ).await()
+                    .call(
+                        mapOf(
+                            "region" to "",
+                            "branch" to cleanBranch,
+                            "groups" to listOf(cleanGroup),
+                            "message" to bodyText,
+                            "targetUids" to targetUids
+                        )
+                    )
+                    .await()
 
                 Log.d(
                     FREE_SESSIONS_DEBUG,
-                    "free_session_coach_broadcast_created | broadcastId=$broadcastId | targets=${targets.size} | branch=$selectedBranch | group=$selectedGroupKey"
+                    "free_session_secure_broadcast_created | targets=${targetUids.size} | branch=$cleanBranch | group=$cleanGroup"
                 )
             }.onFailure { error ->
                 Log.e(
                     FREE_SESSIONS_DEBUG,
-                    "free_session_coach_broadcast_failed | message=${error.message.orEmpty()}",
+                    "free_session_secure_broadcast_failed | message=${error.message.orEmpty()}",
                     error
                 )
             }
@@ -1878,8 +956,8 @@ fun FreeSessionsScreen(
                                         scope.launch {
                                             val res = runCatching {
                                                 repo.deleteFreeSession(
-                                                    branch = firestoreBranchKey,
-                                                    groupKey = firestoreGroupKey,
+                                                    branch = selectedBranch,
+                                                    groupKey = selectedGroupKey,
                                                     sessionId = sid
                                                 )
                                             }
@@ -2104,7 +1182,7 @@ fun FreeSessionsScreen(
                                     selectedBranch = selectedBranch,
                                     selectedGroup = selectedGroupKey,
                                     isEnglish = isEnglish,
-                                    isLoadingGroups = branchGroupsLoading && !branchGroupsLoadedOnce,
+                                    isLoadingGroups = false,
                                     onBranchSelected = { selectedBranch = it },
                                     onGroupSelected = { selectedGroupKey = it }
                                 )
@@ -2200,8 +1278,8 @@ fun FreeSessionsScreen(
                                                 scope.launch {
                                                     val result = runCatching {
                                                         repo.createFreeSession(
-                                                            branch = firestoreBranchKey,
-                                                            groupKey = firestoreGroupKey,
+                                                            branch = selectedBranch,
+                                                            groupKey = selectedGroupKey,
                                                             title = cleanTitle,
                                                             locationName = (
                                                                     selectedPlace?.name
@@ -2308,8 +1386,10 @@ fun FreeSessionsScreen(
                 repo = repo,
                 isEnglish = isEnglish,
                 session = session,
-                branch = firestoreBranchKey,
-                groupKey = firestoreGroupKey,
+                branch = selectedBranch,
+                groupKey = selectedGroupKey,
+                authorizedBranch = selectedBranch,
+                authorizedGroup = selectedGroupKey,
                 currentUid = currentUid,
                 currentName = currentName,
                 onClose = { selected = null }
@@ -4291,6 +3371,8 @@ private fun FreeSessionDetailsSheet(
     session: FreeSession,
     branch: String,
     groupKey: String,
+    authorizedBranch: String,
+    authorizedGroup: String,
     currentUid: String,
     currentName: String,
     onClose: () -> Unit
@@ -4326,10 +3408,20 @@ private fun FreeSessionDetailsSheet(
         }
     }
 
-    LaunchedEffect(branch) {
-        val cleanBranch = branch.trim()
+    LaunchedEffect(
+        authorizedBranch,
+        authorizedGroup
+    ) {
+        val cleanBranch =
+            authorizedBranch.trim()
 
-        if (cleanBranch.isBlank()) {
+        val cleanGroup =
+            authorizedGroup.trim()
+
+        if (
+            cleanBranch.isBlank() ||
+            cleanGroup.isBlank()
+        ) {
             branchUsers = emptyList()
             branchUsersLoading = false
             return@LaunchedEffect
@@ -4337,172 +3429,102 @@ private fun FreeSessionDetailsSheet(
 
         branchUsersLoading = true
 
-        branchUsers = withContext(Dispatchers.IO) {
-            runCatching {
-                val db = FirebaseFirestore.getInstance()
+        branchUsers =
+            withContext(Dispatchers.IO) {
+                runCatching {
+                    val result =
+                        FirebaseFunctions
+                            .getInstance()
+                            .getHttpsCallable(
+                                "loadSecureCoachBroadcastRecipients"
+                            )
+                            .call(
+                                mapOf(
+                                    "branch" to cleanBranch,
+                                    "groups" to listOf(cleanGroup)
+                                )
+                            )
+                            .await()
 
-                fun normalizeBranch(raw: String): String {
-                    return normalizeFreeSessionText(raw)
-                        .replace(" - ", " – ")
-                        .replace("-", "–")
-                        .replace("—", "–")
-                        .replace("־", "–")
-                        .trim()
-                }
+                    val payload =
+                        result.data as? Map<*, *>
 
-                fun splitValue(value: Any?): List<String> {
-                    return when (value) {
-                        is String -> {
-                            val raw = value.trim()
+                    val recipients =
+                        payload
+                            ?.get("recipients")
+                                as? List<*>
+                            ?: emptyList<Any>()
 
-                            if (raw.startsWith("[")) {
-                                runCatching {
-                                    val arr = org.json.JSONArray(raw)
-                                    (0 until arr.length())
-                                        .mapNotNull { index -> arr.optString(index, null) }
-                                }.getOrDefault(emptyList())
+                    recipients
+                        .mapNotNull { rawRecipient ->
+                            val recipient =
+                                rawRecipient as? Map<*, *>
+                                    ?: return@mapNotNull null
+
+                            val uid =
+                                recipient["uid"]
+                                    ?.toString()
+                                    ?.trim()
+                                    .orEmpty()
+
+                            val name =
+                                recipient["name"]
+                                    ?.toString()
+                                    ?.trim()
+                                    .orEmpty()
+
+                            val email =
+                                recipient["email"]
+                                    ?.toString()
+                                    ?.trim()
+                                    ?.lowercase(Locale.US)
+                                    .orEmpty()
+
+                            val phone =
+                                recipient["phone"]
+                                    ?.toString()
+                                    ?.filter { ch ->
+                                        ch.isDigit()
+                                    }
+                                    .orEmpty()
+
+                            if (
+                                uid.isBlank() ||
+                                name.isBlank()
+                            ) {
+                                null
                             } else {
-                                raw.split(',', ';', '|', '\n')
+                                val mergeKey =
+                                    when {
+                                        email.isNotBlank() ->
+                                            "email:$email"
+
+                                        phone.isNotBlank() ->
+                                            "phone:$phone"
+
+                                        else ->
+                                            "uid:$uid"
+                                    }
+
+                                FreeSessionBranchUser(
+                                    uid = uid,
+                                    name = name,
+                                    email = email,
+                                    phone = phone,
+                                    mergeKey = mergeKey
+                                )
                             }
                         }
-
-                        is List<*> -> value.mapNotNull { it?.toString() }
-                        is Set<*> -> value.mapNotNull { it?.toString() }
-                        else -> emptyList()
-                    }
-                        .map { it.trim() }
-                        .filter { it.isNotBlank() }
-                }
-
-                fun userBranches(
-                    doc: com.google.firebase.firestore.DocumentSnapshot
-                ): List<String> {
-                    return listOf(
-                        "active_branch",
-                        "activeBranch",
-                        "branch",
-                        "branchName",
-                        "branch_name",
-                        "branches",
-                        "branches_json",
-                        "selected_branches"
-                    )
-                        .flatMap { key -> splitValue(doc.get(key)) }
-                        .distinct()
-                }
-
-                fun userName(
-                    doc: com.google.firebase.firestore.DocumentSnapshot
-                ): String {
-                    return listOf(
-                        doc.getString("fullName"),
-                        doc.getString("full_name"),
-                        doc.getString("name"),
-                        doc.getString("displayName"),
-                        doc.getString("display_name"),
-                        doc.getString("user_name"),
-                        doc.getString("email")
-                    )
-                        .map { it.orEmpty().trim() }
-                        .firstOrNull { it.isNotBlank() }
-                        .orEmpty()
-                }
-
-                fun userEmail(
-                    doc: com.google.firebase.firestore.DocumentSnapshot
-                ): String {
-                    return listOf(
-                        doc.getString("email"),
-                        doc.getString("userEmail"),
-                        doc.getString("user_email")
-                    )
-                        .map { it.orEmpty().trim().lowercase(Locale.US) }
-                        .firstOrNull { it.isNotBlank() }
-                        .orEmpty()
-                }
-
-                fun userPhone(
-                    doc: com.google.firebase.firestore.DocumentSnapshot
-                ): String {
-                    return listOf(
-                        doc.getString("phone"),
-                        doc.getString("phoneNumber"),
-                        doc.getString("phone_number"),
-                        doc.getString("mobile"),
-                        doc.getString("userPhone"),
-                        doc.getString("user_phone")
-                    )
-                        .map { it.orEmpty().filter { ch -> ch.isDigit() } }
-                        .firstOrNull { it.isNotBlank() }
-                        .orEmpty()
-                }
-
-                fun userMergeKey(
-                    uid: String,
-                    name: String,
-                    email: String,
-                    phone: String
-                ): String {
-                    return when {
-                        email.isNotBlank() -> "email:$email"
-                        phone.isNotBlank() -> "phone:$phone"
-                        name.isNotBlank() -> "name:${normalizeFreeSessionText(name)}"
-                        else -> "uid:$uid"
-                    }
-                }
-
-                val wanted = normalizeBranch(cleanBranch)
-
-                db.collection("users")
-                    .limit(1000)
-                    .get()
-                    .await()
-                    .documents
-                    .filter { doc ->
-                        userBranches(doc).any { userBranch ->
-                            val cleanUserBranch = normalizeBranch(userBranch)
-
-                            cleanUserBranch == wanted ||
-                                    cleanUserBranch.contains(wanted) ||
-                                    wanted.contains(cleanUserBranch)
+                        .distinctBy {
+                            it.mergeKey
                         }
-                    }
-                    .mapNotNull { doc ->
-                        val uid = listOf(
-                            doc.getString("uid"),
-                            doc.getString("authUid"),
-                            doc.id
-                        )
-                            .map { it.orEmpty().trim() }
-                            .firstOrNull { it.isNotBlank() }
-                            .orEmpty()
-
-                        val name = userName(doc)
-                        val email = userEmail(doc)
-                        val phone = userPhone(doc)
-                        val mergeKey = userMergeKey(
-                            uid = uid,
-                            name = name,
-                            email = email,
-                            phone = phone
-                        )
-
-                        if (uid.isBlank() || name.isBlank()) {
-                            null
-                        } else {
-                            FreeSessionBranchUser(
-                                uid = uid,
-                                name = name,
-                                email = email,
-                                phone = phone,
-                                mergeKey = mergeKey
-                            )
+                        .sortedBy {
+                            it.name
                         }
-                    }
-                    .distinctBy { it.mergeKey }
-                    .sortedBy { it.name }
-            }.getOrDefault(emptyList())
-        }
+                }.getOrDefault(
+                    emptyList()
+                )
+            }
 
         branchUsersLoading = false
     }
@@ -4779,8 +3801,8 @@ private fun FreeSessionDetailsSheet(
                 onClick = {
                     scope.launch {
                         repo.setParticipantState(
-                            branch,
-                            groupKey,
+                            authorizedBranch,
+                            authorizedGroup,
                             session.id,
                             currentUid,
                             currentName,
@@ -4797,8 +3819,8 @@ private fun FreeSessionDetailsSheet(
                 onClick = {
                     scope.launch {
                         repo.setParticipantState(
-                            branch,
-                            groupKey,
+                            authorizedBranch,
+                            authorizedGroup,
                             session.id,
                             currentUid,
                             currentName,
@@ -4815,8 +3837,8 @@ private fun FreeSessionDetailsSheet(
                 onClick = {
                     scope.launch {
                         repo.setParticipantState(
-                            branch,
-                            groupKey,
+                            authorizedBranch,
+                            authorizedGroup,
                             session.id,
                             currentUid,
                             currentName,
@@ -4833,8 +3855,8 @@ private fun FreeSessionDetailsSheet(
                 onClick = {
                     scope.launch {
                         repo.setParticipantState(
-                            branch,
-                            groupKey,
+                            authorizedBranch,
+                            authorizedGroup,
                             session.id,
                             currentUid,
                             currentName,
