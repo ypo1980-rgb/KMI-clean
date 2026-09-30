@@ -77,15 +77,25 @@ object HardSectionsCatalog {
         return when {
             t == "שחרורים" -> "releases"
 
+            t == "שחרור מתפיסות ידיים" ||
+                    t == "שחרורים מתפיסות ידיים" ||
+                    t.contains("תפיסות ידיים") ->
+                "releases_hands"
+
+            t == "שחרור מתפיסות שיער" ||
+                    t == "שחרורים מתפיסות שיער" ||
+                    t.contains("תפיסות שיער") ->
+                "releases_hair"
+
+            t == "שחרור מתפיסות חולצה" ||
+                    t == "שחרורים מתפיסות חולצה" ||
+                    t.contains("תפיסות חולצה") ->
+                "releases_shirt"
+
             t == "שחרור מתפיסות" ||
                     t == "שחרורים מתפיסות" ||
-                    t == "שחרור מתפיסות ידיים" ||
-                    t == "שחרורים מתפיסות ידיים" ||
                     t == "שחרור מתפיסות ידיים / שיער / חולצה" ||
-                    t == "שחרורים מתפיסות ידיים / שיער / חולצה" ||
-                    t.contains("תפיסות יד") ||
-                    t.contains("שיער") ||
-                    t.contains("חולצה") ->
+                    t == "שחרורים מתפיסות ידיים / שיער / חולצה" ->
                 "releases_hands_hair_shirt"
 
             t == "שחרור מחניקות" ||
@@ -291,10 +301,21 @@ object HardSectionsCatalog {
                 )
             )
 
-            id == "hands_all" -> handsAll
-            id == "hands_strikes" -> handsAll.filter { it.id == "hands_strikes" }
-            id == "hands_elbows" -> handsAll.filter { it.id == "hands_elbows" }
-            id == "hands_stick_rifle" -> handsAll.filter { it.id == "hands_stick_rifle" }
+            id == "hands_all" ->
+                handsAll.filter {
+                    it.id == "hands_strikes" ||
+                            it.id == "hands_elbows"
+                }
+
+            id == "hands_strikes" ->
+                handsAll.filter { it.id == "hands_strikes" }
+
+            id == "hands_elbows" ->
+                handsAll.filter { it.id == "hands_elbows" }
+
+            id == "hands_stick_rifle" ->
+                handsAll.filter { it.id == "hands_stick_rifle" }
+
             id == "topic_hands" -> handsAll
             id == "topic_general" -> topicGeneral
             id == "topic_kicks" -> topicKicks
@@ -482,13 +503,13 @@ object HardSectionsCatalog {
                     items = listOf(
                         "בעיטה רגילה למפסעה",
                         "בעיטה רגילה לסנטר",
-                        "בעיטת מגל נמוכה",
+                        "בעיטת ברך נמוכה למפסעה",
+                        "בעיטת ברך גבוהה",
+                        "בעיטת ברך מהצד",
                         "בעיטת מגל אופקית",
                         "בעיטת מגל אלכסונית",
                         "בעיטת מגל בהטעיה",
-                        "בעיטת ברך גבוהה",
-                        "בעיטת ברך מהצד",
-                        "בעיטת ברך נמוכה למפסעה",
+                        "בעיטת מגל נמוכה",
                         "בעיטה לצד מעמידת פיסוק"
                     )
                 ),
@@ -498,8 +519,8 @@ object HardSectionsCatalog {
                         "בעיטה רגילה בעקב לסנטר",
                         "בעיטת הגנה לפנים",
                         "בעיטת סנוקרת לאחור",
-                        "בעיטה לצד בשיכול",
                         "בעיטה רגילה לאחור",
+                        "בעיטה לצד בשיכול",
                         "בעיטה לצד בנסיגה",
                         "בעיטת הגנה לאחור",
                         "בעיטת סטירה פנימית",
@@ -1045,6 +1066,7 @@ object HardSectionsCatalog {
                         "מכת פיסת יד שמאל-ימין לפנים",
                         "מכת פיסת יד שמאל-ימין-שמאל לפנים",
                         "מכת פיסת יד מהצד",
+                        "אגרוף שמאל לפנים",
                         "אגרוף ימין לפנים",
                         "אגרוף שמאל-ימין לפנים",
                         "אגרוף שמאל בהתקדמות",
@@ -1381,55 +1403,94 @@ object HardSectionsCatalog {
         Section(
             id = "releases_hands_hair_shirt",
             title = "שחרור מתפיסות ידיים / שיער / חולצה",
-            beltGroups = listOf(
-                BeltGroup(
-                    belt = Belt.YELLOW,
-                    items = listOf(
-                        "שחרור מתפיסת יד מול יד",
-                        "שחרור מתפיסת יד נגדית",
-                        "שחרור מתפיסת שתי ידיים למטה",
-                        "שחרור מתפיסת שתי ידיים למעלה"
+            subSections = listOf(
+
+                Section(
+                    id = "releases_hands",
+                    title = "שחרור מתפיסות ידיים",
+                    beltGroups = listOf(
+                        BeltGroup(
+                            belt = Belt.YELLOW,
+                            items = listOf(
+                                "שחרור מתפיסת יד מול יד",
+                                "שחרור מתפיסת יד נגדית",
+                                "שחרור מתפיסת שתי ידיים למטה",
+                                "שחרור מתפיסת שתי ידיים למעלה"
+                            )
+                        ),
+                        BeltGroup(
+                            belt = Belt.ORANGE,
+                            items = listOf(
+                                "שחרור מתפיסת יד מול יד - בריח על האגודל",
+                                "שחרור מתפיסת יד נגדית - פרקי אצבעות",
+                                "שחרור מתפיסת יד בשתי ידיים למעלה",
+                                "שחרור מתפיסת יד בשתי ידיים למטה - מרווח",
+                                "שחרור מתפיסת יד בשתי ידיים למטה - צמוד",
+                                "שחרור מתפיסת ידיים צמודה מאחור",
+                                "שחרור מתפיסת זרוע מהצד במשיכה",
+                                "שחרור מתפיסת זרוע מהצד בדחיפה"
+                            )
+                        ),
+                        BeltGroup(
+                            belt = Belt.GREEN,
+                            items = listOf(
+                                "חביקת יד מהצד - ראש התוקף מאחור",
+                                "חביקת יד מהצד - ראש התוקף מלפנים",
+                                "שחרור מתפיסת ידיים מאחור"
+                            )
+                        ),
+                        BeltGroup(
+                            belt = Belt.BLUE,
+                            items = listOf(
+                                "שחרור תפיסת ידיים בשכיבה"
+                            )
+                        )
                     )
                 ),
-                BeltGroup(
-                    belt = Belt.ORANGE,
-                    items = listOf(
-                        "שחרור חולצה - בריח על האגודל",
-                        "שחרור חולצה - מכת פרקי אצבעות",
-                        "שחרור חולצה - שתי ידיים",
-                        "שחרור מתפיסת שיער מלפנים",
-                        "שחרור מתפיסת שיער מלפנים בשתי ידיים",
-                        "שחרור מתפיסת יד מול יד - בריח על האגודל",
-                        "שחרור מתפיסת יד נגדית - פרקי אצבעות",
-                        "שחרור מתפיסת יד בשתי ידיים למעלה",
-                        "שחרור מתפיסת יד בשתי ידיים למטה - מרווח",
-                        "שחרור מתפיסת יד בשתי ידיים למטה - צמוד",
-                        "שחרור מתפיסת ידיים צמודה מאחור",
-                        "שחרור מתפיסת זרוע מהצד במשיכה",
-                        "שחרור מתפיסת זרוע מהצד בדחיפה"
+
+                Section(
+                    id = "releases_hair",
+                    title = "שחרור מתפיסות שיער",
+                    beltGroups = listOf(
+                        BeltGroup(
+                            belt = Belt.ORANGE,
+                            items = listOf(
+                                "שחרור מתפיסת שיער מלפנים",
+                                "שחרור מתפיסת שיער מלפנים בשתי ידיים"
+                            )
+                        ),
+                        BeltGroup(
+                            belt = Belt.GREEN,
+                            items = listOf(
+                                "שחרור מתפיסת שיער מאחור - צד חי",
+                                "שחרור מתפיסת שיער מאחור - צד מת",
+                                "שחרור מתפיסת שיער מהצד - צד ימין",
+                                "שחרור מתפיסת שיער מהצד - צד שמאל"
+                            )
+                        )
                     )
                 ),
-                BeltGroup(
-                    belt = Belt.BLUE,
-                    items = listOf(
-                        "שחרור תפיסת ידיים בשכיבה"
+
+                Section(
+                    id = "releases_shirt",
+                    title = "שחרור מתפיסות חולצה",
+                    beltGroups = listOf(
+                        BeltGroup(
+                            belt = Belt.ORANGE,
+                            items = listOf(
+                                "שחרור חולצה - בריח על האגודל",
+                                "שחרור חולצה - מכת פרקי אצבעות",
+                                "שחרור חולצה - שתי ידיים"
+                            )
+                        ),
+                        BeltGroup(
+                            belt = Belt.GREEN,
+                            items = listOf(
+                                "שחרור מתפיסת חולצה מאחור"
+                            )
+                        )
                     )
-                ),
-                BeltGroup(
-                    belt = Belt.GREEN,
-                    items = listOf(
-                        "שחרור מתפיסת שיער מאחור - צד חי",
-                        "שחרור מתפיסת שיער מאחור - צד מת",
-                        "חביקת יד מהצד - ראש התוקף מאחור",
-                        "חביקת יד מהצד - ראש התוקף מלפנים",
-                        "שחרור מתפיסת ידיים מאחור",
-                        "שחרור מתפיסת חולצה מאחור",
-                        "שחרור מתפיסת שיער מהצד - צד ימין",
-                        "שחרור מתפיסת שיער מהצד - צד שמאל"
-                    )
-                ),
-                BeltGroup(belt = Belt.BROWN, items = emptyList()),
-                BeltGroup(belt = Belt.BLACK, items = emptyList())
+                )
             )
         ),
 

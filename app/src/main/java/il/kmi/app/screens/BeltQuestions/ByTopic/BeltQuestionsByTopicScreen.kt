@@ -2267,10 +2267,7 @@ internal fun TopicsBySubjectCard(
 
             "kicks",
             "topic_kicks" -> {
-                uniqueExerciseCountForTopics(
-                    "בעיטות",
-                    "topic_kicks"
-                )
+                0
             }
 
             else -> 0

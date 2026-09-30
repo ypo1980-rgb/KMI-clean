@@ -53,6 +53,11 @@ object ExerciseCountProvider {
                 "kicks_hard"
             }
 
+            clean == "מכות יד" ||
+                    clean == "hands_strikes" -> {
+                "hands_strikes"
+            }
+
             else -> null
         }
     }

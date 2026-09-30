@@ -72,23 +72,38 @@ object TopicsBySubjectRegistry {
         SubjectTopic(
             id = "hands_all",
             titleHeb = "עבודת ידיים",
-            description = "מכות יד + מכות מרפק + מכות במקל / רובה",
+            description = "מכות יד + מכות מרפק",
             belts = listOf(
                 Belt.YELLOW,
                 Belt.ORANGE,
-                Belt.GREEN,
-                Belt.BLACK
+                Belt.GREEN
             ),
             topicsByBelt = mapOf(
                 Belt.YELLOW to listOf("עבודת ידיים", "מכות ידיים", "מכות יד"),
                 Belt.ORANGE to listOf("עבודת ידיים", "מכות יד", "מכות ידיים"),
-                Belt.GREEN to listOf("מכות מרפק", "מכות במקל / רובה"),
-                Belt.BLACK to listOf("מכות במקל / רובה", "מכות במקל קצר")
+                Belt.GREEN to listOf("מכות מרפק")
             ),
             subTopics = listOf(
                 "מכות יד",
-                "מכות מרפק",
-                "מכות במקל / רובה"
+                "מכות מרפק"
+            )
+        ),
+
+        // ================== מכות במקל / רובה ==================
+        SubjectTopic(
+            id = "hands_stick_rifle",
+            titleHeb = "מכות במקל / רובה",
+            description = "מכות במקל וברובה",
+            belts = listOf(
+                Belt.GREEN,
+                Belt.BLACK
+            ),
+            topicsByBelt = mapOf(
+                Belt.GREEN to listOf("מכות במקל / רובה"),
+                Belt.BLACK to listOf(
+                    "מכות במקל / רובה",
+                    "מכות במקל קצר"
+                )
             )
         ),
 
@@ -273,28 +288,47 @@ object TopicsBySubjectRegistry {
         SubjectTopic(
             id = "releases",
             titleHeb = "שחרורים",
-            description = "מתפיסות ידיים, מחניקות ומחביקות",
+            description = "מתפיסות ידיים, שיער, חולצה, מחניקות ומחביקות",
             belts = releasesBelts,
             topicsByBelt = releasesTopicsByBelt,
             subTopics = listOf(
-                "שחרור מתפיסות ידיים / שיער / חולצה",
+                "שחרור מתפיסות ידיים",
+                "שחרור מתפיסות שיער",
+                "שחרור מתפיסות חולצה",
                 "שחרור מחניקות",
                 "שחרור מחביקות"
             )
         ),
 
-        // ✅ ילד: שחרור מתפיסות ידיים / שיער / חולצה
+        // ✅ ילד: שחרור מתפיסות ידיים
         SubjectTopic(
-            id = "releases_hands_hair_shirt",
+            id = "releases_hands",
             parentId = "releases",
-            titleHeb = "שחרור מתפיסות ידיים / שיער / חולצה",
-            description = "תפיסות ידיים, תפיסות שיער ואחיזות חולצה",
+            titleHeb = "שחרור מתפיסות ידיים",
+            description = "שחרורים מתפיסות ידיים וזרוע",
             belts = releasesBelts,
-            topicsByBelt = releasesTopicsByBelt,
-            includeItemKeywords = listOf("תפיס", "אחיז", "אוחז", "חולצ", "חולצה", "שיער"),
-            excludeItemKeywords = listOf("חניק", "חביק", "אקדח", "סכין", "מקל")
+            topicsByBelt = releasesTopicsByBelt
         ),
 
+        // ✅ ילד: שחרור מתפיסות שיער
+        SubjectTopic(
+            id = "releases_hair",
+            parentId = "releases",
+            titleHeb = "שחרור מתפיסות שיער",
+            description = "שחרורים מתפיסות שיער",
+            belts = releasesBelts,
+            topicsByBelt = releasesTopicsByBelt
+        ),
+
+        // ✅ ילד: שחרור מתפיסות חולצה
+        SubjectTopic(
+            id = "releases_shirt",
+            parentId = "releases",
+            titleHeb = "שחרור מתפיסות חולצה",
+            description = "שחרורים מתפיסות חולצה",
+            belts = releasesBelts,
+            topicsByBelt = releasesTopicsByBelt
+        ),
 
         // ✅ ילד: שחרור מחניקות
         SubjectTopic(

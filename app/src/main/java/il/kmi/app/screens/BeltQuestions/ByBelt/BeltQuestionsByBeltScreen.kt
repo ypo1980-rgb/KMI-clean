@@ -96,6 +96,7 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.LayoutDirection
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.core.content.FileProvider
@@ -3166,45 +3167,104 @@ private fun TopicsCardForBelt(
                                                     }
                                                 }
 
-                                                Spacer(Modifier.height(4.dp))
+                                                Spacer(
+                                                    Modifier.height(8.dp)
+                                                )
 
-                                                Text(
-                                                    text =
-                                                        if (isEnglish) {
-                                                            "Close topic"
-                                                        } else {
-                                                            "סגור נושא"
-                                                        },
-                                                    modifier = Modifier
-                                                        .align(horizontalByLang)
-                                                        .clip(RoundedCornerShape(12.dp))
-                                                        .clickable {
+                                                HorizontalDivider(
+                                                    color =
+                                                        subDividerColor,
+                                                    thickness = 1.dp
+                                                )
+
+                                                Spacer(
+                                                    Modifier.height(8.dp)
+                                                )
+
+                                                Row(
+                                                    modifier =
+                                                        Modifier.fillMaxWidth(),
+                                                    horizontalArrangement =
+                                                        Arrangement.spacedBy(8.dp),
+                                                    verticalAlignment =
+                                                        Alignment.CenterVertically
+                                                ) {
+
+                                                    // =====================================================
+                                                    // סגור נושא
+                                                    // =====================================================
+
+                                                    Surface(
+                                                        onClick = {
                                                             clickSound()
                                                             haptic(true)
                                                             expandedTopic = null
-                                                        }
-                                                        .padding(
-                                                            horizontal = 8.dp,
-                                                            vertical = 4.dp
-                                                        ),
-                                                    color =
-                                                        readableBeltAccent,
-                                                    style = KmiTypography.action
-                                                )
-
-                                                Spacer(Modifier.height(2.dp))
-
-                                                Text(
-                                                    text =
-                                                        if (isEnglish) {
-                                                            "Open full topic"
-                                                        } else {
-                                                            "פתח את כל הנושא"
                                                         },
-                                                    modifier = Modifier
-                                                        .align(horizontalByLang)
-                                                        .clip(RoundedCornerShape(12.dp))
-                                                        .clickable {
+                                                        modifier =
+                                                            Modifier
+                                                                .weight(1f)
+                                                                .heightIn(
+                                                                    min = 60.dp
+                                                                ),
+                                                        shape =
+                                                            RoundedCornerShape(14.dp),
+                                                        color =
+                                                            MaterialTheme
+                                                                .colorScheme
+                                                                .surface,
+                                                        border =
+                                                            BorderStroke(
+                                                                width = 1.dp,
+                                                                color =
+                                                                    readableBeltAccent
+                                                                        .copy(
+                                                                            alpha = 0.55f
+                                                                        )
+                                                            ),
+                                                        tonalElevation = 0.dp,
+                                                        shadowElevation = 0.dp
+                                                    ) {
+                                                        Box(
+                                                            modifier =
+                                                                Modifier.fillMaxSize(),
+                                                            contentAlignment =
+                                                                Alignment.Center
+                                                        ) {
+                                                            Text(
+                                                                text =
+                                                                    if (isEnglish) {
+                                                                        "Close topic"
+                                                                    } else {
+                                                                        "סגור נושא"
+                                                                    },
+                                                                color =
+                                                                    MaterialTheme
+                                                                        .colorScheme
+                                                                        .onSurface,
+                                                                style =
+                                                                    KmiTypography.action.copy(
+                                                                        fontSize =
+                                                                            (
+                                                                                    KmiTypography.action.fontSize.value * 0.90f
+                                                                                    ).sp,
+                                                                        fontWeight =
+                                                                            FontWeight.ExtraBold,
+                                                                        lineHeight = 18.sp
+                                                                    ),
+                                                                textAlign =
+                                                                    TextAlign.Center,
+                                                                maxLines = 2,
+                                                                minLines = 1
+                                                            )
+                                                        }
+                                                    }
+
+                                                    // =====================================================
+                                                    // פתח את כל הנושא
+                                                    // =====================================================
+
+                                                    Surface(
+                                                        onClick = {
                                                             clickSound()
                                                             haptic(true)
 
@@ -3212,15 +3272,66 @@ private fun TopicsCardForBelt(
                                                                 belt,
                                                                 title
                                                             )
+                                                        },
+                                                        modifier =
+                                                            Modifier
+                                                                .weight(1f)
+                                                                .heightIn(
+                                                                    min = 60.dp
+                                                                ),
+                                                        shape =
+                                                            RoundedCornerShape(14.dp),
+                                                        color =
+                                                            readableBeltAccent,
+                                                        border =
+                                                            BorderStroke(
+                                                                width = 1.dp,
+                                                                color =
+                                                                    readableBeltAccent
+                                                            ),
+                                                        tonalElevation = 0.dp,
+                                                        shadowElevation = 0.dp
+                                                    ) {
+                                                        Box(
+                                                            modifier =
+                                                                Modifier.fillMaxSize(),
+                                                            contentAlignment =
+                                                                Alignment.Center
+                                                        ) {
+                                                            Text(
+                                                                text =
+                                                                    if (isEnglish) {
+                                                                        "Open full topic"
+                                                                    } else {
+                                                                        "פתח את כל הנושא"
+                                                                    },
+                                                                color =
+                                                                    if (
+                                                                        readableBeltAccent
+                                                                            .luminance() < 0.55f
+                                                                    ) {
+                                                                        Color.White
+                                                                    } else {
+                                                                        Color.Black
+                                                                    },
+                                                                style =
+                                                                    KmiTypography.action.copy(
+                                                                        fontSize =
+                                                                            (
+                                                                                    KmiTypography.action.fontSize.value * 0.90f
+                                                                                    ).sp,
+                                                                        fontWeight =
+                                                                            FontWeight.ExtraBold,
+                                                                        lineHeight = 18.sp
+                                                                    ),
+                                                                textAlign =
+                                                                    TextAlign.Center,
+                                                                maxLines = 2,
+                                                                minLines = 2
+                                                            )
                                                         }
-                                                        .padding(
-                                                            horizontal = 8.dp,
-                                                            vertical = 4.dp
-                                                        ),
-                                                    color =
-                                                        belt.color.copy(alpha = 1f),
-                                                    style = KmiTypography.action
-                                                )
+                                                    }
+                                                }
                                             }
                                         }
                                     }

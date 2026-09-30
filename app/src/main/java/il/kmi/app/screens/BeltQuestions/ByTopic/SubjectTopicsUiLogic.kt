@@ -188,8 +188,7 @@ internal fun HandsPickModeDialogModern(
     val orderedPicks = picks.ifEmpty {
         listOf(
             if (isEnglish) "Hand Strikes" else "מכות יד",
-            if (isEnglish) "Elbow Strikes" else "מכות מרפק",
-            if (isEnglish) "Stick / Rifle Strikes" else "מכות במקל / רובה"
+            if (isEnglish) "Elbow Strikes" else "מכות מרפק"
         )
     }
 
@@ -1505,12 +1504,19 @@ internal object SubjectTopicsUiLogic {
 
     private fun releasesSectionIdForTitle(raw: String): String? {
         return when (normReleaseTitle(raw)) {
-            "שחרור מתפיסות ידיים / שיער / חולצה" -> "releases_hands_hair_shirt"
+            "שחרור מתפיסות ידיים" -> "releases_hands"
+            "שחרור מתפיסות שיער" -> "releases_hair"
+            "שחרור מתפיסות חולצה" -> "releases_shirt"
+
+            "שחרור מתפיסות ידיים / שיער / חולצה" ->
+                "releases_hands_hair_shirt"
+
             "שחרור מחניקות" -> "releases_chokes"
             "שחרור מחביקות" -> "releases_hugs"
             "חביקות גוף" -> "releases_hugs_body"
             "חביקות צואר" -> "releases_hugs_neck"
             "חביקות זרוע" -> "releases_hugs_arm"
+
             else -> null
         }
     }
@@ -1615,86 +1621,33 @@ internal object SubjectTopicsUiLogic {
     private fun countAllKicksItems(
         subjects: List<SubjectTopic>
     ): Int {
-        val kicksSubjects = subjects.filter(::isKicksSubject)
-        val uniqueCanonicalIds = linkedSetOf<String>()
-
-        Log.d(
-            "KMI_KICKS_COUNT",
-            "kicksSubjects=${kicksSubjects.size} " +
-                    kicksSubjects.joinToString { subject ->
-                        "id='${subject.id}', title='${subject.titleHeb}'"
-                    }
-        )
-
-        kicksSubjects.forEach { kicksSubject ->
-            Log.d(
-                "KMI_KICKS_COUNT",
-                "subject id='${kicksSubject.id}' " +
-                        "title='${kicksSubject.titleHeb}' " +
-                        "belts=${kicksSubject.topicsByBelt.keys}"
-            )
-
-            kicksSubject.topicsByBelt.keys.forEach { belt ->
-                val sections = SubjectTopicsEngine
-                    .resolveSectionsForSubject(
-                        belt = belt,
-                        subject = kicksSubject
-                    )
-
-                val items = sections
-                    .flatMap { section ->
-                        section.items
-                    }
-
-                val rawCanonicalIds = items
-                    .map { item ->
-                        item.canonicalId.trim()
-                    }
-                    .filter { canonicalId ->
-                        canonicalId.isNotBlank()
-                    }
-
-                val uniqueForBelt = rawCanonicalIds
-                    .distinct()
-
-                Log.d(
-                    "KMI_KICKS_COUNT",
-                    "subject='${kicksSubject.id}' " +
-                            "belt='${belt.id}' " +
-                            "sections=${sections.size} " +
-                            "rawItems=${items.size} " +
-                            "uniqueForBelt=${uniqueForBelt.size}"
-                )
-
-                Log.d(
-                    "KMI_KICKS_COUNT",
-                    "subject='${kicksSubject.id}' " +
-                            "belt='${belt.id}' " +
-                            "canonicalIds=${uniqueForBelt.joinToString()}"
-                )
-
-                uniqueCanonicalIds.addAll(
-                    uniqueForBelt
-                )
+        return HardSectionsCatalog
+            .topicKicks
+            .asSequence()
+            .flatMap { section ->
+                section.beltGroups.asSequence()
             }
-        }
-
-        Log.d(
-            "KMI_KICKS_COUNT",
-            "finalUniqueCount=${uniqueCanonicalIds.size}"
-        )
-
-        Log.d(
-            "KMI_KICKS_COUNT",
-            "finalCanonicalIds=${uniqueCanonicalIds.joinToString()}"
-        )
-
-        return uniqueCanonicalIds.size
+            .flatMap { group ->
+                group.items.asSequence()
+            }
+            .map { item ->
+                item.trim()
+            }
+            .filter { item ->
+                item.isNotBlank()
+            }
+            .distinct()
+            .count()
     }
 
     private fun countSubjectItemsForBelt(
         subject: SubjectTopic
     ): Int {
+
+        val isHandStrikesSubject =
+            subject.titleHeb.trim() == "מכות יד" ||
+                    subject.subTopicHint
+                        ?.trim() == "מכות יד"
 
         val isElbowSubject =
             subject.titleHeb.contains("מכות מרפק") ||
@@ -1706,18 +1659,24 @@ internal object SubjectTopicsUiLogic {
                             keyword.contains("מרפק")
                         }
 
-        if (isElbowSubject) {
+        val hardHandsSectionId =
+            when {
+                isHandStrikesSubject -> "hands_strikes"
+                isElbowSubject -> "hands_elbows"
+                else -> null
+            }
 
-            val elbowSection =
+        if (hardHandsSectionId != null) {
+            val section =
                 HardSectionsCatalog
-                    .sectionsForSubject("hands_elbows")
+                    .sectionsForSubject(hardHandsSectionId)
                     .orEmpty()
-                    .firstOrNull { section ->
-                        section.id == "hands_elbows"
+                    .firstOrNull { candidate ->
+                        candidate.id == hardHandsSectionId
                     }
                     ?: return 0
 
-            return elbowSection
+            return section
                 .beltGroups
                 .flatMap { group ->
                     group.items
@@ -1816,7 +1775,14 @@ internal object SubjectTopicsUiLogic {
 
         val uiSectionCounts: Map<String, Int> =
             subjects.associate { subject ->
-                subject.id to subject.subTopics.size
+                val subTopicCount =
+                    if (subject.id == "hands_all") {
+                        handsPicks(subject).size
+                    } else {
+                        subject.subTopics.size
+                    }
+
+                subject.id to subTopicCount
             }
 
         val subTopicsPickCountsBySubjectId: Map<String, Map<String, Int>> =
@@ -1969,7 +1935,30 @@ internal object SubjectTopicsUiLogic {
     ): List<SubjectCardModel> {
         return subjects.map { subject ->
             val subCount = sectionCounts[subject.id] ?: subject.subTopics.size
-            val exCount = subjectCounts[subject.id] ?: 0
+
+            val exCount =
+                if (isKicksSubject(subject)) {
+                    HardSectionsCatalog
+                        .topicKicks
+                        .asSequence()
+                        .flatMap { section ->
+                            section.beltGroups.asSequence()
+                        }
+                        .flatMap { group ->
+                            group.items.asSequence()
+                        }
+                        .map { item ->
+                            item.trim()
+                        }
+                        .filter { item ->
+                            item.isNotBlank()
+                        }
+                        .distinct()
+                        .count()
+                } else {
+                    subjectCounts[subject.id] ?: 0
+                }
+
             val hasSubTopics = subCount >= 2
 
             val countText = when {
@@ -2132,11 +2121,21 @@ internal object SubjectTopicsUiLogic {
     }
 
     fun handsPicks(base: SubjectTopic?): List<String> {
-        return base?.subTopics?.takeIf { it.isNotEmpty() }
+        val allowedPicks =
+            setOf(
+                "מכות יד",
+                "מכות מרפק"
+            )
+
+        return base
+            ?.subTopics
+            ?.filter { pick ->
+                pick.trim() in allowedPicks
+            }
+            ?.takeIf { it.isNotEmpty() }
             ?: listOf(
                 "מכות יד",
-                "מכות מרפק",
-                "מכות במקל / רובה"
+                "מכות מרפק"
             )
     }
 
@@ -2264,6 +2263,37 @@ internal object SubjectTopicsUiLogic {
         if (base == null) return SubTopicPickDecision.None
 
         val pickedNorm = norm(picked)
+
+        if (base.id == "releases") {
+            val releaseSubjectId =
+                when (pickedNorm) {
+                    norm("שחרור מתפיסות ידיים") ->
+                        "releases_hands"
+
+                    norm("שחרור מתפיסות שיער") ->
+                        "releases_hair"
+
+                    norm("שחרור מתפיסות חולצה") ->
+                        "releases_shirt"
+
+                    norm("שחרור מחניקות") ->
+                        "releases_chokes"
+
+                    norm("שחרור מחביקות") ->
+                        "releases_hugs"
+
+                    else ->
+                        null
+                }
+
+            if (releaseSubjectId != null) {
+                TopicsBySubjectRegistry
+                    .subjectById(releaseSubjectId)
+                    ?.let { subject ->
+                        return SubTopicPickDecision.OpenSubject(subject)
+                    }
+            }
+        }
 
         if (bodyHugsChild != null && pickedNorm == norm(bodyHugsChild.titleHeb)) {
             return SubTopicPickDecision.OpenSubject(bodyHugsChild)

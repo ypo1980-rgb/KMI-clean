@@ -132,6 +132,9 @@ private fun topicLookupAliases(topicTitle: String): List<String> {
 private fun hardDisplayTitleFallback(raw: String): String {
     return when (raw.trim()) {
         "releases" -> "שחרורים"
+        "releases_hands" -> "שחרור מתפיסות ידיים"
+        "releases_hair" -> "שחרור מתפיסות שיער"
+        "releases_shirt" -> "שחרור מתפיסות חולצה"
         "releases_hands_hair_shirt" -> "שחרור מתפיסות ידיים / שיער / חולצה"
         "releases_chokes" -> "שחרור מחניקות"
         "releases_hugs" -> "שחרור מחביקות"
@@ -470,11 +473,25 @@ private fun normalizeHardNavTopic(raw: String): String {
     return when {
         t == "שחרורים" -> "releases"
 
-        t == "מתפיסות" ||
-                t.contains("תפיסות יד") ||
-                t.contains("שיער") ||
-                t.contains("חולצה") ||
-                t.contains("שחרור מתפיסות") ->
+        t == "releases_hands" ||
+                t == "שחרור מתפיסות ידיים" ||
+                t == "שחרורים מתפיסות ידיים" ->
+            "releases_hands"
+
+        t == "releases_hair" ||
+                t == "שחרור מתפיסות שיער" ||
+                t == "שחרורים מתפיסות שיער" ->
+            "releases_hair"
+
+        t == "releases_shirt" ||
+                t == "שחרור מתפיסות חולצה" ||
+                t == "שחרורים מתפיסות חולצה" ->
+            "releases_shirt"
+
+        t == "releases_hands_hair_shirt" ||
+                t == "מתפיסות" ||
+                t == "שחרור מתפיסות ידיים / שיער / חולצה" ||
+                t == "שחרורים מתפיסות ידיים / שיער / חולצה" ->
             "releases_hands_hair_shirt"
 
         t.contains("חניקות") ||
