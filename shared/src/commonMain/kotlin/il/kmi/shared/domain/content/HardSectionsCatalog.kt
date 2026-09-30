@@ -106,6 +106,7 @@ object HardSectionsCatalog {
             t == "הגנות מסכין" -> "knife_defense"
             t == "הגנות עם רובה נגד דקירות סכין" -> "knife_rifle_defense"
             t == "הגנות מאיום אקדח" -> "gun_threat_defense"
+            t == "הגנות נגד איום תת-מקלע" -> "submachine_gun_defense"
             t == "הגנות נגד מקל" -> "stick_defense"
             t == "הגנות נגד מספר תוקפים" -> "multiple_attackers_defense"
             t == "הגנות נגד 2 תוקפים" -> "multiple_attackers_defense"
@@ -145,6 +146,7 @@ object HardSectionsCatalog {
         "knife_defense",
         "knife_rifle_defense",
         "gun_threat_defense",
+        "submachine_gun_defense",
         "stick_defense",
         "multiple_attackers_defense",
         "hands_all",
@@ -264,6 +266,7 @@ object HardSectionsCatalog {
             id == "knife_defense" -> defensesKnife.filter { it.id == "knife_defense_main" }
             id == "knife_rifle_defense" -> defensesKnife.filter { it.id == "knife_defense_rifle_against_knife_stabs" }
             id == "gun_threat_defense" -> defensesGunThreat
+            id == "submachine_gun_defense" -> defensesSubmachineGunThreat
             id == "stick_defense" -> defensesStick
             id == "multiple_attackers_defense" -> defensesMultipleAttackers
             id == "kicks_hard" -> defensesKicks
@@ -311,6 +314,7 @@ object HardSectionsCatalog {
             "knife_defense" -> "הגנות מסכין"
             "knife_rifle_defense" -> "הגנות עם רובה נגד דקירות סכין"
             "gun_threat_defense" -> "הגנות מאיום אקדח"
+            "submachine_gun_defense" -> "הגנות נגד איום תת-מקלע"
             "stick_defense" -> "הגנות נגד מקל"
             "multiple_attackers_defense" -> "הגנות נגד מספר תוקפים"
             "kicks_hard" -> "הגנות נגד בעיטות"
@@ -442,7 +446,8 @@ object HardSectionsCatalog {
                         "צל בוקס",
                         "סגירת אגרוף",
                         "אצבעות לפנים",
-                        "מכת קשת האצבע והאגודל"
+                        "מכת קשת האגודל והאצבע",
+                        "מכת קשת האגודל והאצבע לקנה הנשימה"
                     )
                 ),
                 BeltGroup(
@@ -539,7 +544,7 @@ object HardSectionsCatalog {
                         "ניתור ברגל שמאל ובעיטה רגילה ברגל ימין",
                         "ניתור ברגל שמאל ובעיטה לצד ברגל ימין",
                         "ניתור ברגל שמאל ובעיטה לצד ברגל שמאל",
-                        "בעיטת לצד בסיבוב מלא בניתור",
+                        "בעיטה לצד בסיבוב מלא בניתור",
                         "בעיטת מגל לאחור בסיבוב בניתור",
                         "בעיטת הגנה לאחור בניתור"
                     )
@@ -567,7 +572,7 @@ object HardSectionsCatalog {
                 BeltGroup(
                     belt = Belt.ORANGE,
                     items = listOf(
-                        "בלימה לצד - ימין/שמא",
+                        "בלימה לצד - ימין/שמאל",
                         "גלגול לפנים - שמאל",
                         "גלגול לאחור - ימין/שמאל",
                     )
@@ -945,6 +950,24 @@ object HardSectionsCatalog {
     )
 
     // ----------------------------
+// הגנות נגד איום תת-מקלע – חגורה שחורה
+// ----------------------------
+    val defensesSubmachineGunThreat: List<Section> = listOf(
+        Section(
+            id = "submachine_gun_defense_main",
+            title = "הגנות נגד איום תת-מקלע",
+            beltGroups = listOf(
+                BeltGroup(
+                    belt = Belt.BLACK,
+                    items = listOf(
+                        "הגנה נגד איום תת-מקלע"
+                    )
+                )
+            )
+        )
+    )
+
+    // ----------------------------
     // הגנות נגד  מספר תוקפים – חגורה שחורה (בקטלוג הקשיח)
     // ----------------------------
     val defensesMultipleAttackers: List<Section> = listOf(
@@ -1314,6 +1337,14 @@ object HardSectionsCatalog {
             title = "הגנות מאיום אקדח",
             beltGroups = defensesGunThreat.firstOrNull()?.beltGroups.orEmpty()
         ),
+         Section(
+         id = "submachine_gun_defense",
+         title = "הגנות נגד איום תת-מקלע",
+         beltGroups = defensesSubmachineGunThreat
+        .firstOrNull()
+             ?.beltGroups
+             .orEmpty()
+        ),
         Section(
             id = "stick_defense",
             title = "הגנות נגד מקל",
@@ -1379,6 +1410,12 @@ object HardSectionsCatalog {
                     )
                 ),
                 BeltGroup(
+                    belt = Belt.BLUE,
+                    items = listOf(
+                        "שחרור תפיסת ידיים בשכיבה"
+                    )
+                ),
+                BeltGroup(
                     belt = Belt.GREEN,
                     items = listOf(
                         "שחרור מתפיסת שיער מאחור - צד חי",
@@ -1391,7 +1428,6 @@ object HardSectionsCatalog {
                         "שחרור מתפיסת שיער מהצד - צד שמאל"
                     )
                 ),
-                BeltGroup(belt = Belt.BLUE, items = emptyList()),
                 BeltGroup(belt = Belt.BROWN, items = emptyList()),
                 BeltGroup(belt = Belt.BLACK, items = emptyList())
             )
@@ -1436,7 +1472,18 @@ object HardSectionsCatalog {
                 )
             )
         ),
-
+        Section(
+            id = "releases_nelson",
+            title = "שחרור מתפיסת נלסון",
+            beltGroups = listOf(
+                BeltGroup(
+                    belt = Belt.BLACK,
+                    items = listOf(
+                        "שחרור מתפיסת נלסון"
+                    )
+                )
+            )
+        ),
         Section(
             id = "releases_hugs",
             title = "שחרור מחביקות",
@@ -1462,6 +1509,7 @@ object HardSectionsCatalog {
                                 "שחרור מחביקה פתוחה מלפנים בהרמה",
                                 "שחרור מחביקה סגורה מהצד",
                                 "שחרור מחביקה סגורה מלפנים בהרמה",
+                                "שחרור מחביקה סגורה מאחור בהרמה",
                                 "שחרור מחביקה פתוחה מאחור בהרמה",
                                 "שחרור מחביקה פתוחה מאחור עם תפיסת אצבע",
                                 "שחרור מחביקה פתוחה מאחור - בריח על האצבעות"
@@ -1503,7 +1551,7 @@ object HardSectionsCatalog {
                         BeltGroup(
                             belt = Belt.GREEN,
                             items = listOf(
-                                "שחרור חביקת צואר מאחור"
+                                "שחרור מחביקת צואר מאחור"
                             )
                         ),
                         BeltGroup(
@@ -1828,6 +1876,15 @@ object HardSectionsCatalog {
         "הגנות מסכין" to defenseCount("knife_hard", "all"),
         "הגנות עם רובה נגד דקירות סכין" to defenseCount("knife_rifle_hard", "all"),
         "הגנות מאיום אקדח" to defenseCount("gun_hard", "all"),
+
+        "הגנות נגד איום תת-מקלע" to
+                beltOrder.sumOf { belt ->
+                    subjectItemsFor(
+                        subjectId = "submachine_gun_defense",
+                        belt = belt
+                    ).size
+                },
+
         "הגנות נגד מספר תוקפים" to defenseCount("multiple_attackers_hard", "all"),
         "הגנות נגד מקל" to defenseCount("stick_hard", "all"),
     )

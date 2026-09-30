@@ -2195,6 +2195,12 @@ internal object SubjectTopicsUiLogic {
                 DefenseDialogDecision.OpenHardSubject("gun_threat_defense")
             }
 
+            p.contains("תת-מקלע") ||
+                    p.contains("תת-מקלע") ||
+                    p == "submachine_gun_defense" -> {
+                DefenseDialogDecision.OpenHardSubject("submachine_gun_defense")
+            }
+
             p.contains("מקל") || p == "stick" -> {
                 DefenseDialogDecision.OpenHardSubject("stick_defense")
             }

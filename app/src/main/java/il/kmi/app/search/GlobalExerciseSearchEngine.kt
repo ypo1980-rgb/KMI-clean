@@ -19,6 +19,107 @@ object GlobalExerciseSearchEngine {
         val subtitle: String?
     )
 
+    /**
+     * תוצאת בדיקת הכיסוי של החיפוש הגלובלי.
+     *
+     * total   = כל התרגילים במקור האמת.
+     * found   = תרגילים שניתן למצוא בחיפוש עם אותו itemKey.
+     * missing = תרגילים שלא חזרו מהחיפוש.
+     */
+    data class SearchCoverageReport(
+        val total: Int,
+        val found: Int,
+        val missing: List<ContentRepo.ExerciseOption>
+    ) {
+        val missingCount: Int
+            get() = missing.size
+
+        val coveragePercent: Double
+            get() =
+                if (total == 0) {
+                    100.0
+                } else {
+                    found.toDouble() * 100.0 / total.toDouble()
+                }
+    }
+
+    /**
+     * בודק שכל תרגיל ממקור האמת ניתן למציאה בחיפוש הגלובלי.
+     *
+     * הבדיקה מתבצעת לפי itemKey מלא ולא רק לפי שם,
+     * ולכן גם תרגילים בעלי שם זהה במיקומים שונים נבדקים בנפרד.
+     */
+    fun auditSearchCoverage(
+        onProgress: ((checked: Int, total: Int) -> Unit)? = null
+    ): SearchCoverageReport {
+
+        val allExercises =
+            ContentRepo
+                .listAllExerciseOptions()
+                .distinctBy { exercise ->
+                    listOf(
+                        exercise.belt.name,
+                        normalizeForMatch(
+                            exercise.topicTitle
+                        ),
+                        normalizeForMatch(
+                            exercise.itemTitle
+                        )
+                    ).joinToString("|")
+                }
+
+        val missing =
+            mutableListOf<ContentRepo.ExerciseOption>()
+
+        allExercises.forEachIndexed { index, exercise ->
+
+            val normalizedExpectedTitle =
+                normalizeForMatch(
+                    exercise.itemTitle
+                )
+
+            val found =
+                search(
+                    query = exercise.itemTitle,
+                    isEnglish = false
+                ).any { result ->
+
+                    val resolved =
+                        ContentRepo.resolveItemKey(
+                            result.id
+                        )
+
+                    resolved != null &&
+                            resolved.belt == exercise.belt &&
+                            normalizeForMatch(
+                                resolved.topicTitle
+                            ) ==
+                            normalizeForMatch(
+                                exercise.topicTitle
+                            ) &&
+                            normalizeForMatch(
+                                result.title
+                            ) ==
+                            normalizedExpectedTitle
+                }
+
+            if (!found) {
+                missing += exercise
+            }
+
+            onProgress?.invoke(
+                index + 1,
+                allExercises.size
+            )
+        }
+
+        return SearchCoverageReport(
+            total = allExercises.size,
+            found = allExercises.size - missing.size,
+            missing = missing
+        )
+    }
+
     fun search(
         query: String,
         isEnglish: Boolean
@@ -56,14 +157,27 @@ object GlobalExerciseSearchEngine {
                         emptyList()
                     }
                 }
-                .map { hit ->
-                    val rawKey = hit.id ?: hit.title
+                .mapNotNull { hit ->
+                    /*
+                     * רק תרגיל אמיתי מקבל מפתח יציב
+                     * Belt::Topic::SubTopic::Item.
+                     *
+                     * כותרות של נושא / תת־נושא מוחזרות
+                     * ללא id ולכן אינן מוצגות בחיפוש הגלובלי.
+                     */
+                    val rawKey =
+                        hit.id
+                            ?: return@mapNotNull null
+
+                    val resolvedItem =
+                        ContentRepo.resolveItemKey(rawKey)
+                            ?: return@mapNotNull null
 
                     Result(
                         id = rawKey,
-                        title = hit.title,
-                        subtitle = hit.subtitle
-                            ?: subtitleFromResolvedKey(
+                        title = resolvedItem.itemTitle,
+                        subtitle =
+                            subtitleFromResolvedKey(
                                 rawKey = rawKey,
                                 fallbackBeltName = "",
                                 isEnglish = isEnglish
@@ -72,12 +186,15 @@ object GlobalExerciseSearchEngine {
                 }
 
         return (
-                directExplanationResults +
-                        hardSectionResults +
-                        regularResults
+                regularResults +
+                        directExplanationResults +
+                        hardSectionResults
                 )
             .distinctBy { result ->
-                normalizeForMatch(result.title)
+                listOf(
+                    result.id,
+                    normalizeForMatch(result.title)
+                ).joinToString("|")
             }
     }
 

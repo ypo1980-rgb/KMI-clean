@@ -658,7 +658,7 @@ object ExerciseTitlesEnItems {
         "רובה נגד דקירה מזרחית משמאל" to "Rifle Defence Against an Eastern Stab from the Left",
         "רובה נגד דקירה מזרחית מלמטה" to "Rifle Defence Against an Eastern Stab from Below",
 
-        "הגנה נגד איום תת־מקלע" to "Defence Against a Submachine Gun Threat",
+        "הגנה נגד איום תת-מקלע" to "Defence Against a Submachine Gun Threat",
     )
 
 }

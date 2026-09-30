@@ -69,12 +69,17 @@ object ExerciseCountsRegistry {
         "הגנות עם רובה נגד דקירות סכין" to
                 HardSectionsCatalog.defenseCount("knife_rifle_hard", "all"),
 
-        "הגנות מאיום אקדח" to HardSectionsCatalog.defenseCount("gun_hard", "all"),
+        "הגנות מאיום אקדח" to
+                HardSectionsCatalog.defenseCount("gun_hard", "all"),
+
+        "הגנות נגד איום תת-מקלע" to
+                hardSubjectCount("submachine_gun_defense"),
 
         "הגנות נגד מספר תוקפים" to
                 HardSectionsCatalog.defenseCount("multiple_attackers_hard", "all"),
 
-        "הגנות נגד מקל" to HardSectionsCatalog.defenseCount("stick_hard", "all"),
+        "הגנות נגד מקל" to
+                HardSectionsCatalog.defenseCount("stick_hard", "all"),
     )
 
     fun defensePickCounts(): Map<String, Int> = linkedMapOf(

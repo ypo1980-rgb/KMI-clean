@@ -9,6 +9,7 @@ import android.content.SharedPreferences
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
+import android.util.Log
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.activity.compose.setContent
@@ -19,6 +20,7 @@ import androidx.lifecycle.lifecycleScope
 import il.kmi.shared.localization.AppLanguageManager
 import il.kmi.app.subscription.BillingRepository
 import il.kmi.app.screens.BeltQuestions.ByTopic.HardSubjectResolverMemoryCache
+import il.kmi.app.screens.BeltQuestions.ByTopic.SubjectTopicsEngine
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
@@ -38,6 +40,7 @@ import il.kmi.app.ui.loading.KmiStartupLoadingScreen
 import il.kmi.app.ui.KmiTtsManager
 import il.kmi.app.reminders.TrainingReminderScheduler
 import il.kmi.app.privacy.DemoPrivacy
+import il.kmi.app.search.GlobalExerciseSearchEngine
 import il.yuval.ui.theme.AppTheme
 
 // 👇 חדש: מיגרציית העדפות ל-KMP (חוצה-פלטפורמות)
@@ -96,7 +99,7 @@ class MainActivity : androidx.fragment.app.FragmentActivity() {
         KmiTtsManager.init(this)
 
         // ---- SharedPreferences ----
-        val sp     = getSharedPreferences("kmi_settings", Context.MODE_PRIVATE)
+        val sp = getSharedPreferences("kmi_settings", Context.MODE_PRIVATE)
         val userSp = getSharedPreferences("kmi_user", Context.MODE_PRIVATE)
 
         // ---- KMP Settings (Multiplatform) ----
@@ -132,7 +135,8 @@ class MainActivity : androidx.fragment.app.FragmentActivity() {
         val ds = DataStoreManager(this)
         // ✅ NEW: Local repo לסיכומי אימון (SharedPreferences)
         val spTrainingSummary = getSharedPreferences("kmi_training_summary", Context.MODE_PRIVATE)
-        val trainingSummaryLocalRepo = il.kmi.app.data.training.TrainingSummaryLocalRepo(spTrainingSummary)
+        val trainingSummaryLocalRepo =
+            il.kmi.app.data.training.TrainingSummaryLocalRepo(spTrainingSummary)
 
 // ✅ FIX: KmiViewModel דורש גם trainingSummaryLocalRepo
         val vm = KmiViewModel(
@@ -150,8 +154,134 @@ class MainActivity : androidx.fragment.app.FragmentActivity() {
         ) {
             HardSubjectResolverMemoryCache.preloadAll()
         }
+
+        /*
+         * בדיקת Coverage זמנית לחיפוש הגלובלי.
+         * רצה רק ב-Debug וברקע, כדי לא לעכב את פתיחת האפליקציה.
+         */
+        val isDebugBuild =
+            (applicationInfo.flags and
+                    android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0
+
+        if (isDebugBuild) {
+
+            Log.i(
+                "KMI_SEARCH_COVERAGE",
+                "===== COVERAGE AUDIT STARTED ====="
+            )
+
+            lifecycleScope.launch(
+                Dispatchers.Default
+            ) {
+                runCatching {
+                    GlobalExerciseSearchEngine
+                        .auditSearchCoverage { checked, total ->
+
+                            if (
+                                checked == 1 ||
+                                checked % 25 == 0 ||
+                                checked == total
+                            ) {
+                                Log.i(
+                                    "KMI_SEARCH_COVERAGE",
+                                    "PROGRESS: $checked / $total"
+                                )
+                            }
+                        }
+                }
+                    .onSuccess { report ->
+
+                        Log.i(
+                            "KMI_SEARCH_COVERAGE",
+                            "TOTAL=${report.total} | " +
+                                    "FOUND=${report.found} | " +
+                                    "MISSING=${report.missingCount} | " +
+                                    "COVERAGE=${"%.2f".format(report.coveragePercent)}%"
+                        )
+
+                        report.missing.forEachIndexed { index,
+                                                        exercise ->
+
+                            Log.w(
+                                "KMI_SEARCH_COVERAGE",
+                                "MISSING #${index + 1}: " +
+                                        "belt=${exercise.belt.name} | " +
+                                        "topic=${exercise.topicTitle} | " +
+                                        "subTopic=${exercise.subTopicTitle.orEmpty()} | " +
+                                        "item=${exercise.itemTitle}"
+                            )
+                        }
+                    }
+                    .onFailure { error ->
+                        Log.e(
+                            "KMI_SEARCH_COVERAGE",
+                            "Coverage audit failed",
+                            error
+                        )
+                    }
+            }
+        }
+
         setupFcmTokenSync()
         trackAppOpenForCurrentUser()
+
+        if (isDebugBuild) {
+
+            Log.i(
+                "KMI_BY_TOPIC_COVERAGE",
+                "===== BY TOPIC COVERAGE AUDIT STARTED ====="
+            )
+
+            lifecycleScope.launch(
+                Dispatchers.Default
+            ) {
+                runCatching {
+                    SubjectTopicsEngine
+                        .auditByTopicCoverage { checked, total ->
+
+                            if (
+                                checked == 1 ||
+                                checked % 25 == 0 ||
+                                checked == total
+                            ) {
+                                Log.i(
+                                    "KMI_BY_TOPIC_COVERAGE",
+                                    "PROGRESS: $checked / $total"
+                                )
+                            }
+                        }
+                }
+                    .onSuccess { report ->
+
+                        Log.i(
+                            "KMI_BY_TOPIC_COVERAGE",
+                            "TOTAL=${report.total} | " +
+                                    "FOUND=${report.found} | " +
+                                    "MISSING=${report.missingCount} | " +
+                                    "COVERAGE=${"%.2f".format(report.coveragePercent)}%"
+                        )
+
+                        report.missing.forEachIndexed { index, exercise ->
+
+                            Log.w(
+                                "KMI_BY_TOPIC_COVERAGE",
+                                "MISSING #${index + 1}: " +
+                                        "belt=${exercise.belt.name} | " +
+                                        "topic=${exercise.topicTitle} | " +
+                                        "subTopic=${exercise.subTopicTitle.orEmpty()} | " +
+                                        "item=${exercise.itemTitle}"
+                            )
+                        }
+                    }
+                    .onFailure { error ->
+                        Log.e(
+                            "KMI_BY_TOPIC_COVERAGE",
+                            "By-topic coverage audit failed",
+                            error
+                        )
+                    }
+            }
+        }
 
         // -------------------- UI --------------------
         setContent {
@@ -739,7 +869,7 @@ private fun AndroidAppRoot(
     kmiPrefs: il.kmi.shared.prefs.KmiPrefs,
     themeMode: String,
     onThemeChange: (String) -> Unit
-){
+) {
     // ✅ חדש: Gate SP (הודעת מאמן לפני כניסה)
     val ctx = androidx.compose.ui.platform.LocalContext.current
     val gateSp = remember { ctx.getSharedPreferences(CoachGate.SP_NAME, Context.MODE_PRIVATE) }

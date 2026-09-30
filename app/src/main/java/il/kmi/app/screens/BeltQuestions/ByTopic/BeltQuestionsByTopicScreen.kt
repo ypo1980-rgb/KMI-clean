@@ -2789,6 +2789,7 @@ internal fun TopicsBySubjectCard(
                                         if (isEnglish) "Knife Defenses" else "הגנות מסכין",
                                         if (isEnglish) "Rifle Defenses Against Knife Stabs" else "הגנות עם רובה נגד דקירות סכין",
                                         if (isEnglish) "Gun Threat Defenses" else "הגנות מאיום אקדח",
+                                        if (isEnglish) "Submachine Gun Threat Defenses" else "הגנות נגד איום תת-מקלע",
                                         if (isEnglish) "Defenses Against Multiple Attackers" else "הגנות נגד מספר תוקפים",
                                         if (isEnglish) "Stick Defenses" else "הגנות נגד מקל"
                                     ).map { title ->
@@ -2818,6 +2819,7 @@ internal fun TopicsBySubjectCard(
                                             "Knife Defenses" -> "הגנות מסכין"
                                             "Rifle Defenses Against Knife Stabs" -> "הגנות עם רובה נגד דקירות סכין"
                                             "Gun Threat Defenses" -> "הגנות מאיום אקדח"
+                                            "Submachine Gun Threat Defenses" -> "הגנות נגד איום תת-מקלע"
                                             "Defenses Against Multiple Attackers" -> "הגנות נגד מספר תוקפים"
                                             "Stick Defenses" -> "הגנות נגד מקל"
                                             else -> pickedClean

@@ -1539,7 +1539,7 @@ object ExerciseExplanationsEn {
 
             // ─────────── SMG Threat ───────────
 
-            "הגנה נגד איום תת־מקלע" ->
+            "הגנה נגד איום תת-מקלע" ->
                 "Perform a Hover-Roll toward the attacker. Kneel and burst toward the attacker. Knees bent on either side of the attacker and grab the attacker. Put your ear to the attacker's back while the left hand is sent diagonally upward."
 
             else -> "$FALLBACK_PREFIX $item"

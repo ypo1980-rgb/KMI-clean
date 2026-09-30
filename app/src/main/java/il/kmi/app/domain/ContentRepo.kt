@@ -216,6 +216,59 @@ object ContentRepo {
     )
 
     /**
+     * מחזיר את כל התרגילים האמיתיים מתוך מקור האמת.
+     *
+     * ללא חיפוש, ללא דירוג וללא סינון לפי טקסט.
+     * משמש גם לבדיקת Coverage של החיפוש הגלובלי.
+     */
+    fun listAllExerciseOptions(): List<ExerciseOption> {
+        initIfNeeded()
+
+        return buildList {
+            listBeltsInOrder().forEach { belt ->
+                listTopicTitles(belt).forEach { topicTitle ->
+
+                    val subTopics =
+                        listOf<String?>(null) +
+                                listSubTopicTitles(
+                                    belt = belt,
+                                    topicTitle = topicTitle
+                                )
+
+                    subTopics
+                        .distinct()
+                        .forEach { subTopicTitle ->
+
+                            listItemTitles(
+                                belt = belt,
+                                topicTitle = topicTitle,
+                                subTopicTitle = subTopicTitle
+                            )
+                                .forEach { itemTitle ->
+                                    add(
+                                        ExerciseOption(
+                                            belt = belt,
+                                            topicTitle = topicTitle,
+                                            subTopicTitle = subTopicTitle,
+                                            itemTitle = itemTitle
+                                        )
+                                    )
+                                }
+                        }
+                }
+            }
+        }
+            .distinctBy { option ->
+                listOf(
+                    option.belt.name,
+                    option.topicTitle,
+                    option.subTopicTitle.orEmpty(),
+                    option.itemTitle
+                ).joinToString("|")
+            }
+    }
+
+    /**
      * מחזיר את כל התרגילים ששמם מכיל את כל מילות החיפוש.
      *
      * החיפוש מתבצע ישירות במקור האמת ואינו תלוי

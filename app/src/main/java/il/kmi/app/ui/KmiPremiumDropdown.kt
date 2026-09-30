@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -387,19 +388,29 @@ fun KmiPremiumDropdown(
                 )
 
                 /*
-                 * הרשימה גדלה לפי מספר האפשרויות.
-                 * רק כאשר יש הרבה שורות היא מגיעה לגובה המרבי ונגללת.
-                 */
-                Column(
+     * הרשימה גדלה לפי מספר האפשרויות.
+     * רק כאשר יש הרבה שורות היא מגיעה לגובה המרבי ונגללת.
+     */
+                val optionsScrollState =
+                    rememberScrollState()
+
+                Box(
                     modifier =
                         Modifier
                             .fillMaxWidth()
                             .heightIn(max = 240.dp)
-                            .verticalScroll(
-                                rememberScrollState()
-                            )
                 ) {
-                    cleanOptions.forEachIndexed { index, option ->
+
+                    Column(
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .heightIn(max = 240.dp)
+                                .verticalScroll(
+                                    optionsScrollState
+                                )
+                    ) {
+                        cleanOptions.forEachIndexed { index, option ->
 
                         val isSelected =
                             option == selectedValue.trim()
@@ -480,6 +491,40 @@ fun KmiPremiumDropdown(
                                 )
                             }
                         }
+                        }
+                    }
+
+                    /*
+                     * פס גלילה עדין מופיע רק כאשר
+                     * התוכן ארוך מגובה הרשימה.
+                     */
+                    if (optionsScrollState.maxValue > 0) {
+                        val scrollFraction =
+                            (
+                                    optionsScrollState.value.toFloat() /
+                                            optionsScrollState.maxValue.toFloat()
+                                    ).coerceIn(0f, 1f)
+
+                        Box(
+                            modifier =
+                                Modifier
+                                    .align(Alignment.TopEnd)
+                                    .padding(
+                                        horizontal = 3.dp,
+                                        vertical = 6.dp
+                                    )
+                                    .offset(
+                                        y = 180.dp * scrollFraction
+                                    )
+                                    .width(3.dp)
+                                    .height(48.dp)
+                                    .clip(
+                                        RoundedCornerShape(999.dp)
+                                    )
+                                    .background(
+                                        Color.White
+                                    )
+                        )
                     }
                 }
             }
@@ -904,20 +949,30 @@ fun <T> KmiPremiumMultiSelectDropdown(
                 )
 
                 /*
-                 * הרשימה מתאימה את הגובה לכמות האפשרויות.
-                 * ברשימה ארוכה בלבד מופעלת גלילה.
-                 */
-                Column(
+     * הרשימה מתאימה את הגובה לכמות האפשרויות.
+     * ברשימה ארוכה בלבד מופעלת גלילה.
+     */
+                val multiSelectScrollState =
+                    rememberScrollState()
+
+                Box(
                     modifier =
                         Modifier
                             .fillMaxWidth()
                             .heightIn(max = 240.dp)
-                            .verticalScroll(
-                                rememberScrollState()
-                            )
                 ) {
 
-                    if (selectedValues.isNotEmpty()) {
+                    Column(
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .heightIn(max = 240.dp)
+                                .verticalScroll(
+                                    multiSelectScrollState
+                                )
+                    ) {
+
+                        if (selectedValues.isNotEmpty()) {
 
                         DropdownMenuItem(
                             text = {
@@ -1085,12 +1140,46 @@ fun <T> KmiPremiumMultiSelectDropdown(
                             )
                         }
                     }
+                    }
+
+                    /*
+                     * פס גלילה עדין.
+                     * מוצג רק כאשר באמת קיימת גלילה.
+                     */
+                    if (multiSelectScrollState.maxValue > 0) {
+                        val scrollFraction =
+                            (
+                                    multiSelectScrollState.value.toFloat() /
+                                            multiSelectScrollState.maxValue.toFloat()
+                                    ).coerceIn(0f, 1f)
+
+                        Box(
+                            modifier =
+                                Modifier
+                                    .align(Alignment.TopEnd)
+                                    .padding(
+                                        horizontal = 3.dp,
+                                        vertical = 6.dp
+                                    )
+                                    .offset(
+                                        y = 180.dp * scrollFraction
+                                    )
+                                    .width(3.dp)
+                                    .height(48.dp)
+                                    .clip(
+                                        RoundedCornerShape(999.dp)
+                                    )
+                                    .background(
+                                        Color.White
+                                    )
+                        )
+                    }
                 }
 
                 /*
-      * החלק הזה אינו בתוך אזור הגלילה.
-      * לכן "סיום בחירה" נשאר תמיד קבוע בתחתית.
-      */
+                 * החלק הזה אינו בתוך אזור הגלילה.
+                 * לכן "סיום בחירה" נשאר תמיד קבוע בתחתית.
+                 */
                 Surface(
                     onClick = {
                         expanded = false

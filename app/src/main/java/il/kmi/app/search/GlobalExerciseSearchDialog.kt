@@ -231,7 +231,7 @@ fun GlobalExerciseSearchDialog(
             shouldDismissOnBackPress = false
         ),
         modifier = modifier,
-        containerColor = MaterialTheme.colorScheme.surface,
+        containerColor = Color.Transparent,
         contentColor = MaterialTheme.colorScheme.onSurface,
         dragHandle = {
             Box(
@@ -256,78 +256,128 @@ fun GlobalExerciseSearchDialog(
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .background(
+                        brush =
+                            Brush.verticalGradient(
+                                colors =
+                                    listOf(
+                                        MaterialTheme.colorScheme.surface,
+                                        MaterialTheme.colorScheme.surfaceVariant
+                                            .copy(alpha = 0.96f),
+                                        MaterialTheme.colorScheme.primaryContainer
+                                            .copy(alpha = 0.30f),
+                                        MaterialTheme.colorScheme.surface
+                                    )
+                            )
+                    )
                     .imePadding()
                     .navigationBarsPadding()
                     .padding(
                         horizontal = 18.dp,
-                        vertical = 12.dp
+                        vertical = 8.dp
                     ),
                 verticalArrangement =
-                    Arrangement.spacedBy(14.dp)
+                    Arrangement.spacedBy(8.dp)
             ) {
-                if (!isKeyboardVisible) {
-                    SearchHeader(
-                        isEnglish = isEnglish,
-                        textAlign = textAlign,
-                        isListening = speechState.isListening,
-                        onMicrophoneClick = {
-                            speechError = null
-                            finishTyping()
-                            speechState.toggleListening()
-                        },
-                        onClose = {
-                            finishTyping()
-                            speechState.stopListening()
-                            onDismiss()
-                        }
-                    )
-                }
-
-                SearchInput(
-                    query = query,
-                    isEnglish = isEnglish,
-                    textAlign = textAlign,
-                    focusRequester = focusRequester,
-                    onQueryChange = { value ->
-                        query = value
-                            .replace("\n", " ")
-                            .replace("\r", " ")
-                            .replace(
-                                Regex("""\s+"""),
-                                " "
-                            )
-                    },
-                    onDone = ::finishTyping
-                )
-
-                speechError?.takeIf {
-                    it.isNotBlank()
-                }?.let { message ->
-                    Text(
-                        text = message,
-                        modifier = Modifier
+                Surface(
+                    modifier =
+                        Modifier
                             .fillMaxWidth()
-                            .padding(horizontal = 8.dp),
-                        color = MaterialTheme.colorScheme.error,
-                        style = KmiTypography.body.copy(
-                            fontWeight = FontWeight.Bold
+                            .weight(1f),
+                    shape = RoundedCornerShape(24.dp),
+                    color = MaterialTheme.colorScheme.surface,
+                    border =
+                        BorderStroke(
+                            width = 1.dp,
+                            color =
+                                MaterialTheme.colorScheme
+                                    .outlineVariant
                         ),
-                        textAlign = textAlign
-                    )
+                    tonalElevation = 0.dp,
+                    shadowElevation = 0.dp
+                ) {
+                    Column(
+                        modifier =
+                            Modifier.fillMaxWidth()
+                    ) {
+                        SearchHeader(
+                            isEnglish = isEnglish,
+                            textAlign = textAlign
+                        )
+
+                        SearchInput(
+                            query = query,
+                            isEnglish = isEnglish,
+                            textAlign = textAlign,
+                            focusRequester = focusRequester,
+                            onQueryChange = { value ->
+                                query = value
+                                    .replace("\n", " ")
+                                    .replace("\r", " ")
+                                    .replace(
+                                        Regex("""\s+"""),
+                                        " "
+                                    )
+                            },
+                            onDone = ::finishTyping
+                        )
+
+                        speechError?.takeIf {
+                            it.isNotBlank()
+                        }?.let { message ->
+                            Text(
+                                text = message,
+                                modifier =
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .padding(
+                                            horizontal = 10.dp,
+                                            vertical = 4.dp
+                                        ),
+                                color =
+                                    MaterialTheme.colorScheme.error,
+                                style =
+                                    KmiTypography.caption.copy(
+                                        fontWeight = FontWeight.Bold
+                                    ),
+                                textAlign = textAlign
+                            )
+                        }
+
+                        Box(
+                            modifier =
+                                Modifier
+                                    .fillMaxWidth()
+                                    .weight(1f)
+                        ) {
+                            SearchContent(
+                                query = query,
+                                results = results,
+                                isEnglish = isEnglish,
+                                textAlign = textAlign,
+                                onExerciseSelected = { result ->
+                                    finishTyping()
+                                    onExerciseSelected(result)
+                                }
+                            )
+                        }
+                    }
                 }
 
-                SearchContent(
-                    query = query,
-                    results = results,
+                SearchBottomActions(
                     isEnglish = isEnglish,
-                    textAlign = textAlign,
-                    onExerciseSelected = { result ->
+                    isListening = speechState.isListening,
+                    onMicrophoneClick = {
+                        speechError = null
                         finishTyping()
-                        onExerciseSelected(result)
+                        speechState.toggleListening()
+                    },
+                    onClose = {
+                        finishTyping()
+                        speechState.stopListening()
+                        onDismiss()
                     }
                 )
-
-                Spacer(Modifier.height(8.dp))
             }
         }
     }
@@ -336,7 +386,80 @@ fun GlobalExerciseSearchDialog(
 @Composable
 private fun SearchHeader(
     isEnglish: Boolean,
-    textAlign: TextAlign,
+    textAlign: TextAlign
+) {
+    Column(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .background(
+                    brush =
+                        Brush.horizontalGradient(
+                            colors =
+                                listOf(
+                                    Color(0xFF174A73),
+                                    Color(0xFF286185),
+                                    Color(0xFF526F85)
+                                )
+                        )
+                )
+                .padding(
+                    horizontal = 16.dp,
+                    vertical = 6.dp
+                ),
+        verticalArrangement =
+            Arrangement.spacedBy(1.dp)
+    ) {
+        Text(
+            text =
+                if (isEnglish) {
+                    "Search exercise"
+                } else {
+                    "חיפוש תרגיל"
+                },
+            modifier =
+                Modifier.fillMaxWidth(),
+            color = Color.White,
+            style =
+                KmiTypography.sectionTitle.copy(
+                    fontWeight =
+                        FontWeight.Black
+                ),
+            textAlign = textAlign,
+            maxLines = 1,
+            overflow =
+                TextOverflow.Ellipsis
+        )
+
+        Text(
+            text =
+                if (isEnglish) {
+                    "Search all exercises"
+                } else {
+                    "חיפוש בכל התרגילים"
+                },
+            modifier =
+                Modifier.fillMaxWidth(),
+            color =
+                Color.White.copy(
+                    alpha = 0.82f
+                ),
+            style =
+                KmiTypography.caption.copy(
+                    fontWeight =
+                        FontWeight.SemiBold
+                ),
+            textAlign = textAlign,
+            maxLines = 1,
+            overflow =
+                TextOverflow.Ellipsis
+        )
+    }
+}
+
+@Composable
+private fun SearchBottomActions(
+    isEnglish: Boolean,
     isListening: Boolean,
     onMicrophoneClick: () -> Unit,
     onClose: () -> Unit
@@ -346,198 +469,214 @@ private fun SearchHeader(
             label = "exercise_search_microphone"
         )
 
-    val microphoneScale by microphoneTransition.animateFloat(
+    val microphoneScale by
+    microphoneTransition.animateFloat(
         initialValue = 1f,
         targetValue =
             if (isListening) {
-                1.16f
+                1.06f
             } else {
                 1f
             },
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 650),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "exercise_search_microphone_scale"
+        animationSpec =
+            infiniteRepeatable(
+                animation =
+                    tween(
+                        durationMillis = 650
+                    ),
+                repeatMode =
+                    RepeatMode.Reverse
+            ),
+        label =
+            "exercise_search_microphone_scale"
     )
 
-    val microphoneAlpha by microphoneTransition.animateFloat(
-        initialValue = 1f,
-        targetValue =
-            if (isListening) {
-                0.68f
-            } else {
-                1f
-            },
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 650),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "exercise_search_microphone_alpha"
-    )
-
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(24.dp))
-            .background(
-                Brush.horizontalGradient(
-                    colors = listOf(
-                        MaterialTheme.colorScheme.primary,
-                        MaterialTheme.colorScheme.primary
-                            .copy(alpha = 0.88f),
-                        MaterialTheme.colorScheme.secondary
-                            .copy(alpha = 0.82f)
-                    )
-                )
-            )
-            .padding(
-                horizontal = 16.dp,
-                vertical = 12.dp
-            )
+    Row(
+        modifier =
+            Modifier.fillMaxWidth(),
+        horizontalArrangement =
+            Arrangement.spacedBy(10.dp),
+        verticalAlignment =
+            Alignment.CenterVertically
     ) {
-        IconButton(
-            onClick = onClose,
-            modifier = Modifier
-                .align(Alignment.TopEnd)
-                .size(KmiIconSize.medium)
-        ) {
-            Icon(
-                imageVector = Icons.Filled.Close,
-                contentDescription =
-                    if (isEnglish) {
-                        "Close search"
-                    } else {
-                        "סגור חיפוש"
-                    },
-                tint = MaterialTheme.colorScheme.onPrimary
-                    .copy(alpha = 0.92f),
-                modifier = Modifier.size(
-                    KmiIconSize.small
-                )
-            )
-        }
-
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(
-                    start = 30.dp,
-                    end = 30.dp
-                ),
-            horizontalAlignment =
-                Alignment.CenterHorizontally
-        ) {
-            Text(
-                text =
-                    if (isEnglish) {
-                        "Search exercise"
-                    } else {
-                        "חיפוש תרגיל"
-                    },
-                modifier = Modifier.fillMaxWidth(),
-                color = MaterialTheme.colorScheme.onPrimary,
-                style = KmiTypography.screenTitle.copy(
-                    fontWeight = FontWeight.Black
-                ),
-                textAlign = textAlign
-            )
-
-            Spacer(
-                modifier = Modifier.height(4.dp)
-            )
-
-            Text(
-                text =
-                    if (isEnglish) {
-                        "Type or say a word to search all exercises."
-                    } else {
-                        "הקלד או אמור מילה כדי לחפש בכל התרגילים."
-                    },
-                modifier = Modifier.fillMaxWidth(),
-                color = MaterialTheme.colorScheme.onPrimary
-                    .copy(alpha = 0.82f),
-                style = KmiTypography.body,
-                textAlign = textAlign
-            )
-
-            Spacer(
-                modifier = Modifier.height(8.dp)
-            )
-
-            Surface(
-                onClick = onMicrophoneClick,
-                modifier = Modifier
-                    .size(KmiIconSize.large)
+        Surface(
+            onClick = onMicrophoneClick,
+            modifier =
+                Modifier
+                    .weight(1f)
+                    .height(44.dp)
                     .graphicsLayer {
-                        scaleX = microphoneScale
-                        scaleY = microphoneScale
-                        alpha = microphoneAlpha
+                        scaleX =
+                            microphoneScale
+                        scaleY =
+                            microphoneScale
                     },
-                shape = CircleShape,
-                color =
-                    if (isListening) {
-                        MaterialTheme.colorScheme.error
-                    } else {
-                        MaterialTheme.colorScheme.onPrimary
-                            .copy(alpha = 0.18f)
-                    },
-                tonalElevation = 0.dp,
-                shadowElevation = 0.dp,
-                border = BorderStroke(
+            shape =
+                RoundedCornerShape(14.dp),
+            color =
+                if (isListening) {
+                    MaterialTheme
+                        .colorScheme
+                        .error
+                } else {
+                    MaterialTheme
+                        .colorScheme
+                        .primaryContainer
+                },
+            border =
+                BorderStroke(
                     width = 1.dp,
-                    color = MaterialTheme.colorScheme.onPrimary
-                        .copy(alpha = 0.42f)
-                )
+                    color =
+                        if (isListening) {
+                            MaterialTheme
+                                .colorScheme
+                                .error
+                        } else {
+                            MaterialTheme
+                                .colorScheme
+                                .primary
+                                .copy(alpha = 0.34f)
+                        }
+                ),
+            tonalElevation = 0.dp,
+            shadowElevation = 0.dp
+        ) {
+            Row(
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(
+                            horizontal = 10.dp
+                        ),
+                horizontalArrangement =
+                    Arrangement.Center,
+                verticalAlignment =
+                    Alignment.CenterVertically
             ) {
-                Box(
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector =
-                            if (isListening) {
-                                Icons.Default.Stop
+                Icon(
+                    imageVector =
+                        if (isListening) {
+                            Icons.Default.Stop
+                        } else {
+                            Icons.Default.Mic
+                        },
+                    contentDescription =
+                        if (isListening) {
+                            if (isEnglish) {
+                                "Stop listening"
                             } else {
-                                Icons.Default.Mic
-                            },
-                        contentDescription =
-                            if (isListening) {
-                                if (isEnglish) {
-                                    "Stop listening"
-                                } else {
-                                    "עצור האזנה"
-                                }
+                                "עצור האזנה"
+                            }
+                        } else {
+                            if (isEnglish) {
+                                "Voice search"
                             } else {
-                                if (isEnglish) {
-                                    "Search by voice"
-                                } else {
-                                    "חיפוש קולי"
-                                }
-                            },
-                        tint = MaterialTheme.colorScheme.onPrimary,
-                        modifier = Modifier.size(
-                            KmiIconSize.medium
+                                "חיפוש קולי"
+                            }
+                        },
+                    tint =
+                        if (isListening) {
+                            MaterialTheme
+                                .colorScheme
+                                .onError
+                        } else {
+                            MaterialTheme
+                                .colorScheme
+                                .primary
+                        },
+                    modifier =
+                        Modifier.size(
+                            KmiIconSize.tiny
                         )
-                    )
-                }
-            }
+                )
 
-            if (isListening) {
                 Spacer(
-                    modifier = Modifier.height(10.dp)
+                    Modifier.width(6.dp)
                 )
 
                 Text(
                     text =
-                        if (isEnglish) {
-                            "Listening…"
+                        if (isListening) {
+                            if (isEnglish) {
+                                "Listening…"
+                            } else {
+                                "מאזין…"
+                            }
                         } else {
-                            "מאזין…"
+                            if (isEnglish) {
+                                "Voice search"
+                            } else {
+                                "חיפוש קולי"
+                            }
                         },
-                    color = MaterialTheme.colorScheme.onPrimary,
-                    style = KmiTypography.action.copy(
-                        fontWeight = FontWeight.Bold
-                    )
+                    color =
+                        if (isListening) {
+                            MaterialTheme
+                                .colorScheme
+                                .onError
+                        } else {
+                            MaterialTheme
+                                .colorScheme
+                                .primary
+                        },
+                    style =
+                        KmiTypography.action.copy(
+                            fontWeight =
+                                FontWeight.ExtraBold
+                        ),
+                    maxLines = 1
+                )
+            }
+        }
+
+        Surface(
+            onClick = onClose,
+            modifier =
+                Modifier
+                    .weight(1f)
+                    .height(44.dp),
+            shape =
+                RoundedCornerShape(14.dp),
+            color =
+                MaterialTheme
+                    .colorScheme
+                    .surfaceVariant,
+            border =
+                BorderStroke(
+                    width = 1.dp,
+                    color =
+                        MaterialTheme
+                            .colorScheme
+                            .outlineVariant
+                ),
+            tonalElevation = 0.dp,
+            shadowElevation = 0.dp
+        ) {
+            Box(
+                modifier =
+                    Modifier.fillMaxWidth(),
+                contentAlignment =
+                    Alignment.Center
+            ) {
+                Text(
+                    text =
+                        if (isEnglish) {
+                            "Close"
+                        } else {
+                            "סגור"
+                        },
+                    color =
+                        MaterialTheme
+                            .colorScheme
+                            .onSurface,
+                    style =
+                        KmiTypography.action.copy(
+                            fontWeight =
+                                FontWeight.ExtraBold
+                        ),
+                    textAlign =
+                        TextAlign.Center,
+                    maxLines = 1
                 )
             }
         }
@@ -560,31 +699,18 @@ private fun SearchInput(
             "חפש תרגיל"
         }
 
-    Surface(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(24.dp),
-        color = MaterialTheme.colorScheme.surface,
-        shadowElevation = 0.dp,
-        tonalElevation = 0.dp,
-        border = BorderStroke(
-            width = 1.dp,
-            color = MaterialTheme.colorScheme.outlineVariant
-        )
-    ) {
-        OutlinedTextField(
-            value = query,
-            onValueChange = onQueryChange,
-            modifier = Modifier
+    OutlinedTextField(
+        value = query,
+        onValueChange = onQueryChange,
+        modifier =
+            Modifier
                 .fillMaxWidth()
-                .heightIn(min = 62.dp)
+                .height(56.dp)
                 .padding(
-                    horizontal = 10.dp,
-                    vertical = 6.dp
+                    horizontal = 10.dp
                 )
                 .focusRequester(focusRequester),
-            singleLine = false,
-            minLines = 1,
-            maxLines = 4,
+        singleLine = true,
             keyboardOptions = KeyboardOptions(
                 imeAction = ImeAction.Search
             ),
@@ -598,16 +724,6 @@ private fun SearchInput(
                 fontWeight = FontWeight.SemiBold,
                 textAlign = textAlign
             ),
-            label = {
-                Text(
-                    text = label,
-                    modifier = Modifier.fillMaxWidth(),
-                    style = KmiTypography.caption.copy(
-                        fontWeight = FontWeight.SemiBold
-                    ),
-                    textAlign = textAlign
-                )
-            },
             placeholder = {
                 Text(
                     text = label,
@@ -673,7 +789,7 @@ private fun SearchInput(
             )
         )
     }
-}
+
 
 @Composable
 private fun SearchContent(
@@ -792,7 +908,7 @@ private fun SearchResultRow(
             .clickable(onClick = onClick)
             .padding(
                 horizontal = 12.dp,
-                vertical = 10.dp
+                vertical = 5.dp
             ),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -825,8 +941,8 @@ private fun SearchResultRow(
                 text = result.title,
                 modifier = Modifier.fillMaxWidth(),
                 textAlign = textAlign,
-                style = KmiTypography.body.copy(
-                    fontWeight = FontWeight.Bold
+                style = KmiTypography.secondary.copy(
+                    fontWeight = FontWeight.ExtraBold
                 ),
                 maxLines = 2,
                 overflow = TextOverflow.Ellipsis,
@@ -834,14 +950,12 @@ private fun SearchResultRow(
             )
 
             if (!result.subtitle.isNullOrBlank()) {
-                Spacer(Modifier.height(2.dp))
-
                 Text(
                     text = result.subtitle,
                     modifier = Modifier.fillMaxWidth(),
                     textAlign = textAlign,
                     style = KmiTypography.caption.copy(
-                        fontWeight = FontWeight.Bold
+                        fontWeight = FontWeight.SemiBold
                     ),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
@@ -1071,12 +1185,12 @@ private fun searchResultBeltColor(
     defaultColor: Color
 ): Color {
     return when (belt) {
-        Belt.YELLOW -> Color(0xFFF59E0B)
+        Belt.YELLOW -> Color(0xFFFFC107)
         Belt.ORANGE -> Color(0xFFFF9800)
         Belt.GREEN -> Color(0xFF2E7D32)
         Belt.BLUE -> Color(0xFF1E88E5)
         Belt.BROWN -> Color(0xFF6D4C41)
-        Belt.BLACK -> Color(0xFF64748B)
+        Belt.BLACK -> Color.Black
 
         else -> defaultColor
     }
