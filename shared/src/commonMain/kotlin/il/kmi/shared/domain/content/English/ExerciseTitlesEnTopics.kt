@@ -18,7 +18,7 @@ object ExerciseTitlesEnTopics {
         "בלימות וגלגולים" to "Breakfalls and Rolls",
         "קוואלר" to "Cavalier",
         "מכות מרפק" to "Elbow Strikes",
-        "מכות במקל / רובה" to "Stick / Rifle Strikes",
+        "מכות במקל/רובה" to "Stick/Rifle Strikes",
         "בעיטות בניתור" to "Jump Kicks",
         "מכות במקל קצר" to "Short Stick Strikes",
         "גלגולים" to "Rolls",

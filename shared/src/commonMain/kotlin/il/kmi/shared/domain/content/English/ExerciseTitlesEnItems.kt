@@ -71,7 +71,7 @@ object ExerciseTitlesEnItems {
         "שחרור מחניקה מאחור במשיכה" to "Release from Choke from the Rear with a Pull",
         "שחרור מחביקת צואר מהצד" to "Release from Neck Hold from the Side",
 
-        "בעיטה רגילה למפסעה" to "Regular Kick to the Groin",
+        "בעיטה רגילה למפשעה" to "Regular Kick to the Groin",
         "בעיטה רגילה לסנטר" to "Regular Kick to the Chin",
         "בעיטת מגל נמוכה" to "Low Magal (Circular) kick",
         "בעיטת מגל אופקית" to "Horizontal Magal (Circular) kick",
@@ -79,14 +79,14 @@ object ExerciseTitlesEnItems {
         "בעיטת מגל בהטעיה" to "Magal (Circular) kick with Diversion",
         "בעיטת ברך גבוהה" to "High Knee Strike",
         "בעיטת ברך מהצד" to "Knee Strike From the Side",
-        "בעיטת ברך נמוכה למפסעה" to "Low Knee Strike to the Groin",
+        "בעיטת ברך נמוכה למפשעה" to "Low Knee Strike to the Groin",
         "בעיטה לצד מעמידת פיסוק" to "Side Kick From a Neutral Stance",
 
         "הגנה חיצונית רפלקסיבית 360 מעלות" to "Reflexive 360 Degree Defence",
         "הגנה פנימית רפלקסיבית" to "Reflexive Internal Defences",
         "הגנה פנימית נגד ימין בכף יד שמאל" to "Internal Defence Against a Right Punch with the Left Palm",
         "הגנה פנימית נגד שמאל בכף יד ימין" to "Internal Defence Against a Left Punch with the Right Palm",
-        "הגנה פנימית נגד בעיטה רגילה למפסעה" to "Internal Defence Against a Regular Kick to the Groin",
+        "הגנה פנימית נגד בעיטה רגילה למפשעה" to "Internal Defence Against a Regular Kick to the Groin",
 
         //----------------------------------------------
         // Orange belt — exact English titles from the PDF
@@ -558,7 +558,7 @@ object ExerciseTitlesEnItems {
         "מכת מקל למרפק" to "Stick Strike to the Elbow",
         "מכת מקל לשורש כף היד" to "Stick Strike to the Wrist",
         "מכת מקל לברך" to "Stick Strike to the Knee",
-        "מכת מקל למפסעה" to "Stick Strike to the Groin",
+        "מכת מקל למפשעה" to "Stick Strike to the Groin",
         "הצלפת מקל לצלעות" to "Stick Whip to the Ribs",
         "דקירת מקל חיצונית לצלעות" to "External Stick Stab to the Ribs",
         "דקירת מקל ישרה לבטן / לגרון" to "Straight Stick Stab to the Abdominal or Throat",
@@ -596,7 +596,7 @@ object ExerciseTitlesEnItems {
         "הגנה נגד דקירה רגילה - בעיטה" to "Defence Against a Regular Stab with a Kick",
         "הגנה נגד דקירה מזרחית - בעיטה" to "Defence Against an Eastern Stab with a Kick",
         "הגנה נגד דקירה ישרה מלפנים - בעיטה" to "Defence Against a Straight Stab from the Front with a Kick",
-        "הגנה נגד דקירה ישרה מלפנים - הגנת גוף ובעיטת מגל למפסעה" to "Defence Against a Straight Stab from the Front - Body Defence and a Magal Kick to the Groin",
+        "הגנה נגד דקירה ישרה מלפנים - הגנת גוף ובעיטת מגל למפשעה" to "Defence Against a Straight Stab from the Front - Body Defence and a Magal Kick to the Groin",
         "הגנה נגד דקירה רגילה מהצד - בעיטה" to "Defence Against a Regular Stab from the Side with a Kick",
         "הגנה נגד דקירה מזרחית מהצד - בעיטה" to "Defence Against an Eastern Stab from the Side with a Kick",
 
@@ -618,8 +618,8 @@ object ExerciseTitlesEnItems {
         "התקפה עם מקל לנקודות תורפה" to "Stick Attack to Vital Points",
 
         // Black belt — exact ContentRepo keys
-        "מכה למפסעה" to "Groin Strike",
-        "מכה אופקית ובעיטה רגילה למפסעה" to "Horizontal Strike and a Regular Kick to the Groin",
+        "מכה למפשעה" to "Groin Strike",
+        "מכה אופקית ובעיטה רגילה למפשעה" to "Horizontal Strike and a Regular Kick to the Groin",
         "מכה אופקית ובעיטת הגנה לפנים" to "Horizontal Strike and a Forward Defensive Kick",
 
         "הגנה נגד איום אקדח לראש מהצד מאחור – צד שמאל" to "Defence from a Gun Threat to the Head from the Rear Side - Left Side",

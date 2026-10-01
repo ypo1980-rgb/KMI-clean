@@ -706,7 +706,7 @@ object ExerciseIdentityRegistry {
         ExerciseIdentity(
             id = "ex_048",
             belt = Belt.YELLOW,
-            hebrewTitle = "בעיטה רגילה למפסעה",
+            hebrewTitle = "בעיטה רגילה למפשעה",
             topicKeys = setOf(
                 "בעיטות",
                 "topic_kicks"
@@ -726,7 +726,7 @@ object ExerciseIdentityRegistry {
         ExerciseIdentity(
             id = "ex_050",
             belt = Belt.YELLOW,
-            hebrewTitle = "בעיטת ברך נמוכה למפסעה",
+            hebrewTitle = "בעיטת ברך נמוכה למפשעה",
             topicKeys = setOf(
                 "בעיטות",
                 "topic_kicks"
@@ -863,7 +863,7 @@ object ExerciseIdentityRegistry {
         ExerciseIdentity(
             id = "ex_062",
             belt = Belt.YELLOW,
-            hebrewTitle = "הגנה פנימית נגד בעיטה רגילה למפסעה",
+            hebrewTitle = "הגנה פנימית נגד בעיטה רגילה למפשעה",
             topicKeys = setOf(
                 "הגנות",
                 "הגנות__הגנות נגד בעיטות רגילות",
@@ -2248,7 +2248,7 @@ object ExerciseIdentityRegistry {
             belt = Belt.GREEN,
             hebrewTitle = "התקפה עם מקל לנקודות תורפה",
             topicKeys = setOf(
-                "מכות במקל / רובה",
+                "מכות במקל/רובה",
                 "עבודת ידיים",
                 "hands_stick_rifle",
                 "topic_hands"
@@ -2742,7 +2742,7 @@ object ExerciseIdentityRegistry {
         ExerciseIdentity(
             id = "ex_198",
             belt = Belt.GREEN,
-            hebrewTitle = "הגנה נגד דקירה ישרה מלפנים – הגנת גוף ובעיטת מגל למפסעה",
+            hebrewTitle = "הגנה נגד דקירה ישרה מלפנים – הגנת גוף ובעיטת מגל למפשעה",
             topicKeys = setOf(
                 "הגנות",
                 "הגנות__הגנות מסכין",
@@ -2752,7 +2752,7 @@ object ExerciseIdentityRegistry {
                 "defenses_root"
             ),
             aliases = setOf(
-                "הגנה נגד דקירה ישרה מלפנים - הגנת גוף ובעיטת מגל למפסעה"
+                "הגנה נגד דקירה ישרה מלפנים - הגנת גוף ובעיטת מגל למפשעה"
             )
         ),
 
@@ -5206,7 +5206,7 @@ object ExerciseIdentityRegistry {
             hebrewTitle = "מכות במקל קצר - מכת מקל לראש",
             topicKeys = setOf(
                 "מכות במקל קצר",
-                "מכות במקל / רובה",
+                "מכות במקל/רובה",
                 "עבודת ידיים",
                 "hands_stick_rifle",
                 "hands_all",
@@ -5221,7 +5221,7 @@ object ExerciseIdentityRegistry {
             hebrewTitle = "מכות במקל קצר - מכת מקל לרקה",
             topicKeys = setOf(
                 "מכות במקל קצר",
-                "מכות במקל / רובה",
+                "מכות במקל/רובה",
                 "עבודת ידיים",
                 "hands_stick_rifle",
                 "hands_all",
@@ -5236,7 +5236,7 @@ object ExerciseIdentityRegistry {
             hebrewTitle = "מכות במקל קצר - מכת מקל ללסת / צואר",
             topicKeys = setOf(
                 "מכות במקל קצר",
-                "מכות במקל / רובה",
+                "מכות במקל/רובה",
                 "עבודת ידיים",
                 "hands_stick_rifle",
                 "hands_all",
@@ -5251,7 +5251,7 @@ object ExerciseIdentityRegistry {
             hebrewTitle = "מכות במקל קצר - מכת מקל לעצם הבריח",
             topicKeys = setOf(
                 "מכות במקל קצר",
-                "מכות במקל / רובה",
+                "מכות במקל/רובה",
                 "עבודת ידיים",
                 "hands_stick_rifle",
                 "hands_all",
@@ -5266,7 +5266,7 @@ object ExerciseIdentityRegistry {
             hebrewTitle = "מכות במקל קצר - מכת מקל למרפק",
             topicKeys = setOf(
                 "מכות במקל קצר",
-                "מכות במקל / רובה",
+                "מכות במקל/רובה",
                 "עבודת ידיים",
                 "hands_stick_rifle",
                 "hands_all",
@@ -5281,7 +5281,7 @@ object ExerciseIdentityRegistry {
             hebrewTitle = "מכות במקל קצר - מכת מקל לשורש כף היד",
             topicKeys = setOf(
                 "מכות במקל קצר",
-                "מכות במקל / רובה",
+                "מכות במקל/רובה",
                 "עבודת ידיים",
                 "hands_stick_rifle",
                 "hands_all",
@@ -5296,7 +5296,7 @@ object ExerciseIdentityRegistry {
             hebrewTitle = "מכות במקל קצר - מכת מקל לפרקי האצבעות",
             topicKeys = setOf(
                 "מכות במקל קצר",
-                "מכות במקל / רובה",
+                "מכות במקל/רובה",
                 "עבודת ידיים",
                 "hands_stick_rifle",
                 "hands_all",
@@ -5311,7 +5311,7 @@ object ExerciseIdentityRegistry {
             hebrewTitle = "מכות במקל קצר - מכת מקל לברך",
             topicKeys = setOf(
                 "מכות במקל קצר",
-                "מכות במקל / רובה",
+                "מכות במקל/רובה",
                 "עבודת ידיים",
                 "hands_stick_rifle",
                 "hands_all",
@@ -5323,16 +5323,16 @@ object ExerciseIdentityRegistry {
         ExerciseIdentity(
             id = "ex_363",
             belt = Belt.BLACK,
-            hebrewTitle = "מכות במקל קצר - מכת מקל למפסעה",
+            hebrewTitle = "מכות במקל קצר - מכת מקל למפשעה",
             topicKeys = setOf(
                 "מכות במקל קצר",
-                "מכות במקל / רובה",
+                "מכות במקל/רובה",
                 "עבודת ידיים",
                 "hands_stick_rifle",
                 "hands_all",
                 "topic_hands"
             ),
-            aliases = setOf("מכת מקל למפסעה")
+            aliases = setOf("מכת מקל למפשעה")
         ),
 
         ExerciseIdentity(
@@ -5341,7 +5341,7 @@ object ExerciseIdentityRegistry {
             hebrewTitle = "מכות במקל קצר - הצלפת מקל לצלעות",
             topicKeys = setOf(
                 "מכות במקל קצר",
-                "מכות במקל / רובה",
+                "מכות במקל/רובה",
                 "עבודת ידיים",
                 "hands_stick_rifle",
                 "hands_all",
@@ -5356,7 +5356,7 @@ object ExerciseIdentityRegistry {
             hebrewTitle = "מכות במקל קצר - דקירת מקל חיצונית לצלעות",
             topicKeys = setOf(
                 "מכות במקל קצר",
-                "מכות במקל / רובה",
+                "מכות במקל/רובה",
                 "עבודת ידיים",
                 "hands_stick_rifle",
                 "hands_all",
@@ -5371,7 +5371,7 @@ object ExerciseIdentityRegistry {
             hebrewTitle = "מכות במקל קצר - דקירת מקל ישרה לבטן / לגרון",
             topicKeys = setOf(
                 "מכות במקל קצר",
-                "מכות במקל / רובה",
+                "מכות במקל/רובה",
                 "עבודת ידיים",
                 "hands_stick_rifle",
                 "hands_all",
@@ -5386,7 +5386,7 @@ object ExerciseIdentityRegistry {
             hebrewTitle = "מכות במקל קצר - דקירת מקל הפוכה",
             topicKeys = setOf(
                 "מכות במקל קצר",
-                "מכות במקל / רובה",
+                "מכות במקל/רובה",
                 "עבודת ידיים",
                 "hands_stick_rifle",
                 "hands_all",
@@ -5395,14 +5395,14 @@ object ExerciseIdentityRegistry {
             aliases = setOf("דקירת מקל הפוכה")
         ),
 
-        // ===== חגורה שחורה — מכות במקל / רובה =====
+        // ===== חגורה שחורה — מכות במקל/רובה =====
 
         ExerciseIdentity(
             id = "ex_368",
             belt = Belt.BLACK,
-            hebrewTitle = "מכות במקל / רובה - התקפה עם מקל לנקודות תורפה",
+            hebrewTitle = "מכות במקל/רובה - התקפה עם מקל לנקודות תורפה",
             topicKeys = setOf(
-                "מכות במקל / רובה",
+                "מכות במקל/רובה",
                 "עבודת ידיים",
                 "hands_stick_rifle",
                 "hands_all",
@@ -5413,9 +5413,9 @@ object ExerciseIdentityRegistry {
         ExerciseIdentity(
             id = "ex_369",
             belt = Belt.BLACK,
-            hebrewTitle = "מכות במקל / רובה - מכה אופקית לצואר",
+            hebrewTitle = "מכות במקל/רובה - מכה אופקית לצואר",
             topicKeys = setOf(
-                "מכות במקל / רובה",
+                "מכות במקל/רובה",
                 "עבודת ידיים",
                 "hands_stick_rifle",
                 "hands_all",
@@ -5427,9 +5427,9 @@ object ExerciseIdentityRegistry {
         ExerciseIdentity(
             id = "ex_370",
             belt = Belt.BLACK,
-            hebrewTitle = "מכות במקל / רובה - דקירה",
+            hebrewTitle = "מכות במקל/רובה - דקירה",
             topicKeys = setOf(
-                "מכות במקל / רובה",
+                "מכות במקל/רובה",
                 "עבודת ידיים",
                 "hands_stick_rifle",
                 "hands_all",
@@ -5441,9 +5441,9 @@ object ExerciseIdentityRegistry {
         ExerciseIdentity(
             id = "ex_371",
             belt = Belt.BLACK,
-            hebrewTitle = "מכות במקל / רובה - מכת מגל",
+            hebrewTitle = "מכות במקל/רובה - מכת מגל",
             topicKeys = setOf(
-                "מכות במקל / רובה",
+                "מכות במקל/רובה",
                 "עבודת ידיים",
                 "hands_stick_rifle",
                 "hands_all",
@@ -5455,9 +5455,9 @@ object ExerciseIdentityRegistry {
         ExerciseIdentity(
             id = "ex_372",
             belt = Belt.BLACK,
-            hebrewTitle = "מכות במקל / רובה - שיסוף",
+            hebrewTitle = "מכות במקל/רובה - שיסוף",
             topicKeys = setOf(
-                "מכות במקל / רובה",
+                "מכות במקל/רובה",
                 "עבודת ידיים",
                 "hands_stick_rifle",
                 "hands_all",
@@ -5469,23 +5469,23 @@ object ExerciseIdentityRegistry {
         ExerciseIdentity(
             id = "ex_373",
             belt = Belt.BLACK,
-            hebrewTitle = "מכות במקל / רובה - מכה למפסעה",
+            hebrewTitle = "מכות במקל/רובה - מכה למפשעה",
             topicKeys = setOf(
-                "מכות במקל / רובה",
+                "מכות במקל/רובה",
                 "עבודת ידיים",
                 "hands_stick_rifle",
                 "hands_all",
                 "topic_hands"
             ),
-            aliases = setOf("מכה למפסעה")
+            aliases = setOf("מכה למפשעה")
         ),
 
         ExerciseIdentity(
             id = "ex_374",
             belt = Belt.BLACK,
-            hebrewTitle = "מכות במקל / רובה - מכת סנוקרת",
+            hebrewTitle = "מכות במקל/רובה - מכת סנוקרת",
             topicKeys = setOf(
-                "מכות במקל / רובה",
+                "מכות במקל/רובה",
                 "עבודת ידיים",
                 "hands_stick_rifle",
                 "hands_all",
@@ -5497,9 +5497,9 @@ object ExerciseIdentityRegistry {
         ExerciseIdentity(
             id = "ex_375",
             belt = Belt.BLACK,
-            hebrewTitle = "מכות במקל / רובה - מכה לצד",
+            hebrewTitle = "מכות במקל/רובה - מכה לצד",
             topicKeys = setOf(
-                "מכות במקל / רובה",
+                "מכות במקל/רובה",
                 "עבודת ידיים",
                 "hands_stick_rifle",
                 "hands_all",
@@ -5511,9 +5511,9 @@ object ExerciseIdentityRegistry {
         ExerciseIdentity(
             id = "ex_376",
             belt = Belt.BLACK,
-            hebrewTitle = "מכות במקל / רובה - מכה לאחור",
+            hebrewTitle = "מכות במקל/רובה - מכה לאחור",
             topicKeys = setOf(
-                "מכות במקל / רובה",
+                "מכות במקל/רובה",
                 "עבודת ידיים",
                 "hands_stick_rifle",
                 "hands_all",
@@ -5525,9 +5525,9 @@ object ExerciseIdentityRegistry {
         ExerciseIdentity(
             id = "ex_377",
             belt = Belt.BLACK,
-            hebrewTitle = "מכות במקל / רובה - מכה אופקית לאחור",
+            hebrewTitle = "מכות במקל/רובה - מכה אופקית לאחור",
             topicKeys = setOf(
-                "מכות במקל / רובה",
+                "מכות במקל/רובה",
                 "עבודת ידיים",
                 "hands_stick_rifle",
                 "hands_all",
@@ -5539,23 +5539,23 @@ object ExerciseIdentityRegistry {
         ExerciseIdentity(
             id = "ex_378",
             belt = Belt.BLACK,
-            hebrewTitle = "מכות במקל / רובה - מכה אופקית ובעיטה רגילה למפסעה",
+            hebrewTitle = "מכות במקל/רובה - מכה אופקית ובעיטה רגילה למפשעה",
             topicKeys = setOf(
-                "מכות במקל / רובה",
+                "מכות במקל/רובה",
                 "עבודת ידיים",
                 "hands_stick_rifle",
                 "hands_all",
                 "topic_hands"
             ),
-            aliases = setOf("מכה אופקית ובעיטה רגילה למפסעה")
+            aliases = setOf("מכה אופקית ובעיטה רגילה למפשעה")
         ),
 
         ExerciseIdentity(
             id = "ex_379",
             belt = Belt.BLACK,
-            hebrewTitle = "מכות במקל / רובה - מכה אופקית ובעיטת הגנה לפנים",
+            hebrewTitle = "מכות במקל/רובה - מכה אופקית ובעיטת הגנה לפנים",
             topicKeys = setOf(
-                "מכות במקל / רובה",
+                "מכות במקל/רובה",
                 "עבודת ידיים",
                 "hands_stick_rifle",
                 "hands_all",
@@ -5567,9 +5567,9 @@ object ExerciseIdentityRegistry {
         ExerciseIdentity(
             id = "ex_380",
             belt = Belt.BLACK,
-            hebrewTitle = "מכות במקל / רובה - מכה לצד ובעיטה לצד",
+            hebrewTitle = "מכות במקל/רובה - מכה לצד ובעיטה לצד",
             topicKeys = setOf(
-                "מכות במקל / רובה",
+                "מכות במקל/רובה",
                 "עבודת ידיים",
                 "hands_stick_rifle",
                 "hands_all",

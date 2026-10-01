@@ -142,7 +142,7 @@ private fun handsSectionIdFor(raw: String): String? {
     return when (t) {
         "מכות יד" -> "hands_strikes"
         "מכות מרפק" -> "hands_elbows"
-        "מכות במקל / רובה" -> "hands_stick_rifle"
+        "מכות במקל/רובה" -> "hands_stick_rifle"
         else -> null
     }
 }
@@ -167,7 +167,7 @@ private fun subTopicTitleForUi(title: String, isEnglish: Boolean): String {
     return when (clean) {
         "מכות יד" -> "Hand Strikes"
         "מכות מרפק" -> "Elbow Strikes"
-        "מכות במקל / רובה" -> "Stick / Rifle Strikes"
+        "מכות במקל/רובה" -> "Stick / Rifle Strikes"
 
         "שחרור מתפיסות ידיים / שיער / חולצה" ->
             "Releases from Hand / Hair / Shirt Grabs"
@@ -1447,6 +1447,12 @@ private fun subjectImageFor(subjectId: String): Int? =
         "hands_strikes" ->
             R.drawable.topic_hand_strikes
 
+        "hands_elbows" ->
+            R.drawable.topic_elbow_strikes
+
+        "hands_stick_rifle" ->
+            R.drawable.topic_stick_rifle_strikes
+
         // בלימות וגלגולים
         "rolls_breakfalls",
         "topic_breakfalls_rolls" -> R.drawable.topic_forward_roll
@@ -1542,8 +1548,8 @@ private fun InlineSubTopicsExpansionCard(
                 "Elbow Strikes" ->
                     counts["מכות מרפק"] ?: 0
 
-                "Stick / Rifle Strikes" ->
-                    counts["מכות במקל / רובה"] ?: 0
+                "Stick/Rifle Strikes" ->
+                    counts["מכות במקל/רובה"] ?: 0
 
                 else -> 0
             }

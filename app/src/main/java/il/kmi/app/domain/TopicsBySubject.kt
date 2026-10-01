@@ -92,16 +92,16 @@ object TopicsBySubjectRegistry {
         // ================== מכות במקל / רובה ==================
         SubjectTopic(
             id = "hands_stick_rifle",
-            titleHeb = "מכות במקל / רובה",
+            titleHeb = "מכות במקל/רובה",
             description = "מכות במקל וברובה",
             belts = listOf(
                 Belt.GREEN,
                 Belt.BLACK
             ),
             topicsByBelt = mapOf(
-                Belt.GREEN to listOf("מכות במקל / רובה"),
+                Belt.GREEN to listOf("מכות במקל/רובה"),
                 Belt.BLACK to listOf(
-                    "מכות במקל / רובה",
+                    "מכות במקל/רובה",
                     "מכות במקל קצר"
                 )
             )

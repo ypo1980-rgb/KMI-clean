@@ -2274,9 +2274,15 @@ private fun TopicsCardForBelt(
                             Spacer(Modifier.height(8.dp))
 
                             /*
-                             * אזור נגלל: גם הערה ארוכה לא תחרוג
-                             * מגובה המסך ולא תסתיר את כפתור הסגירה.
-                             */
+          * אזור נגלל: גם הערה ארוכה לא תחרוג
+          * מגובה המסך ולא תסתיר את כפתור הסגירה.
+          *
+          * פס גלילה עדין מוצג בצד האזור כאשר
+          * תוכן ההערה ארוך יותר מהשטח הזמין.
+          */
+                            val generalNoteScrollState =
+                                rememberScrollState()
+
                             Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -2291,29 +2297,95 @@ private fun TopicsCardForBelt(
                                             MaterialTheme.colorScheme.outlineVariant,
                                         shape = RoundedCornerShape(18.dp)
                                     )
-                                    .verticalScroll(
-                                        rememberScrollState()
-                                    )
-                                    .padding(
-                                        horizontal = 16.dp,
-                                        vertical = 14.dp
-                                    )
                             ) {
-                                Text(
-                                    text = visibleGeneralNote,
-                                    /*
-                                     * secondary קטן יותר מ־body,
-                                     * ועדיין מותאם להגדרת גודל הכתב הגלובלית.
-                                     */
-                                    style = KmiTypography.secondary.copy(
-                                        fontWeight = FontWeight.Medium
-                                    ),
-                                    color = noteBodyColor,
-                                    textAlign =
-                                        TextAlign.Start,
-                                    modifier =
-                                        Modifier.fillMaxWidth()
-                                )
+
+                                BoxWithConstraints(
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Column(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .verticalScroll(
+                                                generalNoteScrollState
+                                            )
+                                            .padding(
+                                                start = 16.dp,
+                                                top = 14.dp,
+                                                end = 24.dp,
+                                                bottom = 14.dp
+                                            )
+                                    ) {
+                                        Text(
+                                            text = visibleGeneralNote,
+                                            style = KmiTypography.secondary.copy(
+                                                fontWeight = FontWeight.Medium
+                                            ),
+                                            color = noteBodyColor,
+                                            textAlign = TextAlign.Start,
+                                            modifier = Modifier.fillMaxWidth()
+                                        )
+                                    }
+
+                                    if (generalNoteScrollState.maxValue > 0) {
+
+                                        val thumbHeight = 52.dp
+
+                                        val availableThumbTravel =
+                                            (maxHeight - thumbHeight)
+                                                .coerceAtLeast(0.dp)
+
+                                        val scrollProgress =
+                                            generalNoteScrollState.value.toFloat() /
+                                                    generalNoteScrollState.maxValue
+                                                        .toFloat()
+
+                                        val thumbOffset =
+                                            availableThumbTravel *
+                                                    scrollProgress
+
+                                        Box(
+                                            modifier = Modifier
+                                                .align(Alignment.CenterEnd)
+                                                .padding(
+                                                    end = 6.dp,
+                                                    top = 8.dp,
+                                                    bottom = 8.dp
+                                                )
+                                                .width(3.dp)
+                                                .fillMaxHeight()
+                                                .background(
+                                                    color =
+                                                        MaterialTheme.colorScheme
+                                                            .onSurface
+                                                            .copy(alpha = 0.10f),
+                                                    shape =
+                                                        RoundedCornerShape(999.dp)
+                                                )
+                                        )
+
+                                        Box(
+                                            modifier = Modifier
+                                                .align(Alignment.TopEnd)
+                                                .padding(
+                                                    end = 6.dp,
+                                                    top = 8.dp
+                                                )
+                                                .offset(
+                                                    y = thumbOffset
+                                                )
+                                                .width(3.dp)
+                                                .height(thumbHeight)
+                                                .background(
+                                                    color =
+                                                        MaterialTheme.colorScheme
+                                                            .primary
+                                                            .copy(alpha = 0.55f),
+                                                    shape =
+                                                        RoundedCornerShape(999.dp)
+                                                )
+                                        )
+                                    }
+                                }
                             }
 
                             Spacer(Modifier.height(10.dp))

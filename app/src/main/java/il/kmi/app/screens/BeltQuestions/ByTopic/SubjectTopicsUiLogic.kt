@@ -203,7 +203,7 @@ internal fun HandsPickModeDialogModern(
         return when (pick.trim()) {
             "Hand Strikes" -> counts["מכות יד"] ?: 0
             "Elbow Strikes" -> counts["מכות מרפק"] ?: 0
-            "Stick / Rifle Strikes" -> counts["מכות במקל / רובה"] ?: 0
+            "Stick/Rifle Strikes" -> counts["מכות במקל/רובה"] ?: 0
             else -> 0
         }
     }

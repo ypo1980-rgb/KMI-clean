@@ -381,7 +381,7 @@ private fun exerciseTitleForUi(
         "מכות במקל קצר - מכת מקל לברך" ->
             "Short Stick Strike - Strike to the Knee"
 
-        "מכות במקל קצר - מכת מקל למפסעה" ->
+        "מכות במקל קצר - מכת מקל למפשעה" ->
             "Short Stick Strike - Strike to the Groin"
 
         "מכות במקל קצר - הצלפת מקל לצלעות" ->
@@ -411,7 +411,7 @@ private fun exerciseTitleForUi(
         "מכות במקל / רובה - שיסוף" ->
             "Stick / Rifle Strike - Slashing Strike"
 
-        "מכות במקל / רובה - מכה למפסעה" ->
+        "מכות במקל / רובה - מכה למפשעה" ->
             "Stick / Rifle Strike - Strike to the Groin"
 
         "מכות במקל / רובה - מכת סנוקרת" ->
@@ -426,7 +426,7 @@ private fun exerciseTitleForUi(
         "מכות במקל / רובה - מכה אופקית לאחור" ->
             "Stick / Rifle Strike - Horizontal Backward Strike"
 
-        "מכות במקל / רובה - מכה אופקית ובעיטה רגילה למפסעה" ->
+        "מכות במקל / רובה - מכה אופקית ובעיטה רגילה למפשעה" ->
             "Stick / Rifle Strike - Horizontal Strike and Regular Kick to the Groin"
 
         "מכות במקל / רובה - מכה אופקית ובעיטת הגנה לפנים" ->
@@ -713,7 +713,7 @@ private fun greenDefenseNestedGroups(): List<UiNestedSubTopicGroup> {
                         "הגנה נגד דקירה מזרחית - בעיטה",
                         "הגנה נגד דקירה ישרה מלפנים - בעיטה",
                         "הגנה נגד דקירה ישרה נמוכה - בעיטה",
-                        "הגנה נגד דקירה ישרה מלפנים - הגנת גוף ובעיטת מגל למפסעה",
+                        "הגנה נגד דקירה ישרה מלפנים - הגנת גוף ובעיטת מגל למפשעה",
                         "הגנה נגד דקירה רגילה מהצד - בעיטה",
                         "הגנה נגד דקירה ישרה - בעיטה",
                         "הגנה נגד דקירה מזרחית מהצד - בעיטה"

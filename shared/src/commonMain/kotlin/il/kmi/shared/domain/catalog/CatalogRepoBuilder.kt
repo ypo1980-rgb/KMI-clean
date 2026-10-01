@@ -121,7 +121,7 @@ object CatalogRepoBuilder {
             items = listOf("מכת מרפק נגד קבוצה")
         ),
         CatalogTopic(
-            title = "מכות במקל / רובה",
+            title = "מכות במקל/רובה",
             items = HardSectionsCatalog.subjectItemsFor(
                 subjectId = "topic_stick_rifle_strikes",
                 belt = Belt.GREEN
@@ -186,7 +186,7 @@ object CatalogRepoBuilder {
             )
         ),
         CatalogTopic(
-            title = "מכות במקל / רובה",
+            title = "מכות במקל/רובה",
             items = HardSectionsCatalog.subjectItemsFor(
                 subjectId = "topic_stick_rifle_strikes",
                 belt = Belt.BLACK

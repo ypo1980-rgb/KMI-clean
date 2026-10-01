@@ -154,13 +154,13 @@ object ExerciseExplanationsEn {
 
             // ─────────── Kicks ───────────
 
-            "בעיטה רגילה למפסעה" ->
+            "בעיטה רגילה למפשעה" ->
                 "Raise your knee forward and snap your lower leg forward, impacting with the ball of your foot. There are two positions for the foot of the base leg."
 
             "בעיטה רגילה לסנטר" ->
                 "Raise your knee as high as possible forward and snap your lower leg forward, impacting with the ball of your foot. There are two positions for the foot of the base leg."
 
-            "בעיטת ברך נמוכה למפסעה" ->
+            "בעיטת ברך נמוכה למפשעה" ->
                 "Grab with both hands the attacker's opposite shoulder, and pull the attacker down while raising your knee to hit the groin."
 
             "בעיטת ברך גבוהה" ->
@@ -209,7 +209,7 @@ object ExerciseExplanationsEn {
             "הגנה פנימית נגד שמאל בכף יד ימין" ->
                 "From an internal defence stance, deflect the punch with your right palm while moving your head to the right, and punch forward with your left."
 
-            "הגנה פנימית נגד בעיטה רגילה למפסעה" ->
+            "הגנה פנימית נגד בעיטה רגילה למפשעה" ->
                 "From a neutral stance, deflect the attacker's knee away from your body with your left palm while guarding your face with your right hand. Step with your left foot toward the attacker's Blind Side and rotate your body while grabbing and blocking his right leg."
 
             // ─────────── Releases From Hand Grabs ───────────
@@ -806,13 +806,13 @@ object ExerciseExplanationsEn {
             "הגנה נגד דקירה ישרה - בעיטה" ->
                 "From the neutral stance, lean backward while raising your hands to guard the face. Kick to the attacker's rib/armpit area."
 
-            "הגנה נגד דקירה ישרה מלפנים - הגנת גוף ובעיטת מגל למפסעה" ->
+            "הגנה נגד דקירה ישרה מלפנים - הגנת גוף ובעיטת מגל למפשעה" ->
                 "From a neutral stance, step diagonally to the attacker's Blind Side. Lean to the side while guarding your face and perform a Magal (Circular) kick to the attacker's groin with your right leg. With your right hand, grab the attacker's stabbing arm."
 
             "הגנה נגד דקירה ישרה מלפנים - הגנת גוף ובעיטת מגל למפשעה" ->
                 "From a neutral stance, step diagonally to the attacker's Blind Side. Lean to the side while guarding your face and perform a Magal (Circular) kick to the attacker's groin with your right leg. With your right hand, grab the attacker's stabbing arm."
 
-            "הגנה נגד דקירה ישרה מלפנים - הגנת גוף ובעיטת מגל למפסעה",
+            "הגנה נגד דקירה ישרה מלפנים - הגנת גוף ובעיטת מגל למפשעה",
             "הגנה נגד דקירה ישרה מלפנים - הגנת גוף ובעיטת מגל למפשעה" ->
                 "From a neutral stance, step diagonally to the attacker's Blind Side. Lean to the side while guarding your face and perform a Magal (Circular) kick to the attacker's groin with your right leg. With your right hand, grab the attacker's stabbing arm."
 
@@ -1458,7 +1458,7 @@ object ExerciseExplanationsEn {
             "מכת מקל לברך" ->
                 "Stick Strike to the Knee."
 
-            "מכת מקל למפסעה" ->
+            "מכת מקל למפשעה" ->
                 "Stick Strike to the Groin."
 
             "הצלפת מקל לצלעות" ->
@@ -1487,7 +1487,7 @@ object ExerciseExplanationsEn {
             "שיסוף" ->
                 "From a regular stance, slash with the bayonet or the front side of the stick while rotating the left heel."
 
-            "מכה למפסעה",
+            "מכה למפשעה",
             "מכה למפשעה" ->
                 "From a regular stance, strike to the groin with the butt of the weapon or the rear of the stick, rotate right heel and hip."
 
@@ -1503,7 +1503,7 @@ object ExerciseExplanationsEn {
             "מכה אופקית לאחור" ->
                 "From a regular stance, strike horizontally backward with the butt of the weapon or the rear of the stick while rotating the left heel."
 
-            "מכה אופקית ובעיטה רגילה למפסעה",
+            "מכה אופקית ובעיטה רגילה למפשעה",
             "מכה אופקית ובעיטה למפשעה" ->
                 "From a regular stance, perform a front horizontal strike and a regular kick to the groin with the rear leg."
 
