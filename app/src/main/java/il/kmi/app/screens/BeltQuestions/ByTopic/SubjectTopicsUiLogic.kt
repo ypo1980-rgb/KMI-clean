@@ -1513,6 +1513,7 @@ internal object SubjectTopicsUiLogic {
 
             "שחרור מחניקות" -> "releases_chokes"
             "שחרור מחביקות" -> "releases_hugs"
+            "שחרור מתפיסת נלסון" -> "releases_nelson"
             "חביקות גוף" -> "releases_hugs_body"
             "חביקות צואר" -> "releases_hugs_neck"
             "חביקות זרוע" -> "releases_hugs_arm"

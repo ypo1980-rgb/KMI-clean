@@ -87,10 +87,6 @@ import il.kmi.app.ui.ext.lightColor
 import il.kmi.app.screens.BeltQuestions.Materials.CoachMaterialProgress
 import il.kmi.app.screens.BeltQuestions.Materials.CoachMaterialStatus
 import il.kmi.app.screens.BeltQuestions.Materials.CoachMaterialStatusSelector
-import il.kmi.app.screens.BeltQuestions.Materials.ItemFloatingActions
-import il.kmi.app.screens.BeltQuestions.Materials.MaterialsExerciseStatusCard
-import il.kmi.app.screens.BeltQuestions.Materials.TraineeMaterialStatus
-import il.kmi.app.screens.BeltQuestions.Materials.TraineeMaterialStatusSelector
 import il.kmi.app.favorites.FavoritesStore
 import il.kmi.app.ui.KmiTopBar
 import il.kmi.app.ui.KmiTypography
@@ -102,6 +98,7 @@ import il.kmi.shared.domain.Belt
 import il.yuval.ui.theme.kmiScreenBackgroundBrush
 import il.kmi.shared.domain.content.ExerciseIdentityRegistry
 import il.kmi.shared.domain.content.ExerciseTitlesEn
+import il.kmi.shared.domain.content.HardSectionsCatalog
 import il.kmi.shared.domain.content.HardSectionsResolver
 import il.kmi.shared.localization.AppLanguage
 import il.kmi.shared.localization.LocalizationRuntime
@@ -718,20 +715,81 @@ fun UnifiedSubjectExercisesScreen(
     val resolverSubjectId = remember(subjectId) {
         when (subjectId.trim()) {
             "kicks" -> "kicks_hard"
+
+            // פתיחת כל הנושא כרשימת תרגילים מלאה לפי חגורות
+            "releases_all" -> "releases"
+            "defenses_root_all" -> "defenses_root"
+            "hands_all_full" -> "hands_all"
+
             else -> subjectId
         }
     }
 
-    val result = remember(resolverSubjectId, sectionId) {
-        HardSubjectResolverMemoryCache.resolve(
-            subjectId = resolverSubjectId,
-            sectionId = sectionId
-        )
+    val result = remember(
+        subjectId,
+        resolverSubjectId,
+        sectionId
+    ) {
+        if (subjectId.trim() == "hands_all_full") {
+            HardSectionsResolver.resolve(
+                subjectId = "hands_all",
+                sectionId = sectionId
+            )
+        } else {
+            HardSubjectResolverMemoryCache.resolve(
+                subjectId = resolverSubjectId,
+                sectionId = sectionId
+            )
+        }
     }
 
     val combinedDefenseGroups = remember(resolverSubjectId) {
         combinedDefenseGroupsFor(resolverSubjectId)
     }
+
+    val fullTopicGroups =
+        remember(
+            subjectId,
+            resolverSubjectId,
+            result
+        ) {
+            when (subjectId.trim()) {
+
+                "hands_all_full" -> {
+                    listOf(
+                        Belt.YELLOW,
+                        Belt.ORANGE,
+                        Belt.GREEN,
+                        Belt.BLUE,
+                        Belt.BROWN,
+                        Belt.BLACK
+                    ).mapNotNull { belt ->
+
+                        val items =
+                            HardSectionsCatalog
+                                .subjectItemsFor(
+                                    subjectId = "hands_all",
+                                    belt = belt
+                                )
+                                .map { it.trim() }
+                                .filter { it.isNotBlank() }
+                                .distinct()
+
+                        if (items.isEmpty()) {
+                            null
+                        } else {
+                            HardSectionsResolver.BeltItems(
+                                belt = belt,
+                                items = items
+                            )
+                        }
+                    }
+                }
+
+                else ->
+                    null
+            }
+        }
 
     val shouldShowSectionCards = sectionId == null && isRootSubjectId(subjectId)
 
@@ -865,6 +923,18 @@ fun UnifiedSubjectExercisesScreen(
                     brush = kmiScreenBackgroundBrush()
                 )
         ) {
+            if (subjectId == "hands_all_full") {
+                BeltGroupsContent(
+                    title = subjectRootTitle(subjectId),
+                    groups = fullTopicGroups.orEmpty(),
+                    isEnglish = isEnglish,
+                    isCoach = resolvedIsCoach,
+                    vm = vm,
+                    modifier = Modifier.fillMaxSize()
+                )
+
+                return@Box
+            }
             if (
                 combinedDefenseGroups != null &&
                 result is HardSectionsResolver.NodeResult.Sections
@@ -964,7 +1034,13 @@ private fun resultTitle(
 
 private fun subjectRootTitle(subjectId: String): String =
     when (subjectId) {
-        "releases" -> "שחרורים"
+        "releases",
+        "releases_all" -> "שחרורים"
+
+        "defenses_root_all" -> "הגנות"
+
+        "hands_all_full" -> "עבודת ידיים"
+
         "releases_hugs" -> "שחרור מחביקות"
         "def_internal" -> "הגנות פנימיות"
         "def_external" -> "הגנות חיצוניות"
@@ -973,6 +1049,7 @@ private fun subjectRootTitle(subjectId: String): String =
         "stick_defense" -> "הגנות נגד מקל"
         "kicks" -> "הגנות נגד בעיטות"
         "kicks_hard" -> "הגנות נגד בעיטות"
+
         else -> "נושאים"
     }
 
@@ -1662,35 +1739,20 @@ private fun SectionsContent(
             modifier.fillMaxSize()
     ) {
 
-        SectionsBeltHeader(
-            belt =
-                currentStickyBelt,
-            totalCount =
-                currentExercises.size,
-            isCoach =
-                isCoach,
-            taughtCount =
-                taughtCount,
-            practicedCount =
-                practicedCount,
-            reinforcementCount =
-                reinforcementCount,
-            coachUnmarkedCount =
-                coachUnmarkedCount,
-            knownCount =
-                knownCount,
-            unknownCount =
-                unknownCount,
-            favoriteCount =
-                favoriteCount,
-            unmarkedCount =
-                unmarkedCount,
-            isDarkMode =
-                isDarkMode,
-            isEnglish =
-                isEnglish,
-            showStats =
-                true
+        HardBeltStickyHeader(
+            belt = currentStickyBelt,
+            count = currentExercises.size,
+            isCoach = isCoach,
+            taughtCount = taughtCount,
+            practicedCount = practicedCount,
+            reinforcementCount = reinforcementCount,
+            coachUnmarkedCount = coachUnmarkedCount,
+            knownCount = knownCount,
+            unknownCount = unknownCount,
+            favoriteCount = favoriteCount,
+            unmarkedCount = unmarkedCount,
+            isEnglish = isEnglish,
+            modifier = Modifier.fillMaxWidth()
         )
 
         LazyColumn(
@@ -1749,13 +1811,10 @@ private fun SectionsContent(
                                         row.belt
                             }
 
-                    SectionsBeltHeader(
-                        belt =
-                            row.belt,
-                        totalCount =
-                            beltExercises.size,
-                        isCoach =
-                            isCoach,
+                    HardBeltStickyHeader(
+                        belt = row.belt,
+                        count = beltExercises.size,
+                        isCoach = isCoach,
                         taughtCount = 0,
                         practicedCount = 0,
                         reinforcementCount = 0,
@@ -1764,12 +1823,8 @@ private fun SectionsContent(
                         unknownCount = 0,
                         favoriteCount = 0,
                         unmarkedCount = 0,
-                        isDarkMode =
-                            isDarkMode,
-                        isEnglish =
-                            isEnglish,
-                        showStats =
-                            false
+                        isEnglish = isEnglish,
+                        modifier = Modifier.fillMaxWidth()
                     )
                 }
 
@@ -1816,320 +1871,61 @@ private fun SectionsBeltHeader(
     showStats: Boolean,
     modifier: Modifier = Modifier
 ) {
-    val beltContentColor =
-        if (
-            isDarkMode &&
-            belt == Belt.BLACK
-        ) {
-            Color.White.copy(
-                alpha = 0.94f
-            )
-        } else {
-            belt.color
-        }
-
-    Column(
-        modifier =
-            modifier.fillMaxWidth()
-    ) {
-
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(
-                    color =
-                        if (isDarkMode) {
-                            MaterialTheme
-                                .colorScheme
-                                .surface
-                        } else {
-                            belt.lightColor
-                        }
-                )
-                .border(
-                    width = 1.dp,
-                    color =
-                        beltContentColor
-                            .copy(
-                                alpha = 0.72f
-                            )
-                )
-                .padding(
-                    vertical = 4.dp
-                ),
-            contentAlignment =
-                Alignment.Center
-        ) {
-            CompositionLocalProvider(
-                LocalLayoutDirection provides
-                        if (isEnglish) {
-                            LayoutDirection.Ltr
-                        } else {
-                            LayoutDirection.Rtl
-                        }
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .heightIn(
-                            min = 52.dp
-                        )
-                        .padding(
-                            horizontal = 16.dp,
-                            vertical = 4.dp
-                        ),
-                    verticalAlignment =
-                        Alignment.CenterVertically
-                ) {
-                    Text(
-                        text =
-                            beltTitle(
-                                belt,
-                                isEnglish
-                            ),
-                        style =
-                            KmiTypography
-                                .screenTitle
-                                .copy(
-                                    fontWeight =
-                                        FontWeight
-                                            .ExtraBold
-                                ),
-                        color =
-                            beltContentColor,
-                        modifier =
-                            Modifier.weight(1f),
-                        textAlign =
-                            if (isEnglish) {
-                                TextAlign.Start
-                            } else {
-                                TextAlign.Right
-                            },
-                        maxLines = 1,
-                        overflow =
-                            TextOverflow.Ellipsis
-                    )
-
-                    Text(
-                        text =
-                            if (isEnglish) {
-                                if (
-                                    totalCount == 1
-                                ) {
-                                    "1 exercise"
-                                } else {
-                                    "$totalCount exercises"
-                                }
-                            } else {
-                                "$totalCount תרגילים"
-                            },
-                        style =
-                            KmiTypography
-                                .caption
-                                .copy(
-                                    fontWeight =
-                                        FontWeight.Bold
-                                ),
-                        color =
-                            beltContentColor,
-                        maxLines = 1
-                    )
-                }
-            }
-        }
-
-        if (showStats) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(
-                        MaterialTheme
-                            .colorScheme
-                            .surfaceVariant
-                            .copy(
-                                alpha = 0.55f
-                            )
-                    )
-                    .padding(
-                        start = 6.dp,
-                        top = 3.dp,
-                        end = 6.dp,
-                        bottom = 0.dp
-                    )
-            ) {
-                Row(
-                    modifier =
-                        Modifier.fillMaxWidth(),
-                    horizontalArrangement =
-                        Arrangement.spacedBy(
-                            7.dp
-                        ),
-                    verticalAlignment =
-                        Alignment.CenterVertically
-                ) {
-                    if (isCoach) {
-
-                        HardTopStatChip(
-                            value =
-                                taughtCount.toString(),
-                            label =
-                                if (isEnglish) {
-                                    "Taught"
-                                } else {
-                                    "נלמד"
-                                },
-                            containerColor =
-                                Color(0xFFDFF7E9),
-                            contentColor =
-                                Color(0xFF16A36A),
-                            modifier =
-                                Modifier.weight(1f)
-                        )
-
-                        HardTopStatChip(
-                            value =
-                                practicedCount
-                                    .toString(),
-                            label =
-                                if (isEnglish) {
-                                    "Practiced"
-                                } else {
-                                    "תורגל"
-                                },
-                            containerColor =
-                                MaterialTheme
-                                    .colorScheme
-                                    .primaryContainer,
-                            contentColor =
-                                MaterialTheme
-                                    .colorScheme
-                                    .primary,
-                            modifier =
-                                Modifier.weight(1f)
-                        )
-
-                        HardTopStatChip(
-                            value =
-                                reinforcementCount
-                                    .toString(),
-                            label =
-                                if (isEnglish) {
-                                    "Reinforce"
-                                } else {
-                                    "לחיזוק"
-                                },
-                            containerColor =
-                                Color(0xFFFFF1D6),
-                            contentColor =
-                                Color(0xFFF59E0B),
-                            modifier =
-                                Modifier.weight(1f)
-                        )
-
-                        HardTopStatChip(
-                            value =
-                                coachUnmarkedCount
-                                    .toString(),
-                            label =
-                                if (isEnglish) {
-                                    "Unmarked"
-                                } else {
-                                    "לא סומן"
-                                },
-                            containerColor =
-                                Color(0xFFE7EDF5),
-                            contentColor =
-                                Color(0xFF64748B),
-                            modifier =
-                                Modifier.weight(1f)
-                        )
-
-                    } else {
-
-                        HardTopStatChip(
-                            value =
-                                knownCount.toString(),
-                            label =
-                                if (isEnglish) {
-                                    "Known"
-                                } else {
-                                    "יודע"
-                                },
-                            containerColor =
-                                Color(0xFFDFF7E9),
-                            contentColor =
-                                Color(0xFF16A36A),
-                            modifier =
-                                Modifier.weight(1f)
-                        )
-
-                        HardTopStatChip(
-                            value =
-                                unknownCount.toString(),
-                            label =
-                                if (isEnglish) {
-                                    "Unknown"
-                                } else {
-                                    "לא יודע"
-                                },
-                            containerColor =
-                                Color(0xFFFFE3E3),
-                            contentColor =
-                                Color(0xFFEF4444),
-                            modifier =
-                                Modifier.weight(1f)
-                        )
-
-                        HardTopStatChip(
-                            value =
-                                favoriteCount.toString(),
-                            label =
-                                if (isEnglish) {
-                                    "Favorites"
-                                } else {
-                                    "מועדפים"
-                                },
-                            containerColor =
-                                Color(0xFFFFF4CC),
-                            contentColor =
-                                Color(0xFFE0A000),
-                            modifier =
-                                Modifier.weight(1f)
-                        )
-
-                        HardTopStatChip(
-                            value =
-                                unmarkedCount.toString(),
-                            label =
-                                if (isEnglish) {
-                                    "Unmarked"
-                                } else {
-                                    "לא סומן"
-                                },
-                            containerColor =
-                                Color(0xFFE7EDF5),
-                            contentColor =
-                                Color(0xFF64748B),
-                            modifier =
-                                Modifier.weight(1f)
-                        )
-                    }
-                }
-            }
-
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(2.dp)
-                    .background(
-                        beltContentColor
-                            .copy(
-                                alpha = 0.75f
-                            )
-                    )
-            )
-        }
-    }
+    HardBeltStickyHeader(
+        belt = belt,
+        count = totalCount,
+        isCoach = isCoach,
+        taughtCount =
+            if (showStats) {
+                taughtCount
+            } else {
+                0
+            },
+        practicedCount =
+            if (showStats) {
+                practicedCount
+            } else {
+                0
+            },
+        reinforcementCount =
+            if (showStats) {
+                reinforcementCount
+            } else {
+                0
+            },
+        coachUnmarkedCount =
+            if (showStats) {
+                coachUnmarkedCount
+            } else {
+                0
+            },
+        knownCount =
+            if (showStats) {
+                knownCount
+            } else {
+                0
+            },
+        unknownCount =
+            if (showStats) {
+                unknownCount
+            } else {
+                0
+            },
+        favoriteCount =
+            if (showStats) {
+                favoriteCount
+            } else {
+                0
+            },
+        unmarkedCount =
+            if (showStats) {
+                unmarkedCount
+            } else {
+                0
+            },
+        isEnglish = isEnglish,
+        modifier = modifier
+    )
 }
 
 @Composable
@@ -2990,40 +2786,47 @@ private fun BeltGroupsContent(
 
     val currentGroupTaughtCount =
         currentStickyExercises.count { row ->
-            coachProgressStates[row.statusId]
-                ?.isSelected(
-                    CoachMaterialStatus.TAUGHT
-                ) == true
+            coachProgressStates[
+                row.statusId
+            ]?.isSelected(
+                CoachMaterialStatus.TAUGHT
+            ) == true
         }
 
     val currentGroupPracticedCount =
         currentStickyExercises.count { row ->
-            coachProgressStates[row.statusId]
-                ?.isSelected(
-                    CoachMaterialStatus.PRACTICED
-                ) == true
+            coachProgressStates[
+                row.statusId
+            ]?.isSelected(
+                CoachMaterialStatus.PRACTICED
+            ) == true
         }
 
     val currentGroupReinforcementCount =
         currentStickyExercises.count { row ->
-            coachProgressStates[row.statusId]
-                ?.isSelected(
-                    CoachMaterialStatus.NEEDS_REINFORCEMENT
-                ) == true
+            coachProgressStates[
+                row.statusId
+            ]?.isSelected(
+                CoachMaterialStatus.NEEDS_REINFORCEMENT
+            ) == true
         }
 
     val currentGroupCoachUnmarkedCount =
-        currentGroupTotalCount -
-                currentGroupTaughtCount -
-                currentGroupPracticedCount -
-                currentGroupReinforcementCount
+        currentStickyExercises.count { row ->
+            coachProgressStates[
+                row.statusId
+            ]
+                ?.selectedStatuses
+                .orEmpty()
+                .isEmpty()
+        }
 
     Column(
         modifier = modifier.fillMaxSize()
     ) {
-        SectionsBeltHeader(
+        HardBeltStickyHeader(
             belt = currentStickyBelt,
-            totalCount = currentGroupTotalCount,
+            count = currentGroupTotalCount,
             isCoach = isCoach,
             taughtCount = currentGroupTaughtCount,
             practicedCount = currentGroupPracticedCount,
@@ -3036,12 +2839,7 @@ private fun BeltGroupsContent(
             unknownCount = currentGroupUnknownCount,
             favoriteCount = currentGroupFavoriteCount,
             unmarkedCount = currentGroupUnmarkedCount,
-            isDarkMode =
-                MaterialTheme.colorScheme
-                    .surface
-                    .luminance() < 0.5f,
             isEnglish = isEnglish,
-            showStats = true,
             modifier = Modifier.fillMaxWidth()
         )
 
@@ -3082,45 +2880,99 @@ private fun BeltGroupsContent(
                 when (row) {
                     is HardBeltListRow.BeltHeader -> {
                         if (index != 0) {
-                            val groupCount =
-                                groups
-                                    .firstOrNull {
-                                        it.belt == row.belt
+
+                            val beltExercises =
+                                flatRows
+                                    .filterIsInstance<HardBeltListRow.Exercise>()
+                                    .filter { exercise ->
+                                        exercise.belt == row.belt
                                     }
-                                    ?.let {
-                                        hardItemsOf(it).size
-                                    }
-                                    ?: 0
+
+                            val beltTaughtCount =
+                                beltExercises.count { exercise ->
+                                    coachProgressStates[
+                                        exercise.statusId
+                                    ]?.isSelected(
+                                        CoachMaterialStatus.TAUGHT
+                                    ) == true
+                                }
+
+                            val beltPracticedCount =
+                                beltExercises.count { exercise ->
+                                    coachProgressStates[
+                                        exercise.statusId
+                                    ]?.isSelected(
+                                        CoachMaterialStatus.PRACTICED
+                                    ) == true
+                                }
+
+                            val beltReinforcementCount =
+                                beltExercises.count { exercise ->
+                                    coachProgressStates[
+                                        exercise.statusId
+                                    ]?.isSelected(
+                                        CoachMaterialStatus.NEEDS_REINFORCEMENT
+                                    ) == true
+                                }
+
+                            val beltCoachUnmarkedCount =
+                                beltExercises.count { exercise ->
+                                    coachProgressStates[
+                                        exercise.statusId
+                                    ]
+                                        ?.selectedStatuses
+                                        .orEmpty()
+                                        .isEmpty()
+                                }
+
+                            val beltKnownCount =
+                                beltExercises.count { exercise ->
+                                    hardItemStates[
+                                        exercise.statusId
+                                    ] == true
+                                }
+
+                            val beltUnknownCount =
+                                beltExercises.count { exercise ->
+                                    hardItemStates[
+                                        exercise.statusId
+                                    ] == false &&
+                                            hardPartiallyKnownStates[
+                                                exercise.statusId
+                                            ] != true
+                                }
+
+                            val beltFavoriteCount =
+                                beltExercises.count { exercise ->
+                                    exercise.statusId in favoriteIds
+                                }
+
+                            val beltUnmarkedCount =
+                                beltExercises.count { exercise ->
+                                    hardItemStates[
+                                        exercise.statusId
+                                    ] == null
+                                }
 
                             Spacer(
                                 modifier =
                                     Modifier.height(42.dp)
                             )
 
-                            SectionsBeltHeader(
+                            HardBeltStickyHeader(
                                 belt = row.belt,
-                                totalCount = groupCount,
+                                count = beltExercises.size,
                                 isCoach = isCoach,
-
-                                // בכותרת פנימית לא מציגים
-                                // שוב את כרטיסי הסטטיסטיקה.
-                                taughtCount = 0,
-                                practicedCount = 0,
-                                reinforcementCount = 0,
-                                coachUnmarkedCount = 0,
-                                knownCount = 0,
-                                unknownCount = 0,
-                                favoriteCount = 0,
-                                unmarkedCount = 0,
-
-                                isDarkMode =
-                                    MaterialTheme.colorScheme
-                                        .surface
-                                        .luminance() < 0.5f,
+                                taughtCount = beltTaughtCount,
+                                practicedCount = beltPracticedCount,
+                                reinforcementCount = beltReinforcementCount,
+                                coachUnmarkedCount = beltCoachUnmarkedCount,
+                                knownCount = beltKnownCount,
+                                unknownCount = beltUnknownCount,
+                                favoriteCount = beltFavoriteCount,
+                                unmarkedCount = beltUnmarkedCount,
                                 isEnglish = isEnglish,
-                                showStats = false,
-                                modifier =
-                                    Modifier.fillMaxWidth()
+                                modifier = Modifier.fillMaxWidth()
                             )
                         }
                     }

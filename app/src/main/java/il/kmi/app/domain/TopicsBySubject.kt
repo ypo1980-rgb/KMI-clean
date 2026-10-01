@@ -288,7 +288,7 @@ object TopicsBySubjectRegistry {
         SubjectTopic(
             id = "releases",
             titleHeb = "שחרורים",
-            description = "מתפיסות ידיים, שיער, חולצה, מחניקות ומחביקות",
+            description = "מתפיסות ידיים, שיער, חולצה, מחניקות, מחביקות ונלסון",
             belts = releasesBelts,
             topicsByBelt = releasesTopicsByBelt,
             subTopics = listOf(
@@ -296,7 +296,8 @@ object TopicsBySubjectRegistry {
                 "שחרור מתפיסות שיער",
                 "שחרור מתפיסות חולצה",
                 "שחרור מחניקות",
-                "שחרור מחביקות"
+                "שחרור מחביקות",
+                "שחרור מתפיסת נלסון"
             )
         ),
 
@@ -359,6 +360,18 @@ object TopicsBySubjectRegistry {
             excludeItemKeywords = listOf("חניק", "תפיס", "אחיז", "חולצ", "שיער")
         ),
 
+        // ✅ ילד: שחרור מתפיסת נלסון
+        SubjectTopic(
+            id = "releases_nelson",
+            parentId = "releases",
+            titleHeb = "שחרור מתפיסת נלסון",
+            description = "שחרור מתפיסת נלסון",
+            belts = listOf(Belt.BLACK),
+            topicsByBelt = mapOf(
+                Belt.BLACK to listOf("שחרורים")
+            )
+        ),
+
         // ================== אגרופים ==================
         SubjectTopic(
             id = "punches",
@@ -380,29 +393,32 @@ object TopicsBySubjectRegistry {
             )
         ),
 
-        // ================== הגנות סכין ==================
+        // ================== הגנות נגד סכין ==================
         SubjectTopic(
             id = "knife_defense",
             parentId = "defenses",
-            titleHeb = "הגנות סכין",
-            description = "עקרונות עבודה והגנות מול איום ודקירות בסכין.",
+            titleHeb = "הגנות נגד סכין",
+            description = "הגנה מאיום סכין והגנה נגד דקירה / שיסוף.",
             belts = listOf(
+                Belt.ORANGE,
                 Belt.GREEN,
                 Belt.BLUE,
                 Belt.BROWN,
                 Belt.BLACK
             ),
             topicsByBelt = mapOf(
-                // ✅ הכל יושב תחת "הגנות" (לא קיים topic בשם "הגנות סכין")
+                Belt.ORANGE to listOf("הגנות"),
                 Belt.GREEN to listOf("הגנות"),
-                Belt.BLUE  to listOf("הגנות"),
+                Belt.BLUE to listOf("הגנות"),
                 Belt.BROWN to listOf("הגנות"),
                 Belt.BLACK to listOf("הגנות")
             ),
-            // ✅ מסנן תתי־נושאים/שמות פריטים שקשורים לסכין
             subTopicHint = "סכין",
-            // ✅ מונע זליגה למקל/אקדח (ובשחור גם תמ"ק)
-            excludeItemKeywords = listOf("מקל", "אקדח", "תמ\"ק")
+            subTopics = listOf(
+                "הגנה מאיום סכין",
+                "הגנה נגד דקירה / שיסוף"
+            ),
+            excludeItemKeywords = listOf("מקל", "אקדח", "תמ\"ק", "רובה")
         ),
 
         // ================== הגנות עם רובה נגד דקירות סכין ==================

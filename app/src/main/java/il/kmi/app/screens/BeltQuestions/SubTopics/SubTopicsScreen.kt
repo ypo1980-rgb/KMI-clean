@@ -141,7 +141,7 @@ private fun hardDisplayTitleFallback(raw: String): String {
         "releases_hugs_body" -> "חביקות גוף"
         "releases_hugs_neck" -> "חביקות צואר"
         "releases_hugs_arm" -> "חביקות זרוע"
-        "knife_defense" -> "הגנות מסכין"
+        "knife_defense" -> "הגנות נגד סכין"
         "knife_rifle_defense" -> "הגנות עם רובה נגד דקירות סכין"
         "knife_defense_rifle_against_knife_stabs" -> "הגנות עם רובה נגד דקירות סכין"
         "gun_threat_defense" -> "הגנות מאיום אקדח"
@@ -504,6 +504,11 @@ private fun normalizeHardNavTopic(raw: String): String {
                 t.contains("חביקות צואר") ||
                 t.contains("חביקות זרוע") ->
             "releases_hugs"
+
+        t == "הגנות מסכין" ||
+                t == "הגנות נגד סכין" ||
+                t == "knife_defense" ->
+            "knife_defense"
 
         t == "הגנות עם רובה נגד דקירות סכין" -> "knife_rifle_defense"
         t == "הגנות נגד מספר תוקפים" -> "multiple_attackers_defense"
@@ -915,11 +920,19 @@ fun SubTopicsScreen(
 
     val hardSubSections = remember(hardRootSections, hardCurrentSection) {
         when {
-            hardCurrentSection != null && hardCurrentSection.subSections.isNotEmpty() -> {
+            hardCurrentSection != null &&
+                    hardCurrentSection.subSections.isNotEmpty() -> {
                 hardCurrentSection.subSections
             }
 
-            hardRootSections != null && hardRootSections.size > 1 -> {
+            hardRootSections != null &&
+                    hardRootSections.size == 1 &&
+                    hardRootSections.first().subSections.isNotEmpty() -> {
+                hardRootSections.first().subSections
+            }
+
+            hardRootSections != null &&
+                    hardRootSections.size > 1 -> {
                 hardRootSections
             }
 
@@ -1414,17 +1427,211 @@ fun SubTopicsScreen(
                 ) {
 
                     if (isHardFlow && hardSubSections.isNotEmpty()) {
-                        hardSubSections.forEach { section ->
-                            val beltCount = section.itemsFor(belt).size
-                            val displayCount =
-                                if (beltCount > 0) beltCount else section.totalItemsCount()
 
-                            HardSubTopicCategoryCard(
-                                belt = belt,
-                                title = if (isEnglish) ExerciseTitlesEn.getOrSame(section.title) else section.title,
-                                count = displayCount,
-                                onClick = { onOpenSubTopic(section.id) }
-                            )
+                        if (hardNavTopic == "knife_defense") {
+
+                            val accent = belt.color
+
+                            Surface(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(
+                                        start = 1.dp,
+                                        end = 1.dp,
+                                        top = 0.dp,
+                                        bottom = 10.dp
+                                    ),
+                                shape = RoundedCornerShape(16.dp),
+                                color = MaterialTheme.colorScheme.surface.copy(
+                                    alpha = 0.92f
+                                ),
+                                border = BorderStroke(
+                                    width = 1.dp,
+                                    color = accent.copy(alpha = 0.18f)
+                                ),
+                                tonalElevation = 0.dp,
+                                shadowElevation = 3.dp
+                            ) {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(
+                                            horizontal = 10.dp,
+                                            vertical = 8.dp
+                                        )
+                                ) {
+                                    hardSubSections.forEachIndexed { index, section ->
+
+                                        val displayCount =
+                                            section.totalItemsCount()
+
+                                        Row(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .clip(
+                                                    RoundedCornerShape(10.dp)
+                                                )
+                                                .clickable {
+                                                    onOpenSubTopic(
+                                                        section.id
+                                                    )
+                                                }
+                                                .padding(
+                                                    horizontal = 10.dp,
+                                                    vertical = 10.dp
+                                                ),
+                                            verticalAlignment =
+                                                Alignment.CenterVertically
+                                        ) {
+
+                                            Text(
+                                                text =
+                                                    if (isEnglish) {
+                                                        "›"
+                                                    } else {
+                                                        "‹"
+                                                    },
+                                                style =
+                                                    KmiTypography
+                                                        .screenTitle
+                                                        .copy(
+                                                            fontWeight =
+                                                                FontWeight.Bold
+                                                        ),
+                                                color = accent,
+                                                maxLines = 1
+                                            )
+
+                                            Spacer(
+                                                Modifier.width(6.dp)
+                                            )
+
+                                            Column(
+                                                modifier =
+                                                    Modifier.weight(1f),
+                                                horizontalAlignment =
+                                                    if (isEnglish) {
+                                                        Alignment.Start
+                                                    } else {
+                                                        Alignment.End
+                                                    }
+                                            ) {
+                                                Text(
+                                                    text =
+                                                        if (isEnglish) {
+                                                            ExerciseTitlesEn
+                                                                .getOrSame(
+                                                                    section.title
+                                                                )
+                                                        } else {
+                                                            section.title
+                                                        },
+                                                    style =
+                                                        KmiTypography
+                                                            .cardTitle,
+                                                    color =
+                                                        MaterialTheme
+                                                            .colorScheme
+                                                            .onSurface,
+                                                    textAlign =
+                                                        if (isEnglish) {
+                                                            TextAlign.Left
+                                                        } else {
+                                                            TextAlign.Right
+                                                        },
+                                                    modifier =
+                                                        Modifier.fillMaxWidth(),
+                                                    maxLines = 2,
+                                                    overflow =
+                                                        TextOverflow.Ellipsis
+                                                )
+
+                                                Spacer(
+                                                    Modifier.height(1.dp)
+                                                )
+
+                                                Text(
+                                                    text =
+                                                        if (isEnglish) {
+                                                            "$displayCount exercises"
+                                                        } else {
+                                                            "$displayCount תרגילים"
+                                                        },
+                                                    style =
+                                                        KmiTypography
+                                                            .caption
+                                                            .copy(
+                                                                fontWeight =
+                                                                    FontWeight.ExtraBold
+                                                            ),
+                                                    color = accent,
+                                                    textAlign =
+                                                        if (isEnglish) {
+                                                            TextAlign.Left
+                                                        } else {
+                                                            TextAlign.Right
+                                                        },
+                                                    modifier =
+                                                        Modifier
+                                                            .fillMaxWidth()
+                                                            .padding(
+                                                                top = 2.dp
+                                                            )
+                                                )
+                                            }
+                                        }
+
+                                        if (
+                                            index !=
+                                            hardSubSections.lastIndex
+                                        ) {
+                                            HorizontalDivider(
+                                                color =
+                                                    accent.copy(
+                                                        alpha = 0.22f
+                                                    ),
+                                                thickness = 0.8.dp,
+                                                modifier =
+                                                    Modifier.padding(
+                                                        horizontal = 8.dp
+                                                    )
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+
+                        } else {
+
+                            hardSubSections.forEach { section ->
+                                val beltCount =
+                                    section.itemsFor(belt).size
+
+                                val displayCount =
+                                    if (beltCount > 0) {
+                                        beltCount
+                                    } else {
+                                        section.totalItemsCount()
+                                    }
+
+                                HardSubTopicCategoryCard(
+                                    belt = belt,
+                                    title =
+                                        if (isEnglish) {
+                                            ExerciseTitlesEn.getOrSame(
+                                                section.title
+                                            )
+                                        } else {
+                                            section.title
+                                        },
+                                    count = displayCount,
+                                    onClick = {
+                                        onOpenSubTopic(
+                                            section.id
+                                        )
+                                    }
+                                )
+                            }
                         }
 
                     } else if (isHardFlow && hardItems.isNotEmpty()) {
