@@ -3859,53 +3859,44 @@ private fun TrainingCardCompact(
 
                     Spacer(Modifier.height(8.dp))
 
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement =
-                            Arrangement.spacedBy(8.dp),
-                        verticalAlignment =
-                            Alignment.CenterVertically
+                    CompositionLocalProvider(
+                        LocalLayoutDirection provides LayoutDirection.Ltr
                     ) {
-                        val comingSelected =
-                            traineeAttendanceChoice == "coming"
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement =
+                                Arrangement.spacedBy(8.dp),
+                            verticalAlignment =
+                                Alignment.CenterVertically
+                        ) {
+                            val comingSelected =
+                                traineeAttendanceChoice == "coming"
 
-                        val notComingSelected =
-                            traineeAttendanceChoice == "not_coming"
+                            val notComingSelected =
+                                traineeAttendanceChoice == "not_coming"
 
-                        // =========================
-                        // לא מגיע
-                        // =========================
-                        Surface(
-                            modifier = Modifier
-                                .weight(1f)
-                                .heightIn(min = 44.dp)
-                                .clickable(
-                                    enabled =
-                                        canEditTraineeAttendance
-                                ) {
-                                    clickSound()
-                                    haptic(true)
+                            // =========================
+                            // לא מגיע
+                            // =========================
+                            Surface(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .heightIn(min = 44.dp)
+                                    .clickable(
+                                        enabled =
+                                            canEditTraineeAttendance
+                                    ) {
+                                        clickSound()
+                                        haptic(true)
 
-                                    saveTraineeAttendance(
-                                        statusToSave =
-                                            AttendanceStatus.ABSENT,
-                                        choiceToShow =
-                                            "not_coming"
-                                    )
-                                },
-                            shape = RoundedCornerShape(16.dp),
-                            color =
-                                if (notComingSelected) {
-                                    MaterialTheme
-                                        .colorScheme
-                                        .error
-                                } else {
-                                    MaterialTheme
-                                        .colorScheme
-                                        .surfaceVariant
-                                },
-                            border = BorderStroke(
-                                width = 1.dp,
+                                        saveTraineeAttendance(
+                                            statusToSave =
+                                                AttendanceStatus.ABSENT,
+                                            choiceToShow =
+                                                "not_coming"
+                                        )
+                                    },
+                                shape = RoundedCornerShape(16.dp),
                                 color =
                                     if (notComingSelected) {
                                         MaterialTheme
@@ -3914,145 +3905,157 @@ private fun TrainingCardCompact(
                                     } else {
                                         MaterialTheme
                                             .colorScheme
-                                            .outline
-                                            .copy(alpha = 0.28f)
-                                    }
-                            ),
-                            tonalElevation = 0.dp,
-                            shadowElevation =
-                                if (notComingSelected) {
-                                    2.dp
-                                } else {
-                                    0.dp
-                                }
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(
-                                        horizontal = 12.dp,
-                                        vertical = 10.dp
-                                    ),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text =
-                                        if (isEnglish) {
-                                            "Not coming"
-                                        } else {
-                                            "לא מגיע"
-                                        },
-                                    style =
-                                        KmiTypography.secondary.copy(
-                                            fontWeight = FontWeight.Bold
-                                        ),
+                                            .surfaceVariant
+                                    },
+                                border = BorderStroke(
+                                    width = 1.dp,
                                     color =
                                         if (notComingSelected) {
                                             MaterialTheme
                                                 .colorScheme
-                                                .onError
+                                                .error
                                         } else {
                                             MaterialTheme
                                                 .colorScheme
-                                                .onSurfaceVariant
-                                        },
-                                    textAlign = TextAlign.Center,
-                                    maxLines = 1
-                                )
-                            }
-                        }
-
-                        // =========================
-                        // מגיע
-                        // =========================
-                        Surface(
-                            modifier = Modifier
-                                .weight(1f)
-                                .heightIn(min = 44.dp)
-                                .clickable(
-                                    enabled =
-                                        canEditTraineeAttendance
+                                                .outline
+                                                .copy(alpha = 0.28f)
+                                        }
+                                ),
+                                tonalElevation = 0.dp,
+                                shadowElevation =
+                                    if (notComingSelected) {
+                                        2.dp
+                                    } else {
+                                        0.dp
+                                    }
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(
+                                            horizontal = 12.dp,
+                                            vertical = 10.dp
+                                        ),
+                                    contentAlignment = Alignment.Center
                                 ) {
-                                    clickSound()
-                                    haptic(true)
-
-                                    saveTraineeAttendance(
-                                        statusToSave =
-                                            AttendanceStatus.PRESENT,
-                                        choiceToShow =
-                                            "coming"
+                                    Text(
+                                        text =
+                                            if (isEnglish) {
+                                                "Not coming"
+                                            } else {
+                                                "לא מגיע"
+                                            },
+                                        style =
+                                            KmiTypography.secondary.copy(
+                                                fontWeight = FontWeight.Bold
+                                            ),
+                                        color =
+                                            if (notComingSelected) {
+                                                MaterialTheme
+                                                    .colorScheme
+                                                    .onError
+                                            } else {
+                                                MaterialTheme
+                                                    .colorScheme
+                                                    .onSurfaceVariant
+                                            },
+                                        textAlign = TextAlign.Center,
+                                        maxLines = 1
                                     )
-                                },
-                            shape = RoundedCornerShape(16.dp),
+                                }
+                            }
 
-                            // ירוק כהה וברור יותר מהכרטיס עצמו
-                            color =
-                                if (comingSelected) {
-                                    kmiSuccessColor()
-                                } else {
-                                    MaterialTheme
-                                        .colorScheme
-                                        .surfaceVariant
-                                },
+                            // =========================
+                            // מגיע
+                            // =========================
+                            Surface(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .heightIn(min = 44.dp)
+                                    .clickable(
+                                        enabled =
+                                            canEditTraineeAttendance
+                                    ) {
+                                        clickSound()
+                                        haptic(true)
 
-                            border = BorderStroke(
-                                width = 1.dp,
+                                        saveTraineeAttendance(
+                                            statusToSave =
+                                                AttendanceStatus.PRESENT,
+                                            choiceToShow =
+                                                "coming"
+                                        )
+                                    },
+                                shape = RoundedCornerShape(16.dp),
+
+                                // ירוק כהה וברור יותר מהכרטיס עצמו
                                 color =
                                     if (comingSelected) {
                                         kmiSuccessColor()
                                     } else {
                                         MaterialTheme
                                             .colorScheme
-                                            .outline
-                                            .copy(alpha = 0.28f)
-                                    }
-                            ),
+                                            .surfaceVariant
+                                    },
 
-                            tonalElevation = 0.dp,
-
-                            shadowElevation =
-                                if (comingSelected) {
-                                    3.dp
-                                } else {
-                                    0.dp
-                                }
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(
-                                        horizontal = 12.dp,
-                                        vertical = 10.dp
-                                    ),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    text =
-                                        if (isEnglish) {
-                                            "Coming"
-                                        } else {
-                                            "מגיע"
-                                        },
-                                    style =
-                                        KmiTypography.secondary.copy(
-                                            fontWeight = FontWeight.Bold
-                                        ),
-
-                                    // בירוק שנבחר המלל לבן
+                                border = BorderStroke(
+                                    width = 1.dp,
                                     color =
                                         if (comingSelected) {
-                                            MaterialTheme
-                                                .colorScheme
-                                                .onPrimary
+                                            kmiSuccessColor()
                                         } else {
                                             MaterialTheme
                                                 .colorScheme
-                                                .onSurfaceVariant
-                                        },
+                                                .outline
+                                                .copy(alpha = 0.28f)
+                                        }
+                                ),
 
-                                    textAlign = TextAlign.Center,
-                                    maxLines = 1
-                                )
+                                tonalElevation = 0.dp,
+
+                                shadowElevation =
+                                    if (comingSelected) {
+                                        3.dp
+                                    } else {
+                                        0.dp
+                                    }
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(
+                                            horizontal = 12.dp,
+                                            vertical = 10.dp
+                                        ),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Text(
+                                        text =
+                                            if (isEnglish) {
+                                                "Coming"
+                                            } else {
+                                                "מגיע"
+                                            },
+                                        style =
+                                            KmiTypography.secondary.copy(
+                                                fontWeight = FontWeight.Bold
+                                            ),
+
+                                        color =
+                                            if (comingSelected) {
+                                                MaterialTheme
+                                                    .colorScheme
+                                                    .onPrimary
+                                            } else {
+                                                MaterialTheme
+                                                    .colorScheme
+                                                    .onSurfaceVariant
+                                            },
+
+                                        textAlign = TextAlign.Center,
+                                        maxLines = 1
+                                    )
+                                }
                             }
                         }
                     }

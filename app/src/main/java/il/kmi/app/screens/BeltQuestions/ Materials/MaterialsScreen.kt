@@ -1,3 +1,9 @@
+@file:Suppress(
+    "PackageDirectoryMismatch",
+    "PackageName",
+    "SpellCheckingInspection"
+)
+
 package il.kmi.app.screens.BeltQuestions.Materials
 
 import androidx.compose.foundation.layout.*
@@ -13,8 +19,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
@@ -79,6 +86,7 @@ import il.kmi.shared.domain.content.ExerciseTitlesEn
 import il.kmi.shared.domain.content.ExerciseIdentityRegistry
 import il.kmi.app.subscription.KmiAccess
 import il.kmi.app.progress.UserProgressRepository
+import il.kmi.app.notes.ExerciseNotesStore
 import il.kmi.app.ui.KmiTopBar
 import il.kmi.app.ui.pdf.KmiPdfHeader
 import il.kmi.app.ui.pdf.KmiPdfFooter
@@ -295,9 +303,13 @@ fun MaterialsScreen(
 ) {
 
     val context = LocalContext.current
-    val configuration = LocalConfiguration.current
+    val windowInfo = LocalWindowInfo.current
+    val density = LocalDensity.current
+
     val bottomListScrollSpace =
-        configuration.screenHeightDp.dp * 0.25f
+        with(density) {
+            windowInfo.containerSize.height.toDp() * 0.25f
+        }
 
     val langManager = remember {
         AppLanguageManager(context)
@@ -490,8 +502,17 @@ fun MaterialsScreen(
             mutableStateMapOf<String, Boolean?>()
         }
 
-    var explainTriple by remember { mutableStateOf<Triple<Belt, String, String>?>(null) }
-    var noteEditorFor by rememberSaveable { mutableStateOf<String?>(null) }
+    var explainTriple by remember {
+        mutableStateOf<Triple<Belt, String, String>?>(null)
+    }
+
+    var explainNoteId by rememberSaveable {
+        mutableStateOf<String?>(null)
+    }
+
+    var noteEditorFor by rememberSaveable {
+        mutableStateOf<String?>(null)
+    }
     var noteDraft by rememberSaveable { mutableStateOf("") }
     var notesRefreshKey by rememberSaveable { mutableIntStateOf(0) }
 
@@ -1464,34 +1485,43 @@ fun MaterialsScreen(
         )
     }
 
-    // (SharedPreferences) הערות חופשיות לכל תרגיל – בלי excludedKeySuffix גלובלי
-    fun loadNote(itemId: String): String {
-        val suffix = if (subTopicFilter.isNullOrBlank()) {
-            topicUi
-        } else {
-            "${topicUi}__${subTopicFilter}"
-        }
-        val key = "note_${belt.id}_${suffix}_$itemId"
-        return sp.getString(key, "") ?: ""
+    /*
+   * מקור אמת גלובלי להערות תרגילים.
+   *
+   * ההערה משויכת לחגורה + מזהה התרגיל בלבד,
+   * ולכן היא משותפת למסך לפי חגורה,
+   * למסך לפי נושא ולכל מסך נוסף.
+   *
+   * ExerciseNotesStore מטפל גם בקריאת
+   * המפתחות הישנים ובמיגרציה שלהם.
+   */
+    fun loadNote(
+        itemId: String,
+        aliases: Collection<String> =
+            emptyList()
+    ): String {
+        return ExerciseNotesStore.loadNote(
+            context = context,
+            belt = belt,
+            exerciseId = itemId,
+            aliases = aliases,
+            allowLegacyMigration = true
+        )
     }
 
-    fun saveNote(itemId: String, value: String) {
-        val suffix = if (subTopicFilter.isNullOrBlank()) {
-            topicUi
-        } else {
-            "${topicUi}__${subTopicFilter}"
-        }
-
-        val key = "note_${belt.id}_${suffix}_$itemId"
-        val clean = value.trim()
-
-        sp.edit {
-            if (clean.isBlank()) {
-                remove(key)
-            } else {
-                putString(key, clean)
-            }
-        }
+    fun saveNote(
+        itemId: String,
+        value: String,
+        aliases: Collection<String> =
+            emptyList()
+    ) {
+        ExerciseNotesStore.saveNote(
+            context = context,
+            belt = belt,
+            exerciseId = itemId,
+            note = value,
+            aliases = aliases
+        )
 
         notesRefreshKey++
     }
@@ -2513,7 +2543,12 @@ fun MaterialsScreen(
                                         ),
                                     hasNote =
                                         loadNote(
-                                            canonicalId
+                                            itemId = canonicalId,
+                                            aliases =
+                                                favoriteAliasesFor(
+                                                    topicTitle = materialRootTopic,
+                                                    rawItem = item
+                                                )
                                         ).isNotBlank()
                                 )
                             },
@@ -2873,16 +2908,28 @@ fun MaterialsScreen(
                 }
 
                 val dialogActionId =
-                    remember(b, t, iRaw, cleanItemForResolver, resolvedIdentity.id) {
-                        if (resolvedIdentity.isKnown) {
-                            resolvedIdentity.id
-                        } else {
-                            CanonicalIds.resolveCanonicalForExplanation(
-                                belt = b,
-                                topicTitle = t,
-                                rawItemFromRepo = iRaw
-                            )
-                        }
+                    remember(
+                        b,
+                        t,
+                        iRaw,
+                        cleanItemForResolver,
+                        resolvedIdentity.id,
+                        explainNoteId
+                    ) {
+                        explainNoteId
+                            ?.trim()
+                            ?.takeIf {
+                                it.isNotBlank()
+                            }
+                            ?: if (resolvedIdentity.isKnown) {
+                                resolvedIdentity.id
+                            } else {
+                                CanonicalIds.resolveCanonicalForExplanation(
+                                    belt = b,
+                                    topicTitle = t,
+                                    rawItemFromRepo = iRaw
+                                )
+                            }
                     }
 
                 val explanation = remember(b, t, cleanItemForResolver, isEnglish) {
@@ -2912,9 +2959,30 @@ fun MaterialsScreen(
                     "(${b.heb})"
                 }
 
-                val dialogNoteText = remember(dialogActionId, notesRefreshKey) {
-                    loadNote(dialogActionId)
-                }
+                val dialogNoteAliases =
+                    remember(
+                        b,
+                        t,
+                        iRaw,
+                        resolvedIdentity.id
+                    ) {
+                        favoriteAliasesFor(
+                            topicTitle = t,
+                            rawItem = iRaw
+                        )
+                    }
+
+                val dialogNoteText =
+                    remember(
+                        dialogActionId,
+                        dialogNoteAliases,
+                        notesRefreshKey
+                    ) {
+                        loadNote(
+                            itemId = dialogActionId,
+                            aliases = dialogNoteAliases
+                        )
+                    }
 
                 ExerciseExplanationDialog(
                     title = dialogTitle,
@@ -2928,14 +2996,28 @@ fun MaterialsScreen(
                             ),
                     accentColor = b.color,
                     isEnglish = isEnglish,
-                    onDismiss = { explainTriple = null },
+                    onDismiss = {
+                        explainTriple = null
+                        explainNoteId = null
+                    },
                     onEditNote = {
-                        noteEditorFor = dialogActionId
-                        noteDraft = loadNote(dialogActionId)
+                        noteEditorFor =
+                            dialogActionId
+
+                        noteDraft =
+                            loadNote(
+                                itemId = dialogActionId,
+                                aliases = dialogNoteAliases
+                            )
                     },
                     onDeleteNote = {
                         noteDraft = ""
-                        saveNote(dialogActionId, "")
+
+                        saveNote(
+                            itemId = dialogActionId,
+                            value = "",
+                            aliases = dialogNoteAliases
+                        )
                     },
                     onToggleFavorite = {
                         toggleFavoriteAliases(
@@ -2947,34 +3029,78 @@ fun MaterialsScreen(
             }
             // ===== סוף הדיאלוג =====
 
-            noteEditorFor?.let { itemId ->
-                ExerciseNoteEditorDialog(
-                    exerciseTitle =
-                        explainTriple
-                            ?.third
-                            ?.let { rawTitle ->
-                                itemTitleForUi(
-                                    topic = explainTriple?.second.orEmpty(),
-                                    rawItem = rawTitle,
-                                    lang = currentLang
-                                )
-                            }
-                            .orEmpty(),
-                    noteText = noteDraft,
-                    isEnglish = isEnglish,
-                    accentColor = belt.color,
-                    onNoteChange = { noteDraft = it },
-                    onDismiss = {
-                        noteEditorFor = null
-                    },
-                    onSave = {
-                        val cleanNote = noteDraft.trim()
-                        noteDraft = cleanNote
-                        saveNote(itemId, cleanNote)
-                        noteEditorFor = null
+        noteEditorFor?.let { itemId ->
+
+            val editorTopic =
+                explainTriple
+                    ?.second
+                    .orEmpty()
+
+            val editorRawItem =
+                explainTriple
+                    ?.third
+                    .orEmpty()
+
+            val editorAliases =
+                remember(
+                    belt,
+                    editorTopic,
+                    editorRawItem
+                ) {
+                    if (
+                        editorTopic.isBlank() ||
+                        editorRawItem.isBlank()
+                    ) {
+                        emptySet()
+                    } else {
+                        favoriteAliasesFor(
+                            topicTitle = editorTopic,
+                            rawItem = editorRawItem
+                        )
                     }
-                )
-            }
+                }
+
+            ExerciseNoteEditorDialog(
+                exerciseTitle =
+                    editorRawItem
+                        .takeIf {
+                            it.isNotBlank()
+                        }
+                        ?.let { rawTitle ->
+                            itemTitleForUi(
+                                topic = editorTopic,
+                                rawItem = rawTitle,
+                                lang = currentLang
+                            )
+                        }
+                        .orEmpty(),
+                noteText = noteDraft,
+                isEnglish = isEnglish,
+                accentColor = belt.color,
+                onNoteChange = {
+                    noteDraft = it
+                },
+                onDismiss = {
+                    noteEditorFor = null
+                },
+                onSave = {
+                    val cleanNote =
+                        noteDraft.trim()
+
+                    noteDraft =
+                        cleanNote
+
+                    saveNote(
+                        itemId = itemId,
+                        value = cleanNote,
+                        aliases = editorAliases
+                    )
+
+                    noteEditorFor =
+                        null
+                }
+            )
+        }
 
             Column(
                 modifier = Modifier
@@ -3433,13 +3559,31 @@ fun MaterialsScreen(
                                                 itemTitleForUi(topicUi, item, currentLang)
                                             }
 
+                                            val noteAliases =
+                                                remember(
+                                                    item,
+                                                    belt.id,
+                                                    materialRootTopic,
+                                                    topicKey
+                                                ) {
+                                                    favoriteAliasesFor(
+                                                        topicTitle = materialRootTopic,
+                                                        rawItem = item
+                                                    )
+                                                }
+
                                             var noteText by remember(
                                                 item,
                                                 belt.id,
                                                 excludedKeySuffix,
                                                 notesRefreshKey
                                             ) {
-                                                mutableStateOf(loadNote(canonicalId))
+                                                mutableStateOf(
+                                                    loadNote(
+                                                        itemId = canonicalId,
+                                                        aliases = noteAliases
+                                                    )
+                                                )
                                             }
 
                                             val mastered: Boolean? =
@@ -3548,6 +3692,9 @@ fun MaterialsScreen(
                                                                         .weight(1f)
                                                                         .clickable {
                                                                             pressed = true
+
+                                                                            explainNoteId =
+                                                                                canonicalId
 
                                                                             explainTriple =
                                                                                 Triple(
@@ -3709,6 +3856,9 @@ fun MaterialsScreen(
                                                                 onInfo = {
                                                                     pressed = true
 
+                                                                    explainNoteId =
+                                                                        canonicalId
+
                                                                     explainTriple = Triple(
                                                                         belt,
                                                                         materialRootTopic,
@@ -3781,11 +3931,16 @@ fun MaterialsScreen(
                                                                         },
                                                                         onInfo = {
                                                                             pressed = true
+
+                                                                            explainNoteId =
+                                                                                canonicalId
+
                                                                             explainTriple = Triple(
                                                                                 belt,
                                                                                 materialRootTopic,
                                                                                 item
                                                                             )
+
                                                                             scope.launch {
                                                                                 delay(150.milliseconds)
                                                                                 pressed = false
@@ -4116,7 +4271,11 @@ fun MaterialsScreen(
                                                         onSave = {
                                                             val cleanNote = noteText.trim()
                                                             noteText = cleanNote
-                                                            saveNote(canonicalId, cleanNote)
+                                                            saveNote(
+                                                                itemId = canonicalId,
+                                                                value = cleanNote,
+                                                                aliases = noteAliases
+                                                            )
                                                             showNoteDialog = false
                                                         }
                                                     )
@@ -5050,7 +5209,6 @@ internal fun MaterialsExerciseStatusCard(
     info: @Composable () -> Unit,
     statuses: @Composable RowScope.() -> Unit
 ) {
-    val colors = MaterialTheme.colorScheme
 
     CompositionLocalProvider(
         LocalLayoutDirection provides

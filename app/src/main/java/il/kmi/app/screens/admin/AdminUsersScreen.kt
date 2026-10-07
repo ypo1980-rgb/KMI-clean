@@ -39,6 +39,7 @@ import il.kmi.app.ui.KmiTopBar
 import il.kmi.app.ui.ext.color
 import il.kmi.app.privacy.TraineeDisplayNameMapper
 import il.kmi.app.screens.registration.CoachBranchAssignment
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.tasks.await
 import java.util.Calendar
 import java.util.Locale
@@ -1305,6 +1306,11 @@ object AdminUsersPreloadCache {
                         }
                     )
             } catch (error: Throwable) {
+
+                if (error is CancellationException) {
+                    throw error
+                }
+
                 val rawError =
                     error.message
                         ?: adminTr(
@@ -1379,7 +1385,12 @@ object AdminUsersPreloadCache {
                                     )
                             )
                     }
-            } catch (_: Throwable) {
+            } catch (error: Throwable) {
+
+                if (error is CancellationException) {
+                    throw error
+                }
+
                 emptyList()
             }
 

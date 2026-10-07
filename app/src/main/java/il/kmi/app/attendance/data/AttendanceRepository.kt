@@ -48,7 +48,10 @@ data class MemberAttendanceHistory(
 data class TrainingAttendanceForecast(
     val comingCount: Int = 0,
     val notComingCount: Int = 0,
-    val noResponseCount: Int = 0
+    val noResponseCount: Int = 0,
+    val comingNames: List<String> = emptyList(),
+    val notComingNames: List<String> = emptyList(),
+    val noResponseNames: List<String> = emptyList()
 )
 
 class AttendanceRepository private constructor(
@@ -1136,14 +1139,26 @@ class AttendanceRepository private constructor(
             sessionDocId(date)
 
         /*
-         * שומרים בנפרד את רשימת חברי הקבוצה
-         * ואת סימוני הצפי האחרונים.
+         * מזהה מתאמן -> שם תצוגה.
          *
-         * כל שינוי באחד מהם מחשב מחדש את הצפי.
+         * כך אפשר להציג למאמן לא רק את הכמות,
+         * אלא גם את רשימת השמות בכל סטטוס.
          */
-        var memberIds: Set<Long> =
+        var memberNames:
+                Map<Long, String> =
+            emptyMap()
+
+        /*
+         * מזהי כל חברי הקבוצה הפעילים.
+         */
+        var memberIds:
+                Set<Long> =
             emptySet()
 
+        /*
+         * בחירות שהמתאמנים סימנו בעצמם
+         * עבור האימון הנוכחי.
+         */
         var traineeChoices:
                 Map<Long, AttendanceStatus> =
             emptyMap()
@@ -1162,28 +1177,58 @@ class AttendanceRepository private constructor(
                     memberId in memberIds
                 }
 
-            val coming =
-                validChoices.values.count { status ->
-                    status == AttendanceStatus.PRESENT
-                }
+            val comingMemberIds =
+                validChoices
+                    .filterValues { status ->
+                        status == AttendanceStatus.PRESENT
+                    }
+                    .keys
 
-            val notComing =
-                validChoices.values.count { status ->
-                    status == AttendanceStatus.ABSENT
-                }
+            val notComingMemberIds =
+                validChoices
+                    .filterValues { status ->
+                        status == AttendanceStatus.ABSENT
+                    }
+                    .keys
 
-            val responded =
-                validChoices.keys.size
+            val noResponseMemberIds =
+                memberIds - validChoices.keys
 
-            val noResponse =
-                (memberIds.size - responded)
-                    .coerceAtLeast(0)
+            val comingNames =
+                comingMemberIds
+                    .mapNotNull { memberId ->
+                        memberNames[memberId]
+                    }
+                    .sorted()
+
+            val notComingNames =
+                notComingMemberIds
+                    .mapNotNull { memberId ->
+                        memberNames[memberId]
+                    }
+                    .sorted()
+
+            val noResponseNames =
+                noResponseMemberIds
+                    .mapNotNull { memberId ->
+                        memberNames[memberId]
+                    }
+                    .sorted()
 
             trySend(
                 TrainingAttendanceForecast(
-                    comingCount = coming,
-                    notComingCount = notComing,
-                    noResponseCount = noResponse
+                    comingCount =
+                        comingMemberIds.size,
+                    notComingCount =
+                        notComingMemberIds.size,
+                    noResponseCount =
+                        noResponseMemberIds.size,
+                    comingNames =
+                        comingNames,
+                    notComingNames =
+                        notComingNames,
+                    noResponseNames =
+                        noResponseNames
                 )
             )
         }
@@ -1199,15 +1244,44 @@ class AttendanceRepository private constructor(
                         return@addSnapshotListener
                     }
 
-                    memberIds =
+                    val memberDocuments =
                         snapshot
                             ?.documents
                             .orEmpty()
+
+                    memberIds =
+                        memberDocuments
                             .mapNotNull { document ->
                                 document.getLong("id")
                                     ?: document.id.toLongOrNull()
                             }
                             .toSet()
+
+                    memberNames =
+                        memberDocuments
+                            .mapNotNull { document ->
+
+                                val memberId =
+                                    document.getLong("id")
+                                        ?: document.id.toLongOrNull()
+                                        ?: return@mapNotNull null
+
+                                val displayName =
+                                    (
+                                            document.getString("displayName")
+                                                ?: document.getString("fullName")
+                                                ?: document.getString("name")
+                                            )
+                                        ?.trim()
+                                        .orEmpty()
+
+                                if (displayName.isBlank()) {
+                                    return@mapNotNull null
+                                }
+
+                                memberId to displayName
+                            }
+                            .toMap()
 
                     emitForecast()
                 }
@@ -1234,7 +1308,7 @@ class AttendanceRepository private constructor(
                             .mapNotNull { document ->
 
                                 /*
-                                 * צפי מבוסס רק על בחירה
+                                 * הצפי מבוסס רק על בחירה
                                  * שהמתאמן ביצע בעצמו.
                                  */
                                 if (
@@ -1255,8 +1329,12 @@ class AttendanceRepository private constructor(
 
                                 val statusRaw =
                                     (
-                                            document.getString("traineeStatus")
-                                                ?: document.getString("status")
+                                            document.getString(
+                                                "traineeStatus"
+                                            )
+                                                ?: document.getString(
+                                                    "status"
+                                                )
                                             )
                                         ?.trim()
                                         .orEmpty()

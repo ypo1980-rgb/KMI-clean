@@ -1,4 +1,5 @@
 @file:OptIn(ExperimentalMaterial3Api::class)
+@file:Suppress("PackageName", "SpellCheckingInspection")
 
 package il.kmi.app.screens.BeltQuestions.ByTopic
 
@@ -19,7 +20,6 @@ import java.util.Date
 import java.util.Locale
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -37,20 +37,14 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ChevronLeft
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.outlined.Info
-import androidx.compose.material.icons.outlined.StarBorder
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.Scaffold
@@ -62,6 +56,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -69,7 +64,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
@@ -83,14 +77,19 @@ import androidx.compose.ui.unit.dp
 import il.kmi.app.KmiViewModel
 import il.kmi.shared.domain.Explanations
 import il.kmi.app.domain.color
-import il.kmi.app.ui.ext.lightColor
+import il.kmi.app.domain.CanonicalIds
+import il.kmi.app.notes.ExerciseNotesStore
 import il.kmi.app.screens.BeltQuestions.Materials.CoachMaterialProgress
 import il.kmi.app.screens.BeltQuestions.Materials.CoachMaterialStatus
 import il.kmi.app.screens.BeltQuestions.Materials.CoachMaterialStatusSelector
+import il.kmi.app.screens.BeltQuestions.Materials.MaterialsExerciseStatusCard
+import il.kmi.app.screens.BeltQuestions.Materials.TraineeMaterialStatus
+import il.kmi.app.screens.BeltQuestions.Materials.TraineeMaterialStatusSelector
 import il.kmi.app.favorites.FavoritesStore
 import il.kmi.app.ui.KmiTopBar
 import il.kmi.app.ui.KmiTypography
 import il.kmi.app.ui.dialogs.ExerciseExplanationDialog
+import il.kmi.app.ui.dialogs.ExerciseNoteEditorDialog
 import il.kmi.app.ui.pdf.KmiPdfDirection
 import il.kmi.app.ui.pdf.KmiPdfFooter
 import il.kmi.app.ui.pdf.KmiPdfHeader
@@ -941,7 +940,6 @@ fun UnifiedSubjectExercisesScreen(
             ) {
                 SectionsContent(
                     subjectId = resolverSubjectId,
-                    title = result.title ?: subjectRootTitle(subjectId),
                     entries = result.entries,
                     isEnglish = isEnglish,
                     isCoach = resolvedIsCoach,
@@ -958,7 +956,6 @@ fun UnifiedSubjectExercisesScreen(
                     if (shouldShowSectionCards) {
                         SectionsContent(
                             subjectId = subjectId,
-                            title = result.title,
                             entries = result.entries,
                             isEnglish = isEnglish,
                             isCoach = resolvedIsCoach,
@@ -1184,7 +1181,6 @@ private data class SectionExerciseRef(
 @Composable
 private fun SectionsContent(
     subjectId: String,
-    title: String?,
     entries: List<HardSectionsResolver.SectionEntry>,
     isEnglish: Boolean,
     isCoach: Boolean,
@@ -1207,12 +1203,6 @@ private fun SectionsContent(
         .collectAsState(
             initial = emptySet()
         )
-
-    val isDarkMode =
-        MaterialTheme
-            .colorScheme
-            .surface
-            .luminance() < 0.5f
 
     val resolveSubjectId =
         remember(subjectId) {
@@ -1356,7 +1346,7 @@ private fun SectionsContent(
                     }
                 }
                 .distinctBy { ref ->
-                    "${ref.belt.id}" +
+                    ref.belt.id +
                             "::${ref.sectionTitle}" +
                             "::${ref.rawItem}"
                 }
@@ -1606,11 +1596,11 @@ private fun SectionsContent(
                             ?: emptySet()
 
                     traineeValue =
-                        when {
-                            statusId in mastered ->
+                        when (statusId) {
+                            in mastered ->
                                 true
 
-                            statusId in unknown ->
+                            in unknown ->
                                 false
 
                             else ->
@@ -1656,12 +1646,6 @@ private fun SectionsContent(
                     .belt
         }
     }
-
-    val currentRows =
-        sectionRows.filter {
-            it.belt ==
-                    currentStickyBelt
-        }
 
     val currentExercises =
         allExerciseRefs.filter {
@@ -1854,81 +1838,6 @@ private fun SectionsContent(
 }
 
 @Composable
-private fun SectionsBeltHeader(
-    belt: Belt,
-    totalCount: Int,
-    isCoach: Boolean,
-    taughtCount: Int,
-    practicedCount: Int,
-    reinforcementCount: Int,
-    coachUnmarkedCount: Int,
-    knownCount: Int,
-    unknownCount: Int,
-    favoriteCount: Int,
-    unmarkedCount: Int,
-    isDarkMode: Boolean,
-    isEnglish: Boolean,
-    showStats: Boolean,
-    modifier: Modifier = Modifier
-) {
-    HardBeltStickyHeader(
-        belt = belt,
-        count = totalCount,
-        isCoach = isCoach,
-        taughtCount =
-            if (showStats) {
-                taughtCount
-            } else {
-                0
-            },
-        practicedCount =
-            if (showStats) {
-                practicedCount
-            } else {
-                0
-            },
-        reinforcementCount =
-            if (showStats) {
-                reinforcementCount
-            } else {
-                0
-            },
-        coachUnmarkedCount =
-            if (showStats) {
-                coachUnmarkedCount
-            } else {
-                0
-            },
-        knownCount =
-            if (showStats) {
-                knownCount
-            } else {
-                0
-            },
-        unknownCount =
-            if (showStats) {
-                unknownCount
-            } else {
-                0
-            },
-        favoriteCount =
-            if (showStats) {
-                favoriteCount
-            } else {
-                0
-            },
-        unmarkedCount =
-            if (showStats) {
-                unmarkedCount
-            } else {
-                0
-            },
-        isEnglish = isEnglish,
-        modifier = modifier
-    )
-}
-
-@Composable
 private fun SubjectSectionCard(
     title: String,
     count: Int,
@@ -2056,8 +1965,8 @@ private fun HardTopStatChip(
     value: String,
     label: String,
     containerColor: Color,
-    contentColor: Color = Color.White,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    contentColor: Color = Color.White
 ) {
     val colors =
         MaterialTheme.colorScheme
@@ -2609,11 +2518,11 @@ private fun BeltGroupsContent(
                                 ) ?: emptySet()
 
                             val localValue: Boolean? =
-                                when {
-                                    statusId in masteredSet ->
+                                when (statusId) {
+                                    in masteredSet ->
                                         true
 
-                                    statusId in unknownSet ->
+                                    in unknownSet ->
                                         false
 
                                     else ->
@@ -2703,6 +2612,141 @@ private fun BeltGroupsContent(
 
     var selectedExercise by remember {
         mutableStateOf<SelectedHardExercise?>(null)
+    }
+
+    var noteEditorExercise by remember {
+        mutableStateOf<SelectedHardExercise?>(null)
+    }
+
+    var noteDraft by remember {
+        mutableStateOf("")
+    }
+
+    var notesRefreshKey by remember {
+        mutableIntStateOf(0)
+    }
+
+    fun hardNoteAliasesFor(
+        belt: Belt,
+        topic: String,
+        rawItem: String
+    ): Set<String> {
+
+        val statusId =
+            hardStatusIdFor(
+                belt = belt,
+                topic = topic,
+                rawItem = rawItem
+            )
+
+        val canonicalId =
+            CanonicalIds.canonicalFor(
+                belt,
+                topic,
+                rawItem
+            )
+
+        val explanationId =
+            CanonicalIds.resolveCanonicalForExplanation(
+                belt = belt,
+                topicTitle = topic,
+                rawItemFromRepo = rawItem
+            )
+
+        return setOf(
+            statusId,
+            canonicalId,
+            explanationId
+        )
+            .map { value ->
+                value.trim()
+            }
+            .filter { value ->
+                value.isNotBlank()
+            }
+            .toSet()
+    }
+
+    fun loadHardNote(
+        belt: Belt,
+        topic: String,
+        rawItem: String
+    ): String {
+
+        val aliases =
+            hardNoteAliasesFor(
+                belt = belt,
+                topic = topic,
+                rawItem = rawItem
+            )
+
+        val primaryId =
+            aliases.firstOrNull()
+                ?: return ""
+
+        return ExerciseNotesStore.loadNote(
+            context = context,
+            belt = belt,
+            exerciseId = primaryId,
+            aliases = aliases,
+            allowLegacyMigration = true
+        )
+    }
+
+    fun saveHardNote(
+        belt: Belt,
+        topic: String,
+        rawItem: String,
+        note: String
+    ) {
+
+        val aliases =
+            hardNoteAliasesFor(
+                belt = belt,
+                topic = topic,
+                rawItem = rawItem
+            )
+
+        val primaryId =
+            aliases.firstOrNull()
+                ?: return
+
+        ExerciseNotesStore.saveNote(
+            context = context,
+            belt = belt,
+            exerciseId = primaryId,
+            note = note,
+            aliases = aliases
+        )
+
+        notesRefreshKey++
+    }
+
+    fun deleteHardNote(
+        belt: Belt,
+        topic: String,
+        rawItem: String
+    ) {
+
+        val aliases =
+            hardNoteAliasesFor(
+                belt = belt,
+                topic = topic,
+                rawItem = rawItem
+            )
+
+        val primaryId =
+            aliases.firstOrNull()
+                ?: return
+
+        ExerciseNotesStore.deleteNote(
+            context = context,
+            belt = belt,
+            exerciseId = primaryId,
+            aliases = aliases
+        )
+
+        notesRefreshKey++
     }
 
     val flatRows: List<HardBeltListRow> =
@@ -2995,11 +3039,30 @@ private fun BeltGroupsContent(
 
                         val isFavorite = favoriteId in favoriteIds
 
+                        val noteText =
+                            remember(
+                                belt,
+                                rawItem,
+                                title,
+                                notesRefreshKey
+                            ) {
+                                loadHardNote(
+                                    belt = belt,
+                                    topic = title,
+                                    rawItem = rawItem
+                                )
+                            }
+
                         HardExerciseRowCard(
                             belt = belt,
                             item = displayItem,
                             mastered = mastered,
+                            partiallyKnown =
+                                hardPartiallyKnownStates[
+                                    statusId
+                                ] == true,
                             isFavorite = isFavorite,
+                            hasNote = noteText.isNotBlank(),
                             isEnglish = isEnglish,
                             isCoach = isCoach,
                             coachProgress =
@@ -3012,23 +3075,35 @@ private fun BeltGroupsContent(
                                     status = selectedStatus
                                 )
                             },
-                            onStatusClick = {
+                            onTraineeStatusSelect = { selectedStatus ->
+
                                 val nextValue =
-                                    when (
-                                        hardItemStates[statusId]
-                                    ) {
-                                        null ->
+                                    when (selectedStatus) {
+                                        TraineeMaterialStatus.KNOWN ->
                                             true
 
-                                        true ->
+                                        TraineeMaterialStatus.PARTIALLY_KNOWN ->
                                             false
 
-                                        false ->
+                                        TraineeMaterialStatus.UNKNOWN ->
+                                            false
+
+                                        null ->
                                             null
                                     }
 
+                                val isPartiallyKnown =
+                                    selectedStatus ==
+                                            TraineeMaterialStatus
+                                                .PARTIALLY_KNOWN
+
                                 hardItemStates[statusId] =
                                     nextValue
+
+                                hardPartiallyKnownStates[
+                                    statusId
+                                ] =
+                                    isPartiallyKnown
 
                                 val statusKeys =
                                     hardStatusKeysFor(
@@ -3051,7 +3126,9 @@ private fun BeltGroupsContent(
                                         belt = belt,
                                         topic = title,
                                         statusId = statusId,
-                                        value = nextValue
+                                        value = nextValue,
+                                        partiallyKnown =
+                                            isPartiallyKnown
                                     )
                                 }
                             },
@@ -3077,6 +3154,7 @@ private fun BeltGroupsContent(
     }
 
     selectedExercise?.let { selected ->
+
         val explanation =
             remember(
                 selected.belt,
@@ -3113,6 +3191,20 @@ private fun BeltGroupsContent(
                 rawItem = selected.rawItem
             )
 
+        val selectedNoteText =
+            remember(
+                selected.belt,
+                selected.topic,
+                selected.rawItem,
+                notesRefreshKey
+            ) {
+                loadHardNote(
+                    belt = selected.belt,
+                    topic = selected.topic,
+                    rawItem = selected.rawItem
+                )
+            }
+
         ExerciseExplanationDialog(
             title = selected.displayItem,
             beltLabel =
@@ -3121,83 +3213,89 @@ private fun BeltGroupsContent(
                     isEnglish = isEnglish
                 ),
             explanation = explanation,
-            noteText = "",
+            noteText = selectedNoteText,
             isFavorite = favoriteId in favoriteIds,
             accentColor = selected.belt.color,
             isEnglish = isEnglish,
             onDismiss = {
                 selectedExercise = null
             },
-            onEditNote = {},
-            onDeleteNote = {},
+            onEditNote = {
+                noteEditorExercise =
+                    selected
+
+                noteDraft =
+                    loadHardNote(
+                        belt = selected.belt,
+                        topic = selected.topic,
+                        rawItem = selected.rawItem
+                    )
+            },
+            onDeleteNote = {
+                deleteHardNote(
+                    belt = selected.belt,
+                    topic = selected.topic,
+                    rawItem = selected.rawItem
+                )
+
+                noteDraft = ""
+            },
             onToggleFavorite = {
-                FavoritesStore.toggle(favoriteId)
+                FavoritesStore.toggle(
+                    favoriteId
+                )
             }
         )
     }
-}
 
-private fun kickDefenseSectionTitleFor(
-    rawItem: String,
-    isEnglish: Boolean
-): String? {
-    val clean = rawItem
-        .replace("\u200F", "")
-        .replace("\u200E", "")
-        .replace("\u00A0", " ")
-        .replace("–", "-")
-        .replace("—", "-")
-        .replace(Regex("\\s+"), " ")
-        .trim()
+    noteEditorExercise?.let { exercise ->
 
-    return when {
-        clean.contains("ברך") -> {
-            if (isEnglish) "Defenses Against Knee Strikes" else "הגנות נגד ברך"
-        }
-
-        clean.contains("מגל") -> {
-            if (isEnglish) "Defenses Against Round Kicks" else "הגנות נגד בעיטות מגל"
-        }
-
-        clean.contains("לצד") ||
-                clean.contains("בעיטת צד") ||
-                clean.contains("בעיטה צד") -> {
-            if (isEnglish) "Defenses Against Side Kicks" else "הגנות נגד בעיטות לצד"
-        }
-
-        clean.contains("בעיטה ישרה") ||
-                clean.contains("בעיטה רגילה") ||
-                clean.contains("רגילה") ||
-                clean.contains("ישרה") -> {
-            if (isEnglish) "Defenses Against Regular Kicks" else "הגנות נגד בעיטה רגילה"
-        }
-
-        else -> null
-    }
-}
-
-@Composable
-private fun HardExerciseSectionHeader(
-    text: String,
-    isEnglish: Boolean
-) {
-    Text(
-        text = text,
-        style = KmiTypography.cardTitle,
-        color = Color(0xFF4CAF50),
-        textAlign =
-            if (isEnglish) {
-                TextAlign.Left
-            } else {
-                TextAlign.Right
+        ExerciseNoteEditorDialog(
+            exerciseTitle =
+                exercise.displayItem,
+            noteText =
+                noteDraft,
+            isEnglish =
+                isEnglish,
+            accentColor =
+                exercise.belt.color,
+            onNoteChange = { value ->
+                noteDraft = value
             },
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(
-                top = 8.dp,
-                bottom = 4.dp
-            )
-    )
+            onDismiss = {
+                noteEditorExercise = null
+            },
+            onSave = {
+                val cleanNote =
+                    noteDraft.trim()
+
+                saveHardNote(
+                    belt = exercise.belt,
+                    topic = exercise.topic,
+                    rawItem = exercise.rawItem,
+                    note = cleanNote
+                )
+
+                noteDraft =
+                    cleanNote
+
+                noteEditorExercise =
+                    null
+            },
+            onDelete = {
+                deleteHardNote(
+                    belt = exercise.belt,
+                    topic = exercise.topic,
+                    rawItem = exercise.rawItem
+                )
+
+                noteDraft = ""
+
+                noteEditorExercise =
+                    null
+            }
+        )
+    }
 }
 
 @Composable
@@ -3474,12 +3572,14 @@ private fun HardExerciseRowCard(
     belt: Belt,
     item: String,
     mastered: Boolean?,
+    partiallyKnown: Boolean,
     isFavorite: Boolean,
+    hasNote: Boolean,
     isEnglish: Boolean,
     isCoach: Boolean,
     coachProgress: CoachMaterialProgress,
     onCoachStatusSelect: (CoachMaterialStatus) -> Unit,
-    onStatusClick: () -> Unit,
+    onTraineeStatusSelect: (TraineeMaterialStatus?) -> Unit,
     onToggleFavorite: () -> Unit,
     onInfoClick: () -> Unit
 ) {
@@ -3580,46 +3680,106 @@ private fun HardExerciseRowCard(
                                     TextOverflow.Ellipsis
                             )
 
-                            if (isFavorite) {
+                            if (
+                                isFavorite ||
+                                hasNote
+                            ) {
                                 Spacer(
-                                    Modifier.width(6.dp)
+                                    modifier =
+                                        Modifier.width(6.dp)
                                 )
 
-                                Surface(
-                                    shape =
-                                        RoundedCornerShape(10.dp),
-                                    color =
-                                        Color(0xFFF9D9B8),
-                                    border =
-                                        BorderStroke(
-                                            width = 1.dp,
-                                            color =
-                                                Color(0xFF9A5A00)
-                                                    .copy(alpha = 0.14f)
-                                        ),
-                                    shadowElevation = 0.dp
+                                Column(
+                                    horizontalAlignment =
+                                        Alignment.CenterHorizontally,
+                                    verticalArrangement =
+                                        Arrangement.spacedBy(3.dp)
                                 ) {
-                                    Text(
-                                        text =
-                                            if (isEnglish) {
-                                                "Favorite"
-                                            } else {
-                                                "מועדף"
-                                            },
-                                        style =
-                                            KmiTypography.caption.copy(
-                                                fontWeight =
-                                                    FontWeight.ExtraBold
-                                            ),
-                                        color =
-                                            Color(0xFF9A5A00),
-                                        modifier =
-                                            Modifier.padding(
-                                                horizontal = 7.dp,
-                                                vertical = 2.dp
-                                            ),
-                                        maxLines = 1
-                                    )
+                                    if (isFavorite) {
+                                        Surface(
+                                            shape =
+                                                RoundedCornerShape(10.dp),
+                                            color =
+                                                Color(0xFFF9D9B8),
+                                            border =
+                                                BorderStroke(
+                                                    width = 1.dp,
+                                                    color =
+                                                        Color(0xFF9A5A00)
+                                                            .copy(
+                                                                alpha = 0.14f
+                                                            )
+                                                ),
+                                            shadowElevation = 0.dp
+                                        ) {
+                                            Text(
+                                                text =
+                                                    if (isEnglish) {
+                                                        "Favorite"
+                                                    } else {
+                                                        "מועדף"
+                                                    },
+                                                style =
+                                                    KmiTypography
+                                                        .caption
+                                                        .copy(
+                                                            fontWeight =
+                                                                FontWeight.ExtraBold
+                                                        ),
+                                                color =
+                                                    Color(0xFF9A5A00),
+                                                modifier =
+                                                    Modifier.padding(
+                                                        horizontal = 7.dp,
+                                                        vertical = 2.dp
+                                                    ),
+                                                maxLines = 1
+                                            )
+                                        }
+                                    }
+
+                                    if (hasNote) {
+                                        Surface(
+                                            shape =
+                                                RoundedCornerShape(10.dp),
+                                            color =
+                                                Color(0xFFFFE7B3),
+                                            border =
+                                                BorderStroke(
+                                                    width = 1.dp,
+                                                    color =
+                                                        Color(0xFF8A5A00)
+                                                            .copy(
+                                                                alpha = 0.18f
+                                                            )
+                                                ),
+                                            shadowElevation = 0.dp
+                                        ) {
+                                            Text(
+                                                text =
+                                                    if (isEnglish) {
+                                                        "Note"
+                                                    } else {
+                                                        "הערה"
+                                                    },
+                                                style =
+                                                    KmiTypography
+                                                        .caption
+                                                        .copy(
+                                                            fontWeight =
+                                                                FontWeight.ExtraBold
+                                                        ),
+                                                color =
+                                                    Color(0xFF8A5A00),
+                                                modifier =
+                                                    Modifier.padding(
+                                                        horizontal = 7.dp,
+                                                        vertical = 2.dp
+                                                    ),
+                                                maxLines = 1
+                                            )
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -3645,7 +3805,7 @@ private fun HardExerciseRowCard(
                             modifier = Modifier.fillMaxWidth(),
                             excluded = false,
                             isFav = isFavorite,
-                            hasNote = false,
+                            hasNote = hasNote,
                             onToggleExclude = {},
                             onInfo = onInfoClick,
                             onToggleFavorite = onToggleFavorite,
@@ -3660,234 +3820,311 @@ private fun HardExerciseRowCard(
         return
     }
 
+    val traineeStatus =
+        when {
+            mastered == true ->
+                TraineeMaterialStatus.KNOWN
+
+            partiallyKnown ->
+                TraineeMaterialStatus.PARTIALLY_KNOWN
+
+            mastered == false ->
+                TraineeMaterialStatus.UNKNOWN
+
+            else ->
+                null
+        }
+
     Surface(
         modifier =
-            Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(16.dp),
-        color = MaterialTheme.colorScheme.surface,
+            Modifier
+                .fillMaxWidth()
+                .padding(
+                    horizontal = 8.dp
+                ),
+        shape =
+            RoundedCornerShape(18.dp),
+        color =
+            MaterialTheme
+                .colorScheme
+                .surface,
+        border =
+            BorderStroke(
+                width = 1.dp,
+                color =
+                    if (isDarkMode) {
+                        belt.color.copy(
+                            alpha = 0.55f
+                        )
+                    } else {
+                        MaterialTheme
+                            .colorScheme
+                            .outlineVariant
+                            .copy(alpha = 0.85f)
+                    }
+            ),
         tonalElevation = 0.dp,
-        shadowElevation = 0.dp,
-        border = BorderStroke(
-            width = 1.dp,
-            color =
-                if (isDarkMode) {
-                    belt.color.copy(alpha = 0.55f)
-                } else {
-                    MaterialTheme.colorScheme.outlineVariant
-                }
-        )
+        shadowElevation = 2.dp
     ) {
-        CompositionLocalProvider(
-            LocalLayoutDirection provides LayoutDirection.Ltr
+        Column(
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .padding(
+                        horizontal = 4.dp,
+                        vertical = 6.dp
+                    )
         ) {
             Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .heightIn(min = 50.dp)
-                    .padding(
-                        start = 8.dp,
-                        top = 5.dp,
-                        end = 0.dp,
-                        bottom = 5.dp
-                    ),
-                verticalAlignment = Alignment.CenterVertically
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .padding(
+                            start = 10.dp,
+                            end = 6.dp,
+                            top = 2.dp,
+                            bottom = 3.dp
+                        ),
+                verticalAlignment =
+                    Alignment.CenterVertically
             ) {
-                HardMasterToggle(
-                    mastered = mastered,
-                    onClick = onStatusClick
-                )
-
-                Spacer(
-                    modifier = Modifier.width(8.dp)
-                )
-
-                CompositionLocalProvider(
-                    LocalLayoutDirection provides
-                            if (isEnglish) {
-                                LayoutDirection.Ltr
-                            } else {
-                                LayoutDirection.Rtl
-                            }
-                ) {
-                    Column(
-                        modifier = Modifier
+                Text(
+                    text =
+                        if (isEnglish) {
+                            item.trim()
+                        } else {
+                            "\u200F${item.trim()}\u200F"
+                        },
+                    modifier =
+                        Modifier
                             .weight(1f)
-                            .clickable(onClick = onInfoClick)
-                            .padding(
-                                start = 2.dp,
-                                end = 4.dp
+                            .clickable(
+                                onClick =
+                                    onInfoClick
                             ),
+                    style =
+                        KmiTypography
+                            .body
+                            .copy(
+                                fontWeight =
+                                    FontWeight.SemiBold
+                            ),
+                    color =
+                        MaterialTheme
+                            .colorScheme
+                            .onSurface,
+                    textAlign =
+                        if (isEnglish) {
+                            TextAlign.Left
+                        } else {
+                            TextAlign.Right
+                        },
+                    maxLines = 3,
+                    overflow =
+                        TextOverflow.Ellipsis
+                )
+
+                if (
+                    isFavorite ||
+                    hasNote
+                ) {
+                    Spacer(
+                        modifier =
+                            Modifier.width(6.dp)
+                    )
+
+                    Column(
                         horizontalAlignment =
-                            if (isEnglish) {
-                                Alignment.Start
-                            } else {
-                                Alignment.End
-                            }
+                            Alignment.CenterHorizontally,
+                        verticalArrangement =
+                            Arrangement.spacedBy(3.dp)
                     ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-
-                            IconButton(
-                                onClick = onInfoClick,
-                                modifier = Modifier.size(26.dp)
+                        if (isFavorite) {
+                            Surface(
+                                shape =
+                                    RoundedCornerShape(10.dp),
+                                color =
+                                    Color(0xFFF9D9B8),
+                                border =
+                                    BorderStroke(
+                                        width = 1.dp,
+                                        color =
+                                            Color(0xFF9A5A00)
+                                                .copy(
+                                                    alpha = 0.14f
+                                                )
+                                    ),
+                                shadowElevation = 0.dp
                             ) {
-                                Icon(
-                                    imageVector = Icons.Filled.Info,
-                                    contentDescription =
+                                Text(
+                                    text =
                                         if (isEnglish) {
-                                            "Exercise information"
+                                            "Favorite"
                                         } else {
-                                            "מידע על התרגיל"
+                                            "מועדף"
                                         },
-                                    tint =
-                                        MaterialTheme.colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.size(19.dp)
+                                    style =
+                                        KmiTypography
+                                            .caption
+                                            .copy(
+                                                fontWeight =
+                                                    FontWeight.ExtraBold
+                                            ),
+                                    color =
+                                        Color(0xFF9A5A00),
+                                    modifier =
+                                        Modifier.padding(
+                                            horizontal = 7.dp,
+                                            vertical = 2.dp
+                                        ),
+                                    maxLines = 1
                                 )
                             }
-
-                            Spacer(
-                                modifier = Modifier.width(2.dp)
-                            )
-
-                            IconButton(
-                                onClick = onToggleFavorite,
-                                modifier = Modifier.size(26.dp)
-                            ) {
-                                Icon(
-                                    imageVector =
-                                        if (isFavorite) {
-                                            Icons.Filled.Star
-                                        } else {
-                                            Icons.Outlined.StarBorder
-                                        },
-                                    contentDescription =
-                                        if (isFavorite) {
-                                            if (isEnglish) {
-                                                "Remove from favorites"
-                                            } else {
-                                                "הסר ממועדפים"
-                                            }
-                                        } else {
-                                            if (isEnglish) {
-                                                "Add to favorites"
-                                            } else {
-                                                "הוסף למועדפים"
-                                            }
-                                        },
-                                    tint =
-                                        if (isFavorite) {
-                                            Color(0xFFFFC107)
-                                        } else {
-                                            MaterialTheme.colorScheme.onSurfaceVariant
-                                        },
-                                    modifier = Modifier.size(19.dp)
-                                )
-                            }
-
-                            Spacer(
-                                modifier = Modifier.weight(1f)
-                            )
                         }
 
-                        Spacer(
-                            modifier = Modifier.height(2.dp)
-                        )
-
-                        Text(
-                            text =
-                                if (isEnglish) {
-                                    item.trim()
-                                } else {
-                                    "\u200F${item.trim()}\u200F"
-                                },
-                            style =
-                                KmiTypography.caption.copy(
-                                    fontWeight = FontWeight.ExtraBold
-                                ),
-                            color = MaterialTheme.colorScheme.onSurface,
-                            textAlign =
-                                if (isEnglish) {
-                                    TextAlign.Left
-                                } else {
-                                    TextAlign.Right
-                                },
-                            modifier = Modifier.fillMaxWidth(),
-                            maxLines = 3,
-                            overflow = TextOverflow.Ellipsis
-                        )
+                        if (hasNote) {
+                            Surface(
+                                shape =
+                                    RoundedCornerShape(10.dp),
+                                color =
+                                    if (isDarkMode) {
+                                        Color(0xFF5B4A22)
+                                    } else {
+                                        Color(0xFFFFE7B3)
+                                    },
+                                border =
+                                    BorderStroke(
+                                        width = 1.dp,
+                                        color =
+                                            if (isDarkMode) {
+                                                Color(0xFFFFD978)
+                                                    .copy(alpha = 0.18f)
+                                            } else {
+                                                Color(0xFF8A5A00)
+                                                    .copy(alpha = 0.18f)
+                                            }
+                                    ),
+                                shadowElevation = 0.dp
+                            ) {
+                                Text(
+                                    text =
+                                        if (isEnglish) {
+                                            "Note"
+                                        } else {
+                                            "הערה"
+                                        },
+                                    style =
+                                        KmiTypography
+                                            .caption
+                                            .copy(
+                                                fontWeight =
+                                                    FontWeight.ExtraBold
+                                            ),
+                                    color =
+                                        if (isDarkMode) {
+                                            Color(0xFFFFD978)
+                                        } else {
+                                            Color(0xFF8A5A00)
+                                        },
+                                    modifier =
+                                        Modifier.padding(
+                                            horizontal = 7.dp,
+                                            vertical = 2.dp
+                                        ),
+                                    maxLines = 1
+                                )
+                            }
+                        }
                     }
                 }
-
-                Spacer(
-                    modifier = Modifier.width(4.dp)
-                )
-
-                Box(
-                    modifier = Modifier
-                        .width(3.dp)
-                        .height(34.dp)
-                        .clip(
-                            RoundedCornerShape(
-                                topStart = 8.dp,
-                                bottomStart = 8.dp
-                            )
-                        )
-                        .background(belt.color)
-                )
             }
-        }
-    }
-}
 
-@Composable
-private fun HardMasterToggle(
-    mastered: Boolean?,
-    onClick: () -> Unit
-) {
-    val bg = when (mastered) {
-        true -> Color(0xFF2E7D32)
-        false -> Color(0xFFC62828)
-        null -> Color.White
-    }
+            Spacer(
+                modifier =
+                    Modifier.height(3.dp)
+            )
 
-    val border = when (mastered) {
-        true -> Color(0xFF1B5E20)
-        false -> Color(0xFF8E1B1B)
-        null -> Color(0xFFCBD5E1)
-    }
+            MaterialsExerciseStatusCard(
+                isEnglish = isEnglish,
+                infoWidth = 76.dp,
+                info = {
+                    Surface(
+                        onClick = onInfoClick,
+                        modifier =
+                            Modifier.fillMaxSize(),
+                        shape =
+                            RoundedCornerShape(7.dp),
+                        color =
+                            MaterialTheme
+                                .colorScheme
+                                .primary,
+                        tonalElevation = 0.dp,
+                        shadowElevation = 0.dp
+                    ) {
+                        Column(
+                            modifier =
+                                Modifier.fillMaxSize(),
+                            horizontalAlignment =
+                                Alignment.CenterHorizontally,
+                            verticalArrangement =
+                                Arrangement.Center
+                        ) {
+                            Icon(
+                                imageVector =
+                                    Icons.Filled.Info,
+                                contentDescription =
+                                    if (isEnglish) {
+                                        "Exercise information"
+                                    } else {
+                                        "מידע"
+                                    },
+                                tint =
+                                    MaterialTheme
+                                        .colorScheme
+                                        .onPrimary,
+                                modifier =
+                                    Modifier.size(12.dp)
+                            )
 
-    Surface(
-        modifier = Modifier
-            .size(34.dp)
-            .clickable(onClick = onClick),
-        shape = CircleShape,
-        color = bg,
-        border = BorderStroke(1.5.dp, border),
-        tonalElevation = 0.dp,
-        shadowElevation = 0.dp
-    ) {
-        Box(
-            modifier = Modifier.fillMaxSize(),
-            contentAlignment = Alignment.Center
-        ) {
-            when (mastered) {
-                true -> Icon(
-                    imageVector = Icons.Filled.Check,
-                    contentDescription = "יודע",
-                    tint = Color.White,
-                    modifier = Modifier.size(21.dp)
+                            Spacer(
+                                Modifier.height(1.dp)
+                            )
+
+                            Text(
+                                text =
+                                    if (isEnglish) {
+                                        "Info"
+                                    } else {
+                                        "מידע"
+                                    },
+                                style =
+                                    KmiTypography
+                                        .caption
+                                        .copy(
+                                            fontWeight =
+                                                FontWeight.ExtraBold
+                                        ),
+                                color =
+                                    MaterialTheme
+                                        .colorScheme
+                                        .onPrimary,
+                                textAlign =
+                                    TextAlign.Center,
+                                maxLines = 1
+                            )
+                        }
+                    }
+                }
+            ) {
+                TraineeMaterialStatusSelector(
+                    selectedStatus =
+                        traineeStatus,
+                    dateText = "",
+                    isEnglish = isEnglish,
+                    showSymbols = false,
+                    onSelect =
+                        onTraineeStatusSelect
                 )
-
-                false -> Icon(
-                    imageVector = Icons.Filled.Close,
-                    contentDescription = "לא יודע",
-                    tint = Color.White,
-                    modifier = Modifier.size(21.dp)
-                )
-
-                null -> Spacer(Modifier.size(1.dp))
             }
         }
     }
