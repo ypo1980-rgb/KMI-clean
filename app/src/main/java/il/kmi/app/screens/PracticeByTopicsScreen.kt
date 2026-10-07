@@ -1,12 +1,10 @@
 package il.kmi.app.screens
 
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.runtime.LaunchedEffect
 import kotlinx.coroutines.delay
 import il.kmi.app.ui.practice.PracticeExerciseCenterCard
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -35,14 +33,23 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.BorderStroke
 import il.yuval.ui.theme.kmiScreenBackgroundBrush
 import androidx.compose.material3.Scaffold
+import androidx.compose.runtime.collectAsState
 import il.yuval.ui.theme.kmiSectionHeaderBackground
 import il.yuval.ui.theme.kmiSectionHeaderContentColor
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.platform.LocalContext
+import il.kmi.app.domain.CanonicalIds
 import il.kmi.app.domain.ExerciseExplanationResolver
+import il.kmi.app.favorites.FavoritesStore
+import il.kmi.app.notes.ExerciseNotesStore
 import il.kmi.app.ui.dialogs.ExerciseExplanationDialog
+import il.kmi.app.ui.dialogs.ExerciseNoteEditorDialog
+import il.kmi.shared.domain.content.ExerciseIdentityRegistry
 import il.kmi.app.ui.practice.PracticeBottomControls
 import il.kmi.app.ui.practice.PracticeStartConfigDialog
+import java.util.Locale
+import kotlin.time.Duration.Companion.seconds
 
 private const val TOPICS_PICK_TOKEN =
     "__TOPICS_PICK__"
@@ -259,6 +266,131 @@ fun PracticeByTopicsScreen(
     onBack: () -> Unit,
     onHome: () -> Unit
 ) {
+    val context =
+        LocalContext.current
+
+    val favorites: Set<String> by
+    FavoritesStore
+        .favoritesFlow
+        .collectAsState(
+            initial = emptySet()
+        )
+
+    fun exerciseAliasesFor(
+        item: PracticeByTopicsItem
+    ): Set<String> {
+        val cleanTitle =
+            item.title.trim()
+
+        val registryId =
+            ExerciseIdentityRegistry.idFor(
+                belt = item.belt,
+                hebrewTitle = cleanTitle,
+                topicKey = item.topic.trim()
+            )
+
+        val canonicalId =
+            CanonicalIds.canonicalFor(
+                belt = item.belt,
+                topicTitle = item.topic.trim(),
+                displayItem = item.title
+            )
+
+        val explanationId =
+            CanonicalIds.resolveCanonicalForExplanation(
+                belt = item.belt,
+                topicTitle = item.topic.trim(),
+                rawItemFromRepo = item.title
+            )
+
+        return setOf(
+            registryId,
+            canonicalId,
+            explanationId,
+            cleanTitle
+        )
+            .map {
+                it.trim()
+            }
+            .filter {
+                it.isNotBlank()
+            }
+            .toSet()
+    }
+
+    fun loadNote(
+        item: PracticeByTopicsItem
+    ): String {
+        val aliases =
+            exerciseAliasesFor(
+                item
+            )
+
+        val primaryId =
+            aliases.firstOrNull()
+                ?: return ""
+
+        return ExerciseNotesStore.loadNote(
+            context = context,
+            belt = item.belt,
+            exerciseId = primaryId,
+            aliases = aliases,
+            allowLegacyMigration = true
+        )
+    }
+
+    fun saveNote(
+        item: PracticeByTopicsItem,
+        value: String
+    ) {
+        val aliases =
+            exerciseAliasesFor(
+                item
+            )
+
+        val primaryId =
+            aliases.firstOrNull()
+                ?: return
+
+        ExerciseNotesStore.saveNote(
+            context = context,
+            belt = item.belt,
+            exerciseId = primaryId,
+            note = value,
+            aliases = aliases
+        )
+    }
+
+    fun deleteNote(
+        item: PracticeByTopicsItem
+    ) {
+        val aliases =
+            exerciseAliasesFor(
+                item
+            )
+
+        val primaryId =
+            aliases.firstOrNull()
+                ?: return
+
+        ExerciseNotesStore.deleteNote(
+            context = context,
+            belt = item.belt,
+            exerciseId = primaryId,
+            aliases = aliases
+        )
+    }
+
+    fun favoriteIdFor(
+        item: PracticeByTopicsItem
+    ): String {
+        return ExerciseIdentityRegistry.idFor(
+            belt = item.belt,
+            hebrewTitle = item.title.trim(),
+            topicKey = item.topic.trim()
+        )
+    }
+
     val practiceItems =
         remember(selectionToken) {
             buildPracticeByTopicsItems(
@@ -281,9 +413,24 @@ fun PracticeByTopicsScreen(
         mutableStateOf(false)
     }
 
+    var showNoteEditor by
+    rememberSaveable {
+        mutableStateOf(false)
+    }
+
+    var noteDraft by
+    rememberSaveable {
+        mutableStateOf("")
+    }
+
+    var notesRefreshKey by
+    rememberSaveable {
+        mutableIntStateOf(0)
+    }
+
     var durationMinutes by
     rememberSaveable {
-        mutableStateOf(1)
+        mutableIntStateOf(1)
     }
 
     var halfAlertEnabled by
@@ -377,7 +524,7 @@ fun PracticeByTopicsScreen(
                 timeLeft > 0 &&
                 isRunning
             ) {
-                delay(1000)
+                delay(1.seconds)
                 timeLeft--
             }
 
@@ -533,6 +680,7 @@ fun PracticeByTopicsScreen(
                                 null,
                             timeText =
                                 String.format(
+                                    Locale.getDefault(),
                                     "%02d:%02d",
                                     timeLeft / 60,
                                     timeLeft % 60
@@ -607,6 +755,26 @@ fun PracticeByTopicsScreen(
                 )
             }
 
+        val favoriteId =
+            remember(currentItem) {
+                favoriteIdFor(
+                    currentItem
+                )
+            }
+
+        val isFavorite =
+            favoriteId in favorites
+
+        val noteText =
+            remember(
+                currentItem,
+                notesRefreshKey
+            ) {
+                loadNote(
+                    currentItem
+                )
+            }
+
         ExerciseExplanationDialog(
             title =
                 currentItem.title,
@@ -614,17 +782,71 @@ fun PracticeByTopicsScreen(
                 "(${currentItem.belt.heb})",
             explanation =
                 explanation,
-            noteText = "",
-            isFavorite = false,
+            noteText =
+                noteText,
+            isFavorite =
+                isFavorite,
             accentColor =
                 currentItem.belt.color,
             isEnglish = false,
             onDismiss = {
                 showHelp = false
             },
-            onEditNote = {},
-            onDeleteNote = {},
-            onToggleFavorite = {}
+            onEditNote = {
+                noteDraft =
+                    loadNote(
+                        currentItem
+                    )
+
+                showNoteEditor =
+                    true
+            },
+            onDeleteNote = {
+                deleteNote(
+                    currentItem
+                )
+
+                noteDraft = ""
+                notesRefreshKey++
+            },
+            onToggleFavorite = {
+                FavoritesStore.toggle(
+                    favoriteId
+                )
+            }
         )
+
+        if (showNoteEditor) {
+            ExerciseNoteEditorDialog(
+                exerciseTitle =
+                    currentItem.title,
+                noteText =
+                    noteDraft,
+                isEnglish = false,
+                accentColor =
+                    currentItem.belt.color,
+                onNoteChange = {
+                    noteDraft = it
+                },
+                onDismiss = {
+                    showNoteEditor = false
+                },
+                onSave = {
+                    val cleanNote =
+                        noteDraft.trim()
+
+                    noteDraft =
+                        cleanNote
+
+                    saveNote(
+                        item = currentItem,
+                        value = cleanNote
+                    )
+
+                    notesRefreshKey++
+                    showNoteEditor = false
+                }
+            )
+        }
     }
 }

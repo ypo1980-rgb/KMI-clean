@@ -15,7 +15,6 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -29,14 +28,9 @@ import kotlinx.coroutines.launch
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.animation.core.tween
-import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.buildAnnotatedString
-import il.kmi.app.ui.KmiIconSize
 import il.kmi.app.ui.KmiTtsManager
 import il.kmi.app.ui.KmiTypography
 import il.kmi.app.ui.dialogs.ExerciseExplanationDialog
@@ -45,8 +39,9 @@ import il.kmi.shared.questions.model.util.ExerciseTitleFormatter
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.runtime.collectAsState
-import il.kmi.app.domain.CanonicalIds
 import il.kmi.app.favorites.FavoritesStore
+import il.kmi.app.notes.ExerciseNotesStore
+import il.kmi.app.exercises.sync.ExerciseSyncStore
 import il.kmi.app.domain.ContentRepo
 import il.kmi.shared.domain.content.ExerciseIdentityRegistry
 import android.app.Activity
@@ -63,6 +58,7 @@ import il.kmi.shared.localization.AppLanguage
 import il.kmi.shared.localization.AppLanguageManager
 import il.yuval.ui.theme.kmiSectionHeaderBackground
 import il.yuval.ui.theme.kmiScreenBackgroundBrush
+import kotlin.time.Duration.Companion.milliseconds
 
 //==============================================================================
 
@@ -214,8 +210,10 @@ private fun ExerciseCardsCoachStatusButton(
 private fun ExerciseCardsCoachStatusRow(
     progress: CoachMaterialProgress,
     isEnglish: Boolean,
+    isExcluded: Boolean,
     isFav: Boolean,
     hasNote: Boolean,
+    onToggleExclude: () -> Unit,
     onInfo: () -> Unit,
     onToggleFavorite: () -> Unit,
     onEditNote: () -> Unit,
@@ -335,10 +333,10 @@ private fun ExerciseCardsCoachStatusRow(
             ) {
                 ItemFloatingActions(
                     isEnglish = isEnglish,
-                    excluded = false,
+                    excluded = isExcluded,
                     isFav = isFav,
                     hasNote = hasNote,
-                    onToggleExclude = {},
+                    onToggleExclude = onToggleExclude,
                     onInfo = onInfo,
                     onToggleFavorite = onToggleFavorite,
                     onEditNote = onEditNote
@@ -488,10 +486,6 @@ private fun createExerciseCardsPdf(
 
     fun textX(): Float {
         return if (isEnglish) contentLeft else contentRight
-    }
-
-    fun beltLabel(): String {
-        return if (isEnglish) belt.en else belt.heb
     }
 
     fun cleanPdfText(value: String): String {
@@ -955,6 +949,18 @@ fun ExercisesTabsScreen(
         sp.all.keys.filter { it.startsWith("unknown_${belt.id}_") }
     }
 
+    val allPartiallyKnownKeys =
+        remember(
+            belt.id,
+            marksVersion
+        ) {
+            sp.all.keys.filter { key ->
+                key.startsWith(
+                    "partially_known_${belt.id}_"
+                )
+            }
+        }
+
     // --- item list כמו ב-MaterialsScreen ---
     data class TopicItems(val topic: String, val items: Set<String>)
 
@@ -1085,6 +1091,10 @@ fun ExercisesTabsScreen(
     var noteEditorFor by rememberSaveable { mutableStateOf<String?>(null) }
     var noteDraft by rememberSaveable { mutableStateOf("") }
     var notesRefreshKey by rememberSaveable { mutableIntStateOf(0) }
+    var exclusionsRefreshKey by rememberSaveable {
+        mutableIntStateOf(0)
+    }
+
     /*
    * צד מתאמן:
    * 0 = הכול
@@ -1098,7 +1108,7 @@ fun ExercisesTabsScreen(
    * 3 = לשיפור
    */
     var selectedTab by rememberSaveable(isCoach) {
-        mutableStateOf(0)
+        mutableIntStateOf(0)
     }
 
     LaunchedEffect(isCoach) {
@@ -1107,17 +1117,56 @@ fun ExercisesTabsScreen(
 
 // אין יותר searchResults מקומי — החיפוש הגלובלי נמצא ב-KmiTopBar
 
-    fun formattedExerciseTitle(raw: String): String {
-        val formatted = ExerciseTitleFormatter
-            .displayName(raw)
-            .toString()
-            .trim()
+    fun formattedExerciseTitle(
+        raw: String,
+        topicTitle: String? = null
+    ): String {
+        val cleanTopic =
+            topicTitle
+                ?.trim()
+                .orEmpty()
+
+        var cleanRaw =
+            raw.trim()
+
+        if (
+            cleanTopic.isNotBlank() &&
+            cleanRaw.startsWith("$cleanTopic::")
+        ) {
+            cleanRaw =
+                cleanRaw
+                    .removePrefix("$cleanTopic::")
+                    .trim()
+        }
+
+        if (
+            cleanTopic.isNotBlank() &&
+            cleanRaw.startsWith(cleanTopic)
+        ) {
+            cleanRaw =
+                cleanRaw
+                    .removePrefix(cleanTopic)
+                    .trim()
+                    .trimStart(
+                        '-',
+                        '–',
+                        '—',
+                        ':'
+                    )
+                    .trim()
+        }
+
+        val formatted =
+            ExerciseTitleFormatter
+                .displayName(cleanRaw)
+                .trim()
 
         return formatted
-            .takeIf { value: String ->
-                value.isNotBlank() && value != "null"
+            .takeIf { value ->
+                value.isNotBlank() &&
+                        value != "null"
             }
-            ?: raw.trim()
+            ?: cleanRaw
     }
 
     // ✅ אם זה __ALL__ צריך לדעת לאיזה נושא שייך כל item
@@ -1139,14 +1188,23 @@ fun ExercisesTabsScreen(
      *
      * כל תרגיל במסך מומר ל־ex_XXX מתוך ExerciseIdentityRegistry.
      */
-    fun exerciseIdentityIdFor(raw: String): String {
-        val itemTopic = topicForRawItem(raw)
+    fun exerciseIdentityIdFor(
+        raw: String
+    ): String {
+        val itemTopic =
+            topicForRawItem(raw)
 
-        return ExerciseIdentityRegistry.idFor(
+        return ExerciseSyncStore.resolveIdentity(
             belt = belt,
-            hebrewTitle = formattedExerciseTitle(raw),
-            topicKey = itemTopic
-        )
+            topic = itemTopic,
+            subTopic =
+                subTopicFilter
+                    ?.takeIf {
+                        it.isNotBlank()
+                    }
+                    ?.let(::dec),
+            rawItem = raw
+        ).exerciseId
     }
 
     /*
@@ -1175,10 +1233,15 @@ fun ExercisesTabsScreen(
     val exerciseIdByRaw: Map<String, String> =
         remember(
             itemList,
-            belt
+            belt,
+            topic,
+            subTopicFilter,
+            allTopicItems
         ) {
             itemList.associateWith { raw ->
-                exerciseIdentityIdFor(raw)
+                exerciseIdentityIdFor(
+                    raw
+                )
             }
         }
 
@@ -1200,7 +1263,28 @@ fun ExercisesTabsScreen(
         return raw in favoriteRawItems
     }
 
-    fun noteKeyFor(raw: String): String {
+    fun noteAliasesFor(
+        raw: String
+    ): Set<String> {
+        val itemTopic =
+            topicForRawItem(raw)
+
+        return ExerciseSyncStore.resolveIdentity(
+            belt = belt,
+            topic = itemTopic,
+            subTopic =
+                subTopicFilter
+                    ?.takeIf {
+                        it.isNotBlank()
+                    }
+                    ?.let(::dec),
+            rawItem = raw
+        ).aliases
+    }
+
+    fun legacyNoteKeyFor(
+        raw: String
+    ): String {
         val exerciseId =
             exerciseIdByRaw[raw]
                 ?: exerciseIdentityIdFor(raw)
@@ -1208,38 +1292,116 @@ fun ExercisesTabsScreen(
         return "note_${belt.id}_$exerciseId"
     }
 
-    fun loadNote(raw: String): String =
-        notesSp.getString(
-            noteKeyFor(raw),
-            ""
-        )?.trim().orEmpty()
+    fun loadNote(
+        raw: String
+    ): String {
+        val aliases =
+            noteAliasesFor(raw)
+
+        val primaryId =
+            aliases.firstOrNull()
+                ?: return ""
+
+        val globalNote =
+            ExerciseNotesStore.loadNote(
+                context = ctx,
+                belt = belt,
+                exerciseId = primaryId,
+                aliases = aliases,
+                allowLegacyMigration = true
+            )
+
+        if (globalNote.isNotBlank()) {
+            return globalNote
+        }
+
+        /*
+         * migration חד־פעמי מה־kmi_notes הישן.
+         */
+        val legacyKey =
+            legacyNoteKeyFor(raw)
+
+        val legacyNote =
+            notesSp.getString(
+                legacyKey,
+                ""
+            )
+                .orEmpty()
+                .trim()
+
+        if (legacyNote.isBlank()) {
+            return ""
+        }
+
+        ExerciseNotesStore.saveNote(
+            context = ctx,
+            belt = belt,
+            exerciseId = primaryId,
+            note = legacyNote,
+            aliases = aliases
+        )
+
+        notesSp.edit {
+            remove(
+                legacyKey
+            )
+        }
+
+        return legacyNote
+    }
 
     fun saveNote(
         raw: String,
         value: String
     ) {
-        val clean = value.trim()
+        val aliases =
+            noteAliasesFor(raw)
 
+        val primaryId =
+            aliases.firstOrNull()
+                ?: return
+
+        ExerciseNotesStore.saveNote(
+            context = ctx,
+            belt = belt,
+            exerciseId = primaryId,
+            note = value,
+            aliases = aliases
+        )
+
+        /*
+         * אם נשאר במקרה מפתח ישן,
+         * מנקים אותו לאחר השמירה החדשה.
+         */
         notesSp.edit {
-            if (clean.isBlank()) {
-                remove(
-                    noteKeyFor(raw)
-                )
-            } else {
-                putString(
-                    noteKeyFor(raw),
-                    clean
-                )
-            }
+            remove(
+                legacyNoteKeyFor(raw)
+            )
         }
 
         notesRefreshKey++
     }
 
-    fun deleteNote(raw: String) {
+    fun deleteNote(
+        raw: String
+    ) {
+        val aliases =
+            noteAliasesFor(raw)
+
+        val primaryId =
+            aliases.firstOrNull()
+                ?: return
+
+        ExerciseNotesStore.deleteNote(
+            context = ctx,
+            belt = belt,
+            exerciseId = primaryId,
+            aliases = aliases
+        )
+
         notesSp.edit {
             remove(
-                noteKeyFor(raw)
+                legacyNoteKeyFor(raw)
             )
         }
 
@@ -1253,15 +1415,10 @@ fun ExercisesTabsScreen(
             exerciseIdByRaw
         ) {
             itemList.associateWith { raw ->
-                loadNote(raw).isNotBlank()
+                loadNote(raw)
+                    .isNotBlank()
             }
         }
-
-    fun hasNote(
-        raw: String
-    ): Boolean {
-        return notePresenceByRaw[raw] == true
-    }
 
 // סטטוסים מה-VM
     val itemStates = remember(
@@ -1280,74 +1437,325 @@ fun ExercisesTabsScreen(
         allTopicItems,
         marksVersion
     ) {
-        /*
-         * אוספים תחילה את כל המצבים למפה רגילה.
-         * כך הרשימה אינה עוברת recomposition אחרי
-         * כל תרגיל בזמן הטעינה.
-         */
         val loadedStates =
             linkedMapOf<String, Boolean?>()
 
         itemList.forEach { raw ->
-            val itemTopic =
-                topicForRawItem(raw)
 
-            val canonicalId =
-                CanonicalIds.canonicalFor(
-                    belt = belt,
-                    topicTitle = itemTopic,
-                    displayItem = raw
+            val itemTopic =
+                topicForRawItem(
+                    raw
                 )
 
-            loadedStates[raw] =
-                runCatching {
-                    vm.getItemStatusNullable(
-                        belt = belt,
-                        topic = itemTopic,
-                        item = canonicalId
+            val decodedSubTopic =
+                subTopicFilter
+                    ?.takeIf {
+                        it.isNotBlank()
+                    }
+                    ?.let(::dec)
+                    ?.trim()
+                    .orEmpty()
+
+            val identity =
+                ExerciseSyncStore.resolveIdentity(
+                    belt = belt,
+                    topic = itemTopic,
+                    subTopic =
+                        decodedSubTopic
+                            .takeIf {
+                                it.isNotBlank()
+                            },
+                    rawItem = raw
+                )
+
+            val topicKeys =
+                buildList {
+
+                    if (
+                        itemTopic.isNotBlank() &&
+                        decodedSubTopic.isNotBlank()
+                    ) {
+                        add(
+                            "${itemTopic.trim()}__${decodedSubTopic}"
+                        )
+                    }
+
+                    if (itemTopic.isNotBlank()) {
+                        add(
+                            itemTopic.trim()
+                        )
+                    }
+
+                    add(
+                        "כללי"
                     )
-                }.getOrNull()
+                }
+                    .distinct()
+
+            var loadedValue: Boolean? =
+                null
+
+            loop@ for (topicKey in topicKeys) {
+
+                for (candidateId in identity.aliases) {
+
+                    val value =
+                        runCatching {
+                            vm.getItemStatusNullable(
+                                belt = belt,
+                                topic = topicKey,
+                                item = candidateId
+                            )
+                        }.getOrNull()
+
+                    if (value != null) {
+                        loadedValue =
+                            value
+
+                        break@loop
+                    }
+                }
+            }
+
+            loadedStates[raw] =
+                loadedValue
         }
 
-        /*
-         * עדכון מרוכז אחד בלבד לאחר סיום הקריאה.
-         *
-         * אין צורך ב-isMastered:
-         * getItemStatusNullable כבר מחזיר
-         * true / false / null ממקור האמת.
-         */
         itemStates.clear()
-        itemStates.putAll(loadedStates)
+        itemStates.putAll(
+            loadedStates
+        )
     }
 
 // ========= ⭐ / X =========
-    val suffix = remember(topic, subTopicFilter) {
-        if (subTopicFilter.isNullOrBlank()) topic else "${topic}__${subTopicFilter}"
+    val suffix =
+        remember(
+            topic,
+            subTopicFilter
+        ) {
+            val decodedSubTopic =
+                subTopicFilter
+                    ?.takeIf {
+                        it.isNotBlank()
+                    }
+                    ?.let(::dec)
+                    ?.trim()
+                    .orEmpty()
+
+            if (decodedSubTopic.isBlank()) {
+                topic.trim()
+            } else {
+                "${topic.trim()}__${decodedSubTopic}"
+            }
+        }
+
+    val exclusionKeySuffix =
+        remember(
+            topic,
+            subTopicFilter
+        ) {
+            val cleanTopic =
+                topic.trim()
+
+            val cleanSubTopic =
+                subTopicFilter
+                    ?.takeIf {
+                        it.isNotBlank()
+                    }
+                    ?.let(::dec)
+                    ?.trim()
+                    .orEmpty()
+
+            if (cleanSubTopic.isBlank()) {
+                cleanTopic
+            } else {
+                "${cleanTopic}__${cleanSubTopic}"
+            }
+        }
+
+    fun isExcludedRawItem(
+        raw: String
+    ): Boolean {
+        val itemTopic =
+            topicForRawItem(
+                raw
+            )
+
+        val identity =
+            ExerciseSyncStore.resolveIdentity(
+                belt = belt,
+                topic = itemTopic,
+                subTopic =
+                    subTopicFilter
+                        ?.takeIf {
+                            it.isNotBlank()
+                        }
+                        ?.let(::dec),
+                rawItem = raw
+            )
+
+        val stored =
+            sp.getStringSet(
+                "excluded_${belt.id}_$exclusionKeySuffix",
+                emptySet()
+            )
+                ?: emptySet()
+
+        return identity.aliases.any { alias ->
+            alias in stored
+        }
     }
 
+    fun toggleExcludedRawItem(
+        raw: String
+    ) {
+        val itemTopic =
+            topicForRawItem(
+                raw
+            )
 
-    var unknowns by remember(belt.id, topic, suffix, allUnknownKeys, marksVersion) {
+        val identity =
+            ExerciseSyncStore.resolveIdentity(
+                belt = belt,
+                topic = itemTopic,
+                subTopic =
+                    subTopicFilter
+                        ?.takeIf {
+                            it.isNotBlank()
+                        }
+                        ?.let(::dec),
+                rawItem = raw
+            )
+
+        val key =
+            "excluded_${belt.id}_$exclusionKeySuffix"
+
+        val stored =
+            (
+                    sp.getStringSet(
+                        key,
+                        emptySet()
+                    )
+                        ?: emptySet()
+                    )
+                .toMutableSet()
+
+        val currentlyExcluded =
+            identity.aliases.any { alias ->
+                alias in stored
+            }
+
+        if (currentlyExcluded) {
+            identity.aliases.forEach { alias ->
+                stored.remove(
+                    alias
+                )
+            }
+        } else {
+            stored.addAll(
+                identity.aliases
+            )
+        }
+
+        sp.edit {
+            putStringSet(
+                key,
+                stored
+            )
+        }
+
+        exclusionsRefreshKey++
+    }
+
+    var unknowns by remember(
+        belt.id,
+        topic,
+        suffix,
+        allUnknownKeys,
+        marksVersion
+    ) {
         mutableStateOf(
             if (topic == "__ALL__") {
                 allUnknownKeys
-                    .flatMap { key -> readSet(key) }
-                    .toMutableSet()
+                    .flatMap { key ->
+                        readSet(key)
+                    }
+                    .toSet()
             } else {
-                readSet("unknown_${belt.id}_$suffix")
-                    .toMutableSet()
+                readSet(
+                    "unknown_${belt.id}_$suffix"
+                ).toSet()
             }
         )
     }
 
-    fun isUnknownRawItem(raw: String): Boolean {
-        val exerciseId = exerciseIdentityIdFor(raw)
+    val partiallyKnownIds =
+        remember(
+            belt.id,
+            topic,
+            suffix,
+            allPartiallyKnownKeys,
+            marksVersion
+        ) {
+            if (topic == "__ALL__") {
+                allPartiallyKnownKeys
+                    .flatMap { key ->
+                        readSet(key)
+                    }
+                    .toSet()
+            } else {
+                readSet(
+                    "partially_known_${belt.id}_$suffix"
+                ).toSet()
+            }
+        }
 
-        return exerciseId in unknowns
+    fun isPartiallyKnownRawItem(
+        raw: String
+    ): Boolean {
+        val identity =
+            ExerciseSyncStore.resolveIdentity(
+                belt = belt,
+                topic =
+                    topicForRawItem(
+                        raw
+                    ),
+                subTopic =
+                    subTopicFilter
+                        ?.takeIf {
+                            it.isNotBlank()
+                        }
+                        ?.let(::dec),
+                rawItem = raw
+            )
+
+        return identity.aliases.any { alias ->
+            alias in partiallyKnownIds
+        }
     }
 
-    fun isUnknownForCards(raw: String): Boolean {
-        return itemStates[raw] == false ||
-                isUnknownRawItem(raw)
+    fun isUnknownRawItem(
+        raw: String
+    ): Boolean {
+        val identity =
+            ExerciseSyncStore.resolveIdentity(
+                belt = belt,
+                topic =
+                    topicForRawItem(
+                        raw
+                    ),
+                subTopic =
+                    subTopicFilter
+                        ?.takeIf {
+                            it.isNotBlank()
+                        }
+                        ?.let(::dec),
+                rawItem = raw
+            )
+
+        return identity.aliases.any { alias ->
+            alias in unknowns
+        }
     }
 
     /*
@@ -1359,12 +1767,24 @@ fun ExercisesTabsScreen(
         belt,
         topic,
         subTopicFilter,
-        marksVersion
+        marksVersion,
+        partiallyKnownIds
     ) {
         derivedStateOf {
-            itemList.filterTo(linkedSetOf()) { rawItem ->
-                itemStates[rawItem] == false ||
-                        isUnknownRawItem(rawItem)
+            itemList.filterTo(
+                linkedSetOf()
+            ) { rawItem ->
+
+                val isPartiallyKnown =
+                    isPartiallyKnownRawItem(
+                        rawItem
+                    )
+
+                !isPartiallyKnown &&
+                        (
+                                itemStates[rawItem] == false ||
+                                        isUnknownRawItem(rawItem)
+                                )
             }
         }
     }
@@ -1540,9 +1960,29 @@ fun ExercisesTabsScreen(
         coachStatusesVersion++
     }
 
-    fun toggleFavorite(rawItem: String) {
+    fun toggleFavorite(
+        rawItem: String
+    ) {
+        val itemTopic =
+            topicForRawItem(
+                rawItem
+            )
+
+        val favoriteId =
+            ExerciseSyncStore.resolveIdentity(
+                belt = belt,
+                topic = itemTopic,
+                subTopic =
+                    subTopicFilter
+                        ?.takeIf {
+                            it.isNotBlank()
+                        }
+                        ?.let(::dec),
+                rawItem = rawItem
+            ).exerciseId
+
         FavoritesStore.toggle(
-            exerciseIdentityIdFor(rawItem)
+            favoriteId
         )
     }
 
@@ -1552,69 +1992,6 @@ fun ExercisesTabsScreen(
     /**
      * סימון/הסרה "לא יודע"
      */
-    fun setUnknown(
-        rawItem: String,
-        set: Boolean
-    ) {
-        val itemTopic = topicForRawItem(rawItem)
-        val exerciseId = exerciseIdentityIdFor(rawItem)
-        val canonicalId = CanonicalIds.canonicalFor(
-            belt,
-            itemTopic,
-            rawItem
-        )
-
-        val storageKey =
-            if (topic == "__ALL__") {
-                "unknown_${belt.id}_$itemTopic"
-            } else {
-                "unknown_${belt.id}_$suffix"
-            }
-
-        val storedUnknowns = readSet(storageKey)
-
-        if (set) {
-            storedUnknowns.add(exerciseId)
-
-            vm.setItemStatusNullable(
-                belt = belt,
-                topic = itemTopic,
-                item = canonicalId,
-                value = false
-            )
-        } else {
-            storedUnknowns.remove(exerciseId)
-            storedUnknowns.remove(rawItem.trim())
-            storedUnknowns.remove(canonicalId)
-
-            vm.setItemStatusNullable(
-                belt = belt,
-                topic = itemTopic,
-                item = canonicalId,
-                value = null
-            )
-        }
-
-        sp.edit {
-            putStringSet(
-                storageKey,
-                storedUnknowns
-            )
-        }
-
-        unknowns =
-            if (topic == "__ALL__") {
-                allUnknownKeys
-                    .plus(storageKey)
-                    .distinct()
-                    .flatMap { key ->
-                        readSet(key)
-                    }
-                    .toMutableSet()
-            } else {
-                storedUnknowns.toMutableSet()
-            }
-    }
 
     val pdfFilteredItems: List<String> =
         if (isCoach) {
@@ -1659,7 +2036,12 @@ fun ExercisesTabsScreen(
             }
 
             ExerciseCardsPdfItem(
-                title = formattedExerciseTitle(rawItem),
+                title =
+                    formattedExerciseTitle(
+                        raw = rawItem,
+                        topicTitle =
+                            topicForRawItem(rawItem)
+                    ),
                 status = status,
                 isFavorite = isFavoriteRawItem(rawItem)
             )
@@ -2269,7 +2651,7 @@ fun ExercisesTabsScreen(
                         contentType = { _, _ ->
                             "exercise_row"
                         }
-                    ) { index, item ->
+                    ) { _, item ->
 
                         var pressed by remember(item) {
                             mutableStateOf(false)
@@ -2289,7 +2671,26 @@ fun ExercisesTabsScreen(
                         val itemHasNote =
                             notePresenceByRaw[item] == true
 
-                        val itemIsUnknown = item in unknownItems
+                        val itemIsExcluded =
+                            remember(
+                                item,
+                                belt,
+                                topic,
+                                subTopicFilter,
+                                exclusionsRefreshKey
+                            ) {
+                                isExcludedRawItem(
+                                    item
+                                )
+                            }
+
+                        val itemIsUnknown =
+                            item in unknownItems
+
+                        val itemIsPartiallyKnown =
+                            isPartiallyKnownRawItem(
+                                item
+                            )
 
                         val itemCoachStatuses =
                             coachStatuses[item]
@@ -2344,7 +2745,7 @@ fun ExercisesTabsScreen(
                                     explainFromSearch = item
 
                                     scope.launch {
-                                        kotlinx.coroutines.delay(120)
+                                        kotlinx.coroutines.delay(120.milliseconds)
                                         pressed = false
                                     }
                                 },
@@ -2446,8 +2847,11 @@ fun ExercisesTabsScreen(
                                                         )
 
                                                         if (
+                                                            itemIsExcluded ||
+                                                            itemHasNote ||
                                                             isFav ||
-                                                            itemHasNote
+                                                            itemIsUnknown ||
+                                                            itemIsPartiallyKnown
                                                         ) {
                                                             Spacer(
                                                                 Modifier.width(6.dp)
@@ -2459,6 +2863,25 @@ fun ExercisesTabsScreen(
                                                                 verticalArrangement =
                                                                     Arrangement.spacedBy(3.dp)
                                                             ) {
+
+                                                                if (itemIsExcluded) {
+                                                                    ExerciseCardsMetaBadge(
+                                                                        text =
+                                                                            tr(
+                                                                                "מוחרג",
+                                                                                "Excluded"
+                                                                            ),
+                                                                        containerColor =
+                                                                            MaterialTheme
+                                                                                .colorScheme
+                                                                                .surfaceVariant,
+                                                                        contentColor =
+                                                                            MaterialTheme
+                                                                                .colorScheme
+                                                                                .onSurfaceVariant
+                                                                    )
+                                                                }
+
                                                                 if (isFav) {
                                                                     ExerciseCardsMetaBadge(
                                                                         text =
@@ -2531,6 +2954,7 @@ fun ExercisesTabsScreen(
                                                     )
 
                                                     if (
+                                                        itemIsExcluded ||
                                                         itemHasNote ||
                                                         isFav ||
                                                         itemIsUnknown
@@ -2551,6 +2975,64 @@ fun ExercisesTabsScreen(
                                                             verticalAlignment =
                                                                 Alignment.CenterVertically
                                                         ) {
+                                                            if (itemIsExcluded) {
+                                                                ExerciseCardsMetaBadge(
+                                                                    text =
+                                                                        tr(
+                                                                            "מוחרג",
+                                                                            "Excluded"
+                                                                        ),
+                                                                    containerColor =
+                                                                        MaterialTheme
+                                                                            .colorScheme
+                                                                            .surfaceVariant,
+                                                                    contentColor =
+                                                                        MaterialTheme
+                                                                            .colorScheme
+                                                                            .onSurfaceVariant
+                                                                )
+
+                                                                if (
+                                                                    itemIsUnknown ||
+                                                                    itemHasNote ||
+                                                                    isFav
+                                                                ) {
+                                                                    Spacer(
+                                                                        Modifier.width(6.dp)
+                                                                    )
+                                                                }
+                                                            }
+
+                                                            if (itemIsPartiallyKnown) {
+                                                                ExerciseCardsMetaBadge(
+                                                                    text =
+                                                                        tr(
+                                                                            "חלקית",
+                                                                            "Partial"
+                                                                        ),
+                                                                    containerColor =
+                                                                        Color(
+                                                                            0xFFFFF1D6
+                                                                        ),
+                                                                    contentColor =
+                                                                        Color(
+                                                                            0xFFB96B12
+                                                                        )
+                                                                )
+
+                                                                if (
+                                                                    itemIsUnknown ||
+                                                                    itemHasNote ||
+                                                                    isFav
+                                                                ) {
+                                                                    Spacer(
+                                                                        Modifier.width(
+                                                                            6.dp
+                                                                        )
+                                                                    )
+                                                                }
+                                                            }
+
                                                             if (itemIsUnknown) {
                                                                 Surface(
                                                                     shape =
@@ -2590,6 +3072,63 @@ fun ExercisesTabsScreen(
                                                                                 )
                                                                     )
                                                                 }
+
+                                                                if (
+                                                                    itemHasNote ||
+                                                                    isFav
+                                                                ) {
+                                                                    Spacer(
+                                                                        Modifier.width(6.dp)
+                                                                    )
+                                                                }
+                                                            }
+
+                                                            if (isFav) {
+                                                                ExerciseCardsMetaBadge(
+                                                                    text =
+                                                                        tr(
+                                                                            "מועדף",
+                                                                            "Favorite"
+                                                                        ),
+                                                                    containerColor =
+                                                                        Color(0xFFF9D9B8),
+                                                                    contentColor =
+                                                                        Color(0xFF9A5A00)
+                                                                )
+
+                                                                if (itemHasNote) {
+                                                                    Spacer(
+                                                                        Modifier.width(6.dp)
+                                                                    )
+                                                                }
+                                                            }
+
+                                                            if (itemHasNote) {
+                                                                val isDark =
+                                                                    MaterialTheme
+                                                                        .colorScheme
+                                                                        .surface
+                                                                        .luminance() < 0.5f
+
+                                                                ExerciseCardsMetaBadge(
+                                                                    text =
+                                                                        tr(
+                                                                            "הערה",
+                                                                            "Note"
+                                                                        ),
+                                                                    containerColor =
+                                                                        if (isDark) {
+                                                                            Color(0xFF5B4A22)
+                                                                        } else {
+                                                                            Color(0xFFFFE7B3)
+                                                                        },
+                                                                    contentColor =
+                                                                        if (isDark) {
+                                                                            Color(0xFFFFD978)
+                                                                        } else {
+                                                                            Color(0xFF8A5A00)
+                                                                        }
+                                                                )
                                                             }
                                                         }
                                                     }
@@ -2605,14 +3144,20 @@ fun ExercisesTabsScreen(
                                             ExerciseCardsCoachStatusRow(
                                                 progress = materialCoachProgress,
                                                 isEnglish = isEnglish,
+                                                isExcluded = itemIsExcluded,
                                                 isFav = isFav,
                                                 hasNote = itemHasNote,
+                                                onToggleExclude = {
+                                                    toggleExcludedRawItem(
+                                                        item
+                                                    )
+                                                },
                                                 onInfo = {
                                                     pressed = true
                                                     explainFromSearch = item
 
                                                     scope.launch {
-                                                        kotlinx.coroutines.delay(120)
+                                                        kotlinx.coroutines.delay(120.milliseconds)
                                                         pressed = false
                                                     }
                                                 },
@@ -2657,7 +3202,14 @@ fun ExercisesTabsScreen(
             // ===== דיאלוג הסבר (לחיצה על שורה או אייקון info ברשימה) =====
             explainFromSearch?.let { item ->
 
-                val displayName = formattedExerciseTitle(item)
+                val itemTopic =
+                    topicForRawItem(item)
+
+                val displayName =
+                    formattedExerciseTitle(
+                        raw = item,
+                        topicTitle = itemTopic
+                    )
 
                 LaunchedEffect(item) {
                     KmiTtsManager.init(ctx)
@@ -2738,7 +3290,12 @@ fun ExercisesTabsScreen(
 
             noteEditorFor?.let { item ->
                 ExerciseNoteEditorDialog(
-                    exerciseTitle = formattedExerciseTitle(item),
+                    exerciseTitle =
+                        formattedExerciseTitle(
+                            raw = item,
+                            topicTitle =
+                                topicForRawItem(item)
+                        ),
                     noteText = noteDraft,
                     isEnglish = isEnglish,
                     accentColor = belt.color,
@@ -2753,472 +3310,5 @@ fun ExercisesTabsScreen(
                 )
             }
         } // ✅ סוגר את Scaffold { padding -> ... }
-    }
-}
-
-@Composable
-private fun ExerciseRowActionsMenu(
-    isEnglish: Boolean,
-    isCoach: Boolean,
-    isFav: Boolean,
-    hasNote: Boolean,
-    isUnknown: Boolean,
-    coachStatuses: Set<ExerciseCoachStatus>,
-    onInfo: () -> Unit,
-    onToggleFavorite: () -> Unit,
-    onEditNote: () -> Unit,
-    onToggleUnknown: () -> Unit,
-    onCoachStatusChange: (ExerciseCoachStatus) -> Unit,
-    modifier: Modifier = Modifier
-) {
-    var expanded by remember {
-        mutableStateOf(false)
-    }
-
-    val infoScale by animateFloatAsState(
-        targetValue = if (expanded) 1.08f else 1f,
-        animationSpec = tween(180),
-        label = "exerciseInfoScale"
-    )
-
-    val infoRotation by animateFloatAsState(
-        targetValue = if (expanded) 12f else 0f,
-        animationSpec = tween(180),
-        label = "exerciseInfoRotation"
-    )
-
-    fun tr(
-        he: String,
-        en: String
-    ): String {
-        return if (isEnglish) en else he
-    }
-
-    Box(
-        modifier = modifier
-    ) {
-        Surface(
-            onClick = {
-                expanded = true
-            },
-            shape = CircleShape,
-            color = MaterialTheme.colorScheme.primaryContainer,
-            shadowElevation = 0.dp,
-            tonalElevation = 0.dp,
-            border = BorderStroke(
-                width = 1.dp,
-                color = MaterialTheme.colorScheme.outline
-                    .copy(alpha = 0.28f)
-            ),
-            modifier = Modifier
-                .size(KmiIconSize.medium)
-                .graphicsLayer {
-                    scaleX = infoScale
-                    scaleY = infoScale
-                }
-        ) {
-            Box(
-                modifier = Modifier.fillMaxSize(),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = "i",
-                    color =
-                        MaterialTheme.colorScheme.onPrimaryContainer,
-                    style = KmiTypography.action.copy(
-                        fontWeight = FontWeight.Black
-                    ),
-                    modifier = Modifier.graphicsLayer {
-                        rotationZ = infoRotation
-                    }
-                )
-            }
-        }
-
-        DropdownMenu(
-            expanded = expanded,
-            onDismissRequest = {
-                expanded = false
-            },
-            modifier = Modifier
-                .background(
-                    brush = Brush.verticalGradient(
-                        colors = listOf(
-                            MaterialTheme.colorScheme.surface,
-                            MaterialTheme.colorScheme.surfaceVariant
-                                .copy(alpha = 0.72f),
-                            MaterialTheme.colorScheme.surface
-                        )
-                    ),
-                    shape = RoundedCornerShape(18.dp)
-                )
-                .border(
-                    width = 1.dp,
-                    color =
-                        MaterialTheme.colorScheme.outline
-                            .copy(alpha = 0.28f),
-                    shape = RoundedCornerShape(18.dp)
-                )
-        ) {
-            DropdownMenuItem(
-                text = {
-                    Text(
-                        text = tr("מידע", "Info"),
-                        style = KmiTypography.action
-                    )
-                },
-                onClick = {
-                    expanded = false
-                    onInfo()
-                }
-            )
-
-            if (isCoach) {
-                HorizontalDivider(
-                    color =
-                        MaterialTheme.colorScheme.outline
-                            .copy(alpha = 0.28f)
-                )
-
-                DropdownMenuItem(
-                    text = {
-                        Text(
-                            text = tr(
-                                if (coachStatuses.isEmpty()) {
-                                    "✓ לא נלמד"
-                                } else {
-                                    "לא נלמד"
-                                },
-                                if (coachStatuses.isEmpty()) {
-                                    "✓ Not taught"
-                                } else {
-                                    "Not taught"
-                                }
-                            ),
-                            style = KmiTypography.action,
-                            color =
-                                MaterialTheme.colorScheme
-                                    .onSurfaceVariant
-                        )
-                    },
-                    onClick = {
-                        expanded = false
-
-                        onCoachStatusChange(
-                            ExerciseCoachStatus.NOT_TAUGHT
-                        )
-                    }
-                )
-
-                DropdownMenuItem(
-                    text = {
-                        Text(
-                            text = tr(
-                                if (
-                                    ExerciseCoachStatus.TAUGHT in
-                                    coachStatuses
-                                ) {
-                                    "✓ נלמד"
-                                } else {
-                                    "נלמד"
-                                },
-                                if (
-                                    ExerciseCoachStatus.TAUGHT in
-                                    coachStatuses
-                                ) {
-                                    "✓ Taught"
-                                } else {
-                                    "Taught"
-                                }
-                            ),
-                            style = KmiTypography.action,
-                            color = Color(0xFF2E7D32)
-                        )
-                    },
-                    onClick = {
-                        expanded = false
-
-                        onCoachStatusChange(
-                            ExerciseCoachStatus.TAUGHT
-                        )
-                    }
-                )
-
-                DropdownMenuItem(
-                    text = {
-                        Text(
-                            text = tr(
-                                if (
-                                    ExerciseCoachStatus.PRACTICED in
-                                    coachStatuses
-                                ) {
-                                    "✓ לתרגול"
-                                } else {
-                                    "לתרגול"
-                                },
-                                if (
-                                    ExerciseCoachStatus.PRACTICED in
-                                    coachStatuses
-                                ) {
-                                    "✓ Practice"
-                                } else {
-                                    "Practice"
-                                }
-                            ),
-                            style = KmiTypography.action,
-                            color = Color(0xFFF57C00)
-                        )
-                    },
-                    onClick = {
-                        expanded = false
-
-                        onCoachStatusChange(
-                            ExerciseCoachStatus.PRACTICED
-                        )
-                    }
-                )
-
-                DropdownMenuItem(
-                    text = {
-                        Text(
-                            text = tr(
-                                if (
-                                    ExerciseCoachStatus.NEEDS_REINFORCEMENT in
-                                    coachStatuses
-                                ) {
-                                    "✓ לשיפור"
-                                } else {
-                                    "לשיפור"
-                                },
-                                if (
-                                    ExerciseCoachStatus.NEEDS_REINFORCEMENT in
-                                    coachStatuses
-                                ) {
-                                    "✓ Needs improvement"
-                                } else {
-                                    "Needs improvement"
-                                }
-                            ),
-                            style = KmiTypography.action,
-                            color = Color(0xFFC62828)
-                        )
-                    },
-                    onClick = {
-                        expanded = false
-
-                        onCoachStatusChange(
-                            ExerciseCoachStatus.NEEDS_REINFORCEMENT
-                        )
-                    }
-                )
-            } else {
-                DropdownMenuItem(
-                    text = {
-                        Text(
-                            text = tr(
-                                if (isFav) {
-                                    "הסר ממועדפים"
-                                } else {
-                                    "הוסף למועדפים"
-                                },
-                                if (isFav) {
-                                    "Remove from favorites"
-                                } else {
-                                    "Add to favorites"
-                                }
-                            ),
-                            style = KmiTypography.action
-                        )
-                    },
-                    onClick = {
-                        expanded = false
-                        onToggleFavorite()
-                    }
-                )
-
-                DropdownMenuItem(
-                    text = {
-                        Text(
-                            text = tr(
-                                if (hasNote) {
-                                    "ערוך / מחק הערה"
-                                } else {
-                                    "הוסף הערה לתרגיל"
-                                },
-                                if (hasNote) {
-                                    "Edit / delete note"
-                                } else {
-                                    "Add note"
-                                }
-                            ),
-                            style = KmiTypography.action
-                        )
-                    },
-                    onClick = {
-                        expanded = false
-                        onEditNote()
-                    }
-                )
-
-                DropdownMenuItem(
-                    text = {
-                        Text(
-                            text = tr(
-                                if (isUnknown) {
-                                    "בטל לא יודע"
-                                } else {
-                                    "סמן כלא יודע"
-                                },
-                                if (isUnknown) {
-                                    "Remove unknown mark"
-                                } else {
-                                    "Mark as unknown"
-                                }
-                            ),
-                            style = KmiTypography.action
-                        )
-                    },
-                    onClick = {
-                        expanded = false
-                        onToggleUnknown()
-                    }
-                )
-            }
-        }
-    }
-}
-
-// ========= כפתור מונפש לשימוש חוזר =========
-@Composable
-fun ActionButton(
-    text: String,
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    modifier: Modifier = Modifier,
-    brush: Brush,
-    contentColor: Color,
-    onClick: () -> Unit
-) {
-    var pressed by remember {
-        mutableStateOf(false)
-    }
-
-    val scale by animateFloatAsState(
-        targetValue =
-            if (pressed) {
-                0.96f
-            } else {
-                1f
-            },
-        animationSpec = tween(120),
-        label = "btnScale"
-    )
-
-    val scope = rememberCoroutineScope()
-
-    Surface(
-        onClick = {
-            pressed = true
-            onClick()
-
-            scope.launch {
-                kotlinx.coroutines.delay(140)
-                pressed = false
-            }
-        },
-        modifier = modifier
-            .scale(scale)
-            .heightIn(min = 60.dp),
-        shape = RoundedCornerShape(30.dp),
-        color = Color.Transparent,
-        contentColor = contentColor,
-        tonalElevation = 0.dp,
-        shadowElevation = 6.dp,
-        border = BorderStroke(
-            width = 1.dp,
-            color = contentColor.copy(alpha = 0.20f)
-        )
-    ) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(
-                    brush = brush,
-                    shape = RoundedCornerShape(30.dp)
-                )
-                .padding(
-                    horizontal = 18.dp,
-                    vertical = 12.dp
-                ),
-            contentAlignment = Alignment.Center
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.Center
-            ) {
-                Icon(
-                    imageVector = icon,
-                    contentDescription = null,
-                    tint = contentColor,
-                    modifier = Modifier.size(24.dp)
-                )
-
-                Spacer(Modifier.width(10.dp))
-
-                Text(
-                    text = text,
-                    style = KmiTypography.action.copy(
-                        fontWeight = FontWeight.Black
-                    ),
-                    color = contentColor,
-                    textAlign = TextAlign.Center,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-        }
-    }
-}
-
-// ========= עזר: הדגשת "עמידת מוצא ..." עד פסיק/נקודה =========
-private fun buildExplanationWithStanceHighlight(
-    source: String,
-    stanceColor: Color
-): AnnotatedString {
-    val marker = "עמידת מוצא"
-
-    // אם אין בכלל "עמידת מוצא" – מחזירים טקסט רגיל
-    val idx = source.indexOf(marker)
-    if (idx < 0) return AnnotatedString(source)
-
-    // מחפשים סוף משפט: פסיק או נקודה אחרי "עמידת מוצא"
-    val sentenceEndExclusive = run {
-        val endIdx = source.indexOfAny(charArrayOf('.', ','), startIndex = idx)
-        if (endIdx == -1) source.length else endIdx + 1   // כולל הפסיק/נקודה
-    }
-
-    val before = source.substring(0, idx)
-    val stanceSentence = source.substring(idx, sentenceEndExclusive)
-    val after = source.substring(sentenceEndExclusive)
-
-    return buildAnnotatedString {
-        // מה שלפני
-        append(before)
-
-        // המשפט של "עמידת מוצא ..." מודגש וצבוע
-        val stanceStart = length
-        append(stanceSentence)
-        val stanceEnd = length
-
-        addStyle(
-            style = SpanStyle(
-                fontWeight = FontWeight.Bold,
-                color = stanceColor
-            ),
-            start = stanceStart,
-            end = stanceEnd
-        )
-
-        // שאר ההסבר
-        append(after)
     }
 }

@@ -1,3 +1,7 @@
+@file:Suppress(
+    "SpellCheckingInspection"
+)
+
 package il.kmi.app.screens
 
 import androidx.compose.foundation.background
@@ -31,11 +35,13 @@ import il.kmi.app.R
 import il.kmi.app.domain.CanonicalIds
 import il.kmi.app.domain.ExerciseExplanationResolver
 import il.kmi.app.favorites.FavoritesStore
+import il.kmi.app.notes.ExerciseNotesStore
 import il.kmi.shared.domain.ContentRepo as SharedContentRepo
 import android.app.Activity
 import android.media.AudioManager
 import android.media.ToneGenerator
 import androidx.compose.ui.platform.LocalContext
+import androidx.core.content.edit
 import il.kmi.shared.localization.AppLanguage
 import il.kmi.shared.localization.AppLanguageManager
 import androidx.compose.material3.MaterialTheme
@@ -50,6 +56,8 @@ import il.yuval.ui.theme.kmiSectionHeaderBackground
 import il.yuval.ui.theme.kmiSectionHeaderContentColor
 import il.kmi.app.ui.practice.PracticeBottomControls
 import il.kmi.app.ui.practice.PracticeExerciseCenterCard
+import java.util.Locale
+import kotlin.time.Duration.Companion.seconds
 
 //==========================================================================
 
@@ -111,22 +119,6 @@ private fun normalizeFavoriteId(raw: String): String =
     raw.substringAfter("::", raw)
         .substringAfter(":", raw)
         .trim()
-
-private fun savePracticeNote(
-    prefs: android.content.SharedPreferences,
-    key: String,
-    text: String
-) {
-    val clean = text.trim()
-
-    prefs.edit().apply {
-        if (clean.isBlank()) {
-            remove(key)
-        } else {
-            putString(key, clean)
-        }
-    }.apply()
-}
 
 private fun decTokenPart(s: String): String =
     runCatching {
@@ -256,9 +248,6 @@ fun RandomPracticeScreen(
             android.content.Context.MODE_PRIVATE
         )
     }
-    val notePrefs = remember(context) {
-        context.getSharedPreferences("kmi_exercise_notes", android.content.Context.MODE_PRIVATE)
-    }
 
     // ✅ Favorites – source of truth אחד לכל האפליקציה
     val favorites: Set<String> by FavoritesStore.favoritesFlow.collectAsState(initial = emptySet())
@@ -296,6 +285,228 @@ fun RandomPracticeScreen(
         il.kmi.shared.questions.model.util.ExerciseTitleFormatter
             .displayName(rawItem)
             .trim()
+
+    fun noteAliasesFor(
+        targetBelt: Belt,
+        targetTopic: String,
+        rawItem: String
+    ): Set<String> {
+        val cleanTopic =
+            targetTopic.trim()
+
+        val displayTitle =
+            displayName(rawItem)
+                .ifBlank {
+                    rawItem
+                }
+                .trim()
+
+        val registryId =
+            ExerciseIdentityRegistry.idFor(
+                belt = targetBelt,
+                hebrewTitle = displayTitle,
+                topicKey = cleanTopic
+            )
+
+        val canonicalId =
+            CanonicalIds.canonicalFor(
+                belt = targetBelt,
+                topicTitle = cleanTopic,
+                displayItem = rawItem
+            )
+
+        val explanationId =
+            CanonicalIds.resolveCanonicalForExplanation(
+                belt = targetBelt,
+                topicTitle = cleanTopic,
+                rawItemFromRepo = rawItem
+            )
+
+        return setOf(
+            registryId,
+            canonicalId,
+            explanationId,
+            displayTitle,
+            rawItem.trim()
+        )
+            .map {
+                it.trim()
+            }
+            .filter {
+                it.isNotBlank()
+            }
+            .toSet()
+    }
+
+    fun loadPracticeNote(
+        targetBelt: Belt,
+        targetTopic: String,
+        rawItem: String
+    ): String {
+        val aliases =
+            noteAliasesFor(
+                targetBelt = targetBelt,
+                targetTopic = targetTopic,
+                rawItem = rawItem
+            )
+
+        val primaryId =
+            aliases.firstOrNull()
+                ?: return ""
+
+        return ExerciseNotesStore.loadNote(
+            context = context,
+            belt = targetBelt,
+            exerciseId = primaryId,
+            aliases = aliases,
+            allowLegacyMigration = true
+        )
+    }
+
+    fun savePracticeNoteGlobal(
+        targetBelt: Belt,
+        targetTopic: String,
+        rawItem: String,
+        note: String
+    ) {
+        val aliases =
+            noteAliasesFor(
+                targetBelt = targetBelt,
+                targetTopic = targetTopic,
+                rawItem = rawItem
+            )
+
+        val primaryId =
+            aliases.firstOrNull()
+                ?: return
+
+        ExerciseNotesStore.saveNote(
+            context = context,
+            belt = targetBelt,
+            exerciseId = primaryId,
+            note = note,
+            aliases = aliases
+        )
+    }
+
+    fun deletePracticeNoteGlobal(
+        targetBelt: Belt,
+        targetTopic: String,
+        rawItem: String
+    ) {
+        val aliases =
+            noteAliasesFor(
+                targetBelt = targetBelt,
+                targetTopic = targetTopic,
+                rawItem = rawItem
+            )
+
+        val primaryId =
+            aliases.firstOrNull()
+                ?: return
+
+        ExerciseNotesStore.deleteNote(
+            context = context,
+            belt = targetBelt,
+            exerciseId = primaryId,
+            aliases = aliases
+        )
+    }
+
+    fun favoriteAliasesFor(
+        targetBelt: Belt,
+        targetTopic: String,
+        rawItem: String
+    ): Set<String> {
+        val cleanTopic =
+            targetTopic.trim()
+
+        val displayTitle =
+            displayName(rawItem)
+                .ifBlank {
+                    rawItem
+                }
+                .trim()
+
+        val registryId =
+            ExerciseIdentityRegistry.idFor(
+                belt = targetBelt,
+                hebrewTitle = displayTitle,
+                topicKey = cleanTopic
+            )
+
+        return setOf(
+            registryId,
+            displayTitle,
+            rawItem.trim(),
+            normalizeFavoriteId(rawItem)
+        )
+            .map {
+                it.trim()
+            }
+            .filter {
+                it.isNotBlank()
+            }
+            .toSet()
+    }
+
+    fun isFavoriteGlobal(
+        targetBelt: Belt,
+        targetTopic: String,
+        rawItem: String
+    ): Boolean {
+        return favoriteAliasesFor(
+            targetBelt = targetBelt,
+            targetTopic = targetTopic,
+            rawItem = rawItem
+        ).any { candidate ->
+            candidate in favorites
+        }
+    }
+
+    fun toggleFavoriteGlobal(
+        targetBelt: Belt,
+        targetTopic: String,
+        rawItem: String
+    ) {
+        val aliases =
+            favoriteAliasesFor(
+                targetBelt = targetBelt,
+                targetTopic = targetTopic,
+                rawItem = rawItem
+            )
+
+        val displayTitle =
+            displayName(rawItem)
+                .ifBlank {
+                    rawItem
+                }
+                .trim()
+
+        val canonicalId =
+            ExerciseIdentityRegistry.idFor(
+                belt = targetBelt,
+                hebrewTitle = displayTitle,
+                topicKey = targetTopic.trim()
+            )
+
+        val existing =
+            aliases.filter { candidate ->
+                candidate in favorites
+            }
+
+        if (existing.isNotEmpty()) {
+            existing.forEach { storedId ->
+                FavoritesStore.toggle(
+                    storedId
+                )
+            }
+        } else {
+            FavoritesStore.toggle(
+                canonicalId
+            )
+        }
+    }
 
     // =====================================================================================
 
@@ -504,17 +715,17 @@ fun RandomPracticeScreen(
                 ),
 
                 // ===================== ✅ FIX: TopicTitlesProvider =====================
-                topicTitlesProvider = il.kmi.shared.practice.PracticeFacade.TopicTitlesProvider { beltId ->
+                topicTitlesProvider = topicTitlesProvider@ { beltId ->
                     val b = Belt.fromId(beltId) ?: belt
 
                     // ✅ אם זה תרגול של נושא יחיד — תחזיר רק אותו
                     if (isSingleTopicFilter && b.id == belt.id) {
-                        return@TopicTitlesProvider listOf(resolvedSingleTopic ?: fixedFilter.trim())
+                        return@topicTitlesProvider listOf(resolvedSingleTopic ?: fixedFilter.trim())
                     }
 
                     // ✅ קודם shared (האמת)
                     val sharedTitles = sharedTopicTitlesFor(b)
-                    if (sharedTitles.isNotEmpty()) return@TopicTitlesProvider sharedTitles
+                    if (sharedTitles.isNotEmpty()) return@topicTitlesProvider sharedTitles
 
                     // ואז Bridge אם צריך
                     runCatching { il.kmi.app.search.KmiSearchBridge.topicTitlesFor(b) }
@@ -523,9 +734,7 @@ fun RandomPracticeScreen(
 
                 // =====================================================================
 
-                itemsProvider =
-                    il.kmi.shared.practice.PracticeFacade
-                        .ItemsProvider { beltId, topicTitle ->
+                itemsProvider = itemsProvider@ { beltId, topicTitle ->
 
                             val currentBelt =
                                 Belt.fromId(beltId) ?: belt
@@ -548,7 +757,7 @@ fun RandomPracticeScreen(
                                 )
 
                             if (sharedItems.isNotEmpty()) {
-                                return@ItemsProvider sharedItems
+                                return@itemsProvider sharedItems
                             }
 
                             // Bridge הוא fallback לנושא ללא תת־נושא.
@@ -565,10 +774,14 @@ fun RandomPracticeScreen(
                                 emptyList()
                             }
                         },
-                setsProvider = il.kmi.shared.practice.PracticeFacade.SetProvider { key ->
+                setsProvider = { key ->
                     sp.getStringSet(key, emptySet()) ?: emptySet()
                 },
-                excludedProvider = il.kmi.shared.practice.PracticeFacade.ExcludedProvider { beltId, topicTitle, rawItem, disp ->
+                excludedProvider = {
+                        beltId,
+                        topicTitle,
+                        rawItem,
+                        disp ->
                     val excluded = sp.getStringSet("excluded_${beltId}_${topicTitle}", emptySet())
                         ?: emptySet()
                     (rawItem in excluded) || (disp in excluded)
@@ -941,9 +1154,12 @@ fun RandomPracticeScreen(
     }
 
     fun persistWrongKeys() {
-        sp.edit()
-            .putStringSet("wrong_${belt.id}_$practiceKey", wrongCanonicalKeys.toSet())
-            .apply()
+        sp.edit {
+            putStringSet(
+                "wrong_${belt.id}_$practiceKey",
+                wrongCanonicalKeys.toSet()
+            )
+        }
     }
 
     fun setPracticeStatus(
@@ -1017,10 +1233,17 @@ fun RandomPracticeScreen(
                 }
             }
 
-            sp.edit()
-                .putStringSet(masteredKey, masteredSet)
-                .putStringSet(unknownKey, unknownSet)
-                .apply()
+            sp.edit {
+                putStringSet(
+                    masteredKey,
+                    masteredSet
+                )
+
+                putStringSet(
+                    unknownKey,
+                    unknownSet
+                )
+            }
         }
 
         // ✅ תאימות למסך "כל הרשימות" / רשימת לא יודע:
@@ -1031,10 +1254,6 @@ fun RandomPracticeScreen(
         }
 
         persistWrongKeys()
-    }
-
-    fun addWrongForCurrent(item: il.kmi.shared.practice.PracticeItem?) {
-        setPracticeStatus(item, false)
     }
 
     // ✅ רשימה משוקללת דרך shared (Wrong first + weight)
@@ -1064,7 +1283,9 @@ fun RandomPracticeScreen(
         weightedPracticeItems.map { uiTitleFor(it) }
     }
 
-    var currentIndex by remember { mutableStateOf(0) }
+    var currentIndex by remember {
+        mutableIntStateOf(0)
+    }
 
     val currentPracticeItem =
         remember(
@@ -1220,20 +1441,33 @@ fun RandomPracticeScreen(
 
     // ----- הגדרות טיימר -----
     var durationMinutes by remember {
-        mutableStateOf(
-            practiceDurationMinutes.takeIf { it > 0 } ?: sp.getInt("timer_minutes", 3)
+        mutableIntStateOf(
+            practiceDurationMinutes
+                .takeIf {
+                    it > 0
+                }
+                ?: sp.getInt(
+                    "timer_minutes",
+                    3
+                )
         )
     }
     var beepLast10State by remember { mutableStateOf(sp.getBoolean("beep_last10", beepLast10)) }
     var beepHalfTimeState by remember { mutableStateOf(sp.getBoolean("beep_half", true)) }
-    var timeLeft by remember { mutableStateOf(durationMinutes * 60) }
+    var timeLeft by remember {
+        mutableIntStateOf(
+            durationMinutes * 60
+        )
+    }
 
     var isRunning by remember { mutableStateOf(false) }
 
     // 🔊 שליטה בהקראה
     var isMuted by remember { mutableStateOf(false) }
     var sessionStarted by rememberSaveable { mutableStateOf(false) }
-    var lastSpokenIndex by remember { mutableStateOf(-1) }
+    var lastSpokenIndex by remember {
+        mutableIntStateOf(-1)
+    }
     var halfAnnouncementDone by remember { mutableStateOf(false) }
 
     // ✅ Guard יציאה: ברגע שזה true — אין הקריאות/טיימרים/Callbacks
@@ -1339,20 +1573,22 @@ fun RandomPracticeScreen(
                 beepLast10State =
                     playCountdown
 
-                sp.edit()
-                    .putInt(
+                sp.edit {
+                    putInt(
                         "timer_minutes",
                         durationMinutes
                     )
-                    .putBoolean(
+
+                    putBoolean(
                         "beep_half",
                         beepHalfTimeState
                     )
-                    .putBoolean(
+
+                    putBoolean(
                         "beep_last10",
                         beepLast10State
                     )
-                    .apply()
+                }
 
                 timeLeft =
                     durationMinutes * 60
@@ -1426,7 +1662,7 @@ fun RandomPracticeScreen(
 
             while (timeLeft > 0 && isRunning) {
                 if (isExiting) return@LaunchedEffect
-                delay(1000)
+                delay(1.seconds)
                 timeLeft--
 
                 if (!halfAnnouncementDone && beepHalfTimeState && timeLeft == halfTime) {
@@ -1700,6 +1936,7 @@ fun RandomPracticeScreen(
                                         },
                                 timeText =
                                     String.format(
+                                        Locale.getDefault(),
                                         "%02d:%02d",
                                         timeLeft / 60,
                                         timeLeft % 60
@@ -1863,24 +2100,38 @@ fun RandomPracticeScreen(
                         topicTitleForUi(t)
                     }
 
-                    val sheetTextAlign = if (isEnglish) TextAlign.Left else TextAlign.Right
-                    val sheetHorizontalAlignment = if (isEnglish) Alignment.Start else Alignment.End
-                    val actionAlignment = if (isEnglish) Alignment.Start else Alignment.End
+                    val isFav =
+                        isFavoriteGlobal(
+                            targetBelt = b,
+                            targetTopic = t,
+                            rawItem = item
+                        )
 
-                    val favId = remember(item) { normalizeFavoriteId(item) }
-                    val isFav = favorites.contains(favId)
-
-                    val noteKey = remember(b, t, favId) {
-                        "note_${b.id}_${t.trim()}_${favId}"
-                    }
-                    var noteText by remember(noteKey) {
-                        mutableStateOf(notePrefs.getString(noteKey, "").orEmpty())
+                    var noteText by remember(
+                        b,
+                        t,
+                        item
+                    ) {
+                        mutableStateOf(
+                            loadPracticeNote(
+                                targetBelt = b,
+                                targetTopic = t,
+                                rawItem = item
+                            )
+                        )
                     }
                     var showNoteEditor by remember { mutableStateOf(false) }
 
                     fun toggleFav() {
-                        if (item.isBlank()) return
-                        FavoritesStore.toggle(favId)
+                        if (item.isBlank()) {
+                            return
+                        }
+
+                        toggleFavoriteGlobal(
+                            targetBelt = b,
+                            targetTopic = t,
+                            rawItem = item
+                        )
                     }
 
                     ExerciseExplanationDialog(
@@ -1903,10 +2154,10 @@ fun RandomPracticeScreen(
                         onDeleteNote = {
                             noteText = ""
 
-                            savePracticeNote(
-                                prefs = notePrefs,
-                                key = noteKey,
-                                text = ""
+                            deletePracticeNoteGlobal(
+                                targetBelt = b,
+                                targetTopic = t,
+                                rawItem = item
                             )
                         },
                         onToggleFavorite = {
@@ -1928,10 +2179,11 @@ fun RandomPracticeScreen(
                                 val cleanNote = noteText.trim()
                                 noteText = cleanNote
 
-                                savePracticeNote(
-                                    prefs = notePrefs,
-                                    key = noteKey,
-                                    text = cleanNote
+                                savePracticeNoteGlobal(
+                                    targetBelt = b,
+                                    targetTopic = t,
+                                    rawItem = item,
+                                    note = cleanNote
                                 )
 
                                 showNoteEditor = false
@@ -1957,6 +2209,7 @@ fun RandomPracticeScreen(
                         }
                     }
 
+                    @Suppress("NAME_SHADOWING")
                     val safeItem = rawItemForHelp
 
                     val safeItemTitleUi = remember(currentHelpItem, safeItem, isEnglish) {
@@ -1967,29 +2220,61 @@ fun RandomPracticeScreen(
                         }
                     }
 
-                    val helpTextAlign = if (isEnglish) TextAlign.Left else TextAlign.Right
-                    val helpHorizontalAlignment = if (isEnglish) Alignment.Start else Alignment.End
+                    val noteTopic =
+                        remember(
+                            currentHelpItem,
+                            topicFilter
+                        ) {
+                            currentHelpItem
+                                ?.topicTitle
+                                ?.trim()
+                                ?.takeIf {
+                                    it.isNotBlank()
+                                }
+                                ?: topicFilter
+                                    ?.takeIf {
+                                        it.isNotBlank()
+                                    }
+                                ?: "כללי"
+                        }
 
-                    val favId = remember(safeItem) { normalizeFavoriteId(safeItem) }
+                    val isFav =
+                        safeItem.isNotBlank() &&
+                                isFavoriteGlobal(
+                                    targetBelt = belt,
+                                    targetTopic = noteTopic,
+                                    rawItem = safeItem
+                                )
 
-                    val isFav = safeItem.isNotBlank() && favorites.contains(favId)
-
-                    val noteTopic = remember(currentHelpItem, topicFilter) {
-                        currentHelpItem?.topicTitle?.trim()?.takeIf { it.isNotBlank() }
-                            ?: topicFilter?.takeIf { it.isNotBlank() }
-                            ?: "general"
-                    }
-                    val noteKey = remember(belt, noteTopic, favId) {
-                        "note_${belt.id}_${noteTopic.trim()}_${favId}"
-                    }
-                    var noteText by remember(noteKey) {
-                        mutableStateOf(notePrefs.getString(noteKey, "").orEmpty())
+                    var noteText by remember(
+                        belt,
+                        noteTopic,
+                        safeItem
+                    ) {
+                        mutableStateOf(
+                            if (safeItem.isBlank()) {
+                                ""
+                            } else {
+                                loadPracticeNote(
+                                    targetBelt = belt,
+                                    targetTopic = noteTopic,
+                                    rawItem = safeItem
+                                )
+                            }
+                        )
                     }
                     var showNoteEditor by remember { mutableStateOf(false) }
 
                     fun toggleFav() {
-                        if (safeItem.isBlank()) return
-                        FavoritesStore.toggle(favId)
+                        if (safeItem.isBlank()) {
+                            return
+                        }
+
+                        toggleFavoriteGlobal(
+                            targetBelt = belt,
+                            targetTopic = noteTopic,
+                            rawItem = safeItem
+                        )
                     }
 
                     ExerciseExplanationDialog(
@@ -2009,10 +2294,10 @@ fun RandomPracticeScreen(
                         onDeleteNote = {
                             noteText = ""
 
-                            savePracticeNote(
-                                prefs = notePrefs,
-                                key = noteKey,
-                                text = ""
+                            deletePracticeNoteGlobal(
+                                targetBelt = belt,
+                                targetTopic = noteTopic,
+                                rawItem = safeItem
                             )
                         },
                         onToggleFavorite = {
@@ -2034,10 +2319,11 @@ fun RandomPracticeScreen(
                                 val cleanNote = noteText.trim()
                                 noteText = cleanNote
 
-                                savePracticeNote(
-                                    prefs = notePrefs,
-                                    key = noteKey,
-                                    text = cleanNote
+                                savePracticeNoteGlobal(
+                                    targetBelt = belt,
+                                    targetTopic = noteTopic,
+                                    rawItem = safeItem,
+                                    note = cleanNote
                                 )
 
                                 showNoteEditor = false

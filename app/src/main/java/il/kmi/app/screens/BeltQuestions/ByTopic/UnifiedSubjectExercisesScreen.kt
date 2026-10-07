@@ -77,8 +77,8 @@ import androidx.compose.ui.unit.dp
 import il.kmi.app.KmiViewModel
 import il.kmi.shared.domain.Explanations
 import il.kmi.app.domain.color
-import il.kmi.app.domain.CanonicalIds
 import il.kmi.app.notes.ExerciseNotesStore
+import il.kmi.app.exercises.sync.ExerciseSyncStore
 import il.kmi.app.screens.BeltQuestions.Materials.CoachMaterialProgress
 import il.kmi.app.screens.BeltQuestions.Materials.CoachMaterialStatus
 import il.kmi.app.screens.BeltQuestions.Materials.CoachMaterialStatusSelector
@@ -2155,6 +2155,18 @@ private fun BeltGroupsContent(
             .replace(Regex("\\s+"), " ")
             .trim()
 
+    fun syncIdentityFor(
+        belt: Belt,
+        topic: String,
+        rawItem: String
+    ) =
+        ExerciseSyncStore.resolveIdentity(
+            belt = belt,
+            topic = topic,
+            subTopic = null,
+            rawItem = rawItem
+        )
+
     fun coachProgressKey(
         belt: Belt,
         statusId: String
@@ -2603,11 +2615,11 @@ private fun BeltGroupsContent(
         topic: String,
         rawItem: String
     ): String {
-        return hardStatusIdFor(
+        return syncIdentityFor(
             belt = belt,
             topic = topic,
             rawItem = rawItem
-        )
+        ).exerciseId
     }
 
     var selectedExercise by remember {
@@ -2626,45 +2638,118 @@ private fun BeltGroupsContent(
         mutableIntStateOf(0)
     }
 
+    var exclusionsRefreshKey by remember {
+        mutableIntStateOf(0)
+    }
+
     fun hardNoteAliasesFor(
         belt: Belt,
         topic: String,
         rawItem: String
     ): Set<String> {
+        return syncIdentityFor(
+            belt = belt,
+            topic = topic,
+            rawItem = rawItem
+        ).aliases
+    }
 
-        val statusId =
-            hardStatusIdFor(
+    fun exclusionKeyFor(
+        belt: Belt,
+        topic: String
+    ): String {
+        return buildString {
+            append("excluded_")
+            append(belt.id)
+            append("_")
+            append(
+                normalizeStatusPart(
+                    topic
+                )
+            )
+        }
+    }
+
+    fun isHardExcluded(
+        belt: Belt,
+        topic: String,
+        rawItem: String
+    ): Boolean {
+        val identity =
+            syncIdentityFor(
                 belt = belt,
                 topic = topic,
                 rawItem = rawItem
             )
 
-        val canonicalId =
-            CanonicalIds.canonicalFor(
-                belt,
-                topic,
-                rawItem
+        val stored =
+            prefs.getStringSet(
+                exclusionKeyFor(
+                    belt = belt,
+                    topic = topic
+                ),
+                emptySet()
             )
+                ?: emptySet()
 
-        val explanationId =
-            CanonicalIds.resolveCanonicalForExplanation(
+        return identity.aliases.any { alias ->
+            alias in stored
+        }
+    }
+
+    fun toggleHardExcluded(
+        belt: Belt,
+        topic: String,
+        rawItem: String
+    ) {
+        val identity =
+            syncIdentityFor(
                 belt = belt,
-                topicTitle = topic,
-                rawItemFromRepo = rawItem
+                topic = topic,
+                rawItem = rawItem
             )
 
-        return setOf(
-            statusId,
-            canonicalId,
-            explanationId
-        )
-            .map { value ->
-                value.trim()
+        val key =
+            exclusionKeyFor(
+                belt = belt,
+                topic = topic
+            )
+
+        val stored =
+            (
+                    prefs.getStringSet(
+                        key,
+                        emptySet()
+                    )
+                        ?: emptySet()
+                    )
+                .toMutableSet()
+
+        val currentlyExcluded =
+            identity.aliases.any { alias ->
+                alias in stored
             }
-            .filter { value ->
-                value.isNotBlank()
+
+        if (currentlyExcluded) {
+            identity.aliases.forEach { alias ->
+                stored.remove(
+                    alias
+                )
             }
-            .toSet()
+        } else {
+            stored.addAll(
+                identity.aliases
+            )
+        }
+
+        prefs.edit {
+            putStringSet(
+                key,
+                stored
+            )
+        }
+
+        exclusionsRefreshKey++
     }
 
     fun loadHardNote(
@@ -2820,7 +2905,11 @@ private fun BeltGroupsContent(
 
     val currentGroupFavoriteCount =
         currentStickyExercises.count { row ->
-            row.statusId in favoriteIds
+            hardFavoriteIdFor(
+                belt = row.belt,
+                topic = title,
+                rawItem = row.rawItem
+            ) in favoriteIds
         }
 
     val currentGroupUnmarkedCount =
@@ -2988,7 +3077,11 @@ private fun BeltGroupsContent(
 
                             val beltFavoriteCount =
                                 beltExercises.count { exercise ->
-                                    exercise.statusId in favoriteIds
+                                    hardFavoriteIdFor(
+                                        belt = exercise.belt,
+                                        topic = title,
+                                        rawItem = exercise.rawItem
+                                    ) in favoriteIds
                                 }
 
                             val beltUnmarkedCount =
@@ -3025,7 +3118,12 @@ private fun BeltGroupsContent(
                         val belt = row.belt
                         val rawItem = row.rawItem
                         val statusId = row.statusId
-                        val favoriteId = row.statusId
+                        val favoriteId =
+                            hardFavoriteIdFor(
+                                belt = belt,
+                                topic = title,
+                                rawItem = rawItem
+                            )
 
                         val mastered =
                             hardItemStates[statusId]
@@ -3037,7 +3135,22 @@ private fun BeltGroupsContent(
                                 rawItem
                             }
 
-                        val isFavorite = favoriteId in favoriteIds
+                        val isFavorite =
+                            favoriteId in favoriteIds
+
+                        val isExcluded =
+                            remember(
+                                belt,
+                                title,
+                                rawItem,
+                                exclusionsRefreshKey
+                            ) {
+                                isHardExcluded(
+                                    belt = belt,
+                                    topic = title,
+                                    rawItem = rawItem
+                                )
+                            }
 
                         val noteText =
                             remember(
@@ -3056,6 +3169,7 @@ private fun BeltGroupsContent(
                         HardExerciseRowCard(
                             belt = belt,
                             item = displayItem,
+                            isExcluded = isExcluded,
                             mastered = mastered,
                             partiallyKnown =
                                 hardPartiallyKnownStates[
@@ -3135,6 +3249,13 @@ private fun BeltGroupsContent(
                             onToggleFavorite = {
                                 FavoritesStore.toggle(
                                     favoriteId
+                                )
+                            },
+                            onToggleExclude = {
+                                toggleHardExcluded(
+                                    belt = belt,
+                                    topic = title,
+                                    rawItem = rawItem
                                 )
                             },
                             onInfoClick = {
@@ -3571,6 +3692,7 @@ private fun HardBeltStickyHeader(
 private fun HardExerciseRowCard(
     belt: Belt,
     item: String,
+    isExcluded: Boolean,
     mastered: Boolean?,
     partiallyKnown: Boolean,
     isFavorite: Boolean,
@@ -3581,6 +3703,7 @@ private fun HardExerciseRowCard(
     onCoachStatusSelect: (CoachMaterialStatus) -> Unit,
     onTraineeStatusSelect: (TraineeMaterialStatus?) -> Unit,
     onToggleFavorite: () -> Unit,
+    onToggleExclude: () -> Unit,
     onInfoClick: () -> Unit
 ) {
     val isDarkMode =
@@ -3681,6 +3804,7 @@ private fun HardExerciseRowCard(
                             )
 
                             if (
+                                isExcluded ||
                                 isFavorite ||
                                 hasNote
                             ) {
@@ -3695,6 +3819,53 @@ private fun HardExerciseRowCard(
                                     verticalArrangement =
                                         Arrangement.spacedBy(3.dp)
                                 ) {
+                                    if (isExcluded) {
+                                        Surface(
+                                            shape =
+                                                RoundedCornerShape(10.dp),
+                                            color =
+                                                MaterialTheme
+                                                    .colorScheme
+                                                    .surfaceVariant,
+                                            border =
+                                                BorderStroke(
+                                                    width = 1.dp,
+                                                    color =
+                                                        MaterialTheme
+                                                            .colorScheme
+                                                            .onSurfaceVariant
+                                                            .copy(alpha = 0.14f)
+                                                ),
+                                            shadowElevation = 0.dp
+                                        ) {
+                                            Text(
+                                                text =
+                                                    if (isEnglish) {
+                                                        "Excluded"
+                                                    } else {
+                                                        "מוחרג"
+                                                    },
+                                                style =
+                                                    KmiTypography
+                                                        .caption
+                                                        .copy(
+                                                            fontWeight =
+                                                                FontWeight.ExtraBold
+                                                        ),
+                                                color =
+                                                    MaterialTheme
+                                                        .colorScheme
+                                                        .onSurfaceVariant,
+                                                modifier =
+                                                    Modifier.padding(
+                                                        horizontal = 7.dp,
+                                                        vertical = 2.dp
+                                                    ),
+                                                maxLines = 1
+                                            )
+                                        }
+                                    }
+
                                     if (isFavorite) {
                                         Surface(
                                             shape =
@@ -3803,10 +3974,10 @@ private fun HardExerciseRowCard(
                             progress = coachProgress,
                             isEnglish = isEnglish,
                             modifier = Modifier.fillMaxWidth(),
-                            excluded = false,
+                            excluded = isExcluded,
                             isFav = isFavorite,
                             hasNote = hasNote,
-                            onToggleExclude = {},
+                            onToggleExclude = onToggleExclude,
                             onInfo = onInfoClick,
                             onToggleFavorite = onToggleFavorite,
                             onEditNote = {},
@@ -3925,6 +4096,7 @@ private fun HardExerciseRowCard(
                 )
 
                 if (
+                    isExcluded ||
                     isFavorite ||
                     hasNote
                 ) {

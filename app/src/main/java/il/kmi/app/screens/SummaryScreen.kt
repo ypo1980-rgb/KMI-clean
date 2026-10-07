@@ -1,3 +1,7 @@
+@file:Suppress(
+    "SpellCheckingInspection"
+)
+
 package il.kmi.app.screens
 
 import android.graphics.pdf.PdfDocument
@@ -12,7 +16,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
-import androidx.compose.material.icons.filled.Insights
 import androidx.compose.material3.*
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.runtime.*
@@ -42,7 +45,6 @@ import il.kmi.app.ui.KmiTypography
 import il.kmi.app.ui.LocalAppIconScale
 import il.kmi.app.ui.loading.KmiLoadingRings
 import il.yuval.ui.theme.kmiScreenBackgroundBrush
-import il.yuval.ui.theme.kmiSectionHeaderBrush
 import il.kmi.shared.domain.Belt
 import il.kmi.shared.questions.model.util.ExerciseTitleFormatter
 import java.io.File
@@ -55,8 +57,8 @@ import kotlinx.coroutines.CancellationException
 import android.app.Activity
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.ui.AbsoluteAlignment
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.core.content.edit
 import androidx.core.graphics.withTranslation
 import il.kmi.shared.localization.AppLanguage
 import il.kmi.shared.localization.AppLanguageManager
@@ -64,7 +66,9 @@ import il.kmi.shared.domain.content.ExerciseTitlesEn
 import il.kmi.shared.domain.content.ExerciseIdentityRegistry
 import il.kmi.app.ui.dialogs.ExerciseExplanationDialog
 import il.kmi.app.ui.dialogs.ExerciseNoteEditorDialog
+import il.kmi.app.domain.CanonicalIds
 import il.kmi.app.domain.ExerciseExplanationResolver
+import il.kmi.app.notes.ExerciseNotesStore
 import il.kmi.app.progress.CoachGroupProgressSummary
 import il.kmi.app.progress.UserProgressComparison
 import il.kmi.app.progress.UserProgressRepository
@@ -875,9 +879,9 @@ private fun UserProgressComparisonCard(
                         .size(34.dp)
                         .align(
                             if (isEnglish) {
-                                androidx.compose.ui.AbsoluteAlignment.CenterRight
+                                AbsoluteAlignment.CenterRight
                             } else {
-                                androidx.compose.ui.AbsoluteAlignment.CenterLeft
+                                AbsoluteAlignment.CenterLeft
                             }
                         )
                 ) {
@@ -1040,7 +1044,7 @@ private fun SummaryMiniProgressChip(
                 textAlign = TextAlign.Center,
                 maxLines = 2,
                 overflow =
-                    androidx.compose.ui.text.style.TextOverflow.Ellipsis
+                    TextOverflow.Ellipsis
             )
 
             Spacer(Modifier.height(2.dp))
@@ -1622,40 +1626,111 @@ fun SummaryScreen(
         mutableStateOf(false)
     }
 
-    fun noteSuffixFor(topicTitle: String): String {
-        val cleanTopic = topicTitle.trim().ifBlank { "כללי" }
-        return if (
-            topic.isNotBlank() &&
-            !subTopicFilter.isNullOrBlank() &&
-            norm(cleanTopic) == norm(topic)
-        ) {
-            "${topic.trim()}__${subTopicFilter.trim()}"
-        } else {
-            cleanTopic
-        }
-    }
+    fun noteAliasesFor(
+        topicTitle: String,
+        rawItem: String,
+        statusTopicKey: String? = null
+    ): Set<String> {
+        val clean =
+            cleanItem(
+                topicTitle,
+                rawItem
+            ).trim()
 
-    fun noteKeyFor(topicTitle: String, itemId: String): String {
-        return "note_${belt.id}_${noteSuffixFor(topicTitle)}_${cleanItem(topicTitle, itemId)}"
-    }
+        val registryId =
+            ExerciseIdentityRegistry.resolve(
+                belt = belt,
+                hebrewTitle = clean,
+                topicKey =
+                    statusTopicKey
+                        ?.trim()
+                        ?.takeIf {
+                            it.isNotBlank()
+                        }
+                        ?: topicTitle
+                            .trim()
+                            .takeIf {
+                                it.isNotBlank()
+                            }
+            ).id
 
-    fun loadNote(topicTitle: String, itemId: String): String =
-        notesSp.getString(noteKeyFor(topicTitle, itemId), "")?.trim().orEmpty()
+        val explanationId =
+            CanonicalIds.resolveCanonicalForExplanation(
+                belt = belt,
+                topicTitle = topicTitle,
+                rawItemFromRepo = rawItem
+            )
 
-    fun saveNote(topicTitle: String, itemId: String, value: String) {
-        val key = noteKeyFor(topicTitle, itemId)
+        val canonicalId =
+            CanonicalIds.canonicalFor(
+                belt = belt,
+                topicTitle = topicTitle,
+                displayItem = rawItem
+            )
 
-        notesSp.edit {
-            if (value.isBlank()) {
-                remove(key)
-            } else {
-                putString(key, value.trim())
+        val localCanonicalId =
+            canonicalFromRepo(
+                topicTitle = topicTitle,
+                rawItemFromRepo = rawItem
+            )
+
+        return setOf(
+            registryId,
+            explanationId,
+            canonicalId,
+            localCanonicalId
+        )
+            .map {
+                it.trim()
             }
-        }
+            .filter {
+                it.isNotBlank()
+            }
+            .toSet()
     }
 
-    fun hasNote(topicTitle: String, itemId: String): Boolean =
-        loadNote(topicTitle, itemId).isNotBlank()
+    fun loadNote(
+        itemId: String,
+        aliases: Collection<String> =
+            emptyList()
+    ): String {
+        return ExerciseNotesStore.loadNote(
+            context = ctx,
+            belt = belt,
+            exerciseId = itemId,
+            aliases = aliases,
+            allowLegacyMigration = true
+        )
+    }
+
+    fun saveNote(
+        itemId: String,
+        value: String,
+        aliases: Collection<String> =
+            emptyList()
+    ) {
+        ExerciseNotesStore.saveNote(
+            context = ctx,
+            belt = belt,
+            exerciseId = itemId,
+            note = value,
+            aliases = aliases
+        )
+    }
+
+    fun hasNote(
+        itemId: String,
+        aliases: Collection<String> =
+            emptyList()
+    ): Boolean {
+        return ExerciseNotesStore.hasNote(
+            context = ctx,
+            belt = belt,
+            exerciseId = itemId,
+            aliases = aliases,
+            allowLegacyMigration = true
+        )
+    }
 
     // ✅ כשפותחים מד התקדמות / השוואה — עולים לראש המסך
     LaunchedEffect(showProgress, showComparison) {
@@ -2708,11 +2783,42 @@ fun SummaryScreen(
                 }
             }
 
-            val cleanFavId = cleanItem(t, canonical)
-            val isFav = favorites.contains(cleanFavId)
-            val noteText = remember(t, cleanFavId, notesRefreshKey) {
-                loadNote(t, cleanFavId)
-            }
+            val cleanFavId =
+                cleanItem(
+                    t,
+                    canonical
+                )
+
+            val dialogNoteAliases =
+                remember(
+                    b,
+                    t,
+                    iRaw,
+                    canonical
+                ) {
+                    noteAliasesFor(
+                        topicTitle = t,
+                        rawItem = iRaw
+                    )
+                }
+
+            val isFav =
+                favorites.contains(
+                    cleanFavId
+                )
+
+            val noteText =
+                remember(
+                    t,
+                    cleanFavId,
+                    dialogNoteAliases,
+                    notesRefreshKey
+                ) {
+                    loadNote(
+                        itemId = cleanFavId,
+                        aliases = dialogNoteAliases
+                    )
+                }
 
             val dialogTitle = exerciseDisplayNameForUi(
                 topicTitle = t,
@@ -2747,12 +2853,25 @@ fun SummaryScreen(
                     focusManager.clearFocus()
                 },
                 onEditNote = {
-                    noteEditorTopic = t
-                    noteEditorFor = cleanFavId
-                    noteDraft = loadNote(t, cleanFavId)
+                    noteEditorTopic =
+                        t
+
+                    noteEditorFor =
+                        cleanFavId
+
+                    noteDraft =
+                        loadNote(
+                            itemId = cleanFavId,
+                            aliases = dialogNoteAliases
+                        )
                 },
                 onDeleteNote = {
-                    saveNote(t, cleanFavId, "")
+                    saveNote(
+                        itemId = cleanFavId,
+                        value = "",
+                        aliases = dialogNoteAliases
+                    )
+
                     noteDraft = ""
                     notesRefreshKey++
                 },
@@ -2763,7 +2882,6 @@ fun SummaryScreen(
         }
 
         noteEditorFor?.let { item ->
-            val noteTopic = noteEditorTopic ?: topic.ifBlank { "כללי" }
 
             ExerciseNoteEditorDialog(
                 noteText = noteDraft,
@@ -2778,7 +2896,10 @@ fun SummaryScreen(
                     val cleanNote = noteDraft.trim()
                     noteDraft = cleanNote
 
-                    saveNote(noteTopic, item, cleanNote)
+                    saveNote(
+                        itemId = item,
+                        value = cleanNote
+                    )
 
                     notesRefreshKey++
                     noteEditorFor = null
@@ -2985,9 +3106,9 @@ fun SummaryScreen(
                                                 .offset(y = (-13).dp)
                                                 .align(
                                                     if (isEnglish) {
-                                                        androidx.compose.ui.AbsoluteAlignment.CenterRight
+                                                        AbsoluteAlignment.CenterRight
                                                     } else {
-                                                        androidx.compose.ui.AbsoluteAlignment.CenterLeft
+                                                        AbsoluteAlignment.CenterLeft
                                                     }
                                                 )
                                         ) {
@@ -3174,12 +3295,7 @@ fun SummaryScreen(
                                                         TextAlign.Center,
                                                     maxLines = 1,
                                                     overflow =
-                                                        androidx.compose
-                                                            .ui
-                                                            .text
-                                                            .style
-                                                            .TextOverflow
-                                                            .Ellipsis
+                                                        TextOverflow.Ellipsis
                                                 )
                                             }
                                         }
@@ -3704,7 +3820,7 @@ fun SummaryScreen(
                                                                                     Color(0xFFE53935)
 
                                                                                 MarkState.NONE ->
-                                                                                    summaryColors.surfaceVariant
+                                                                                    summaryColors.onSurfaceVariant
                                                                             }
                                                                         }
                                                                     }
@@ -3725,15 +3841,37 @@ fun SummaryScreen(
                                                                         canonicalId
                                                                     )
 
+                                                                val itemNoteAliases =
+                                                                    remember(
+                                                                        belt,
+                                                                        row.sourceTopicTitle,
+                                                                        row.statusTopicKey,
+                                                                        itemRaw
+                                                                    ) {
+                                                                        noteAliasesFor(
+                                                                            topicTitle = row.sourceTopicTitle,
+                                                                            rawItem = itemRaw,
+                                                                            statusTopicKey = row.statusTopicKey
+                                                                        )
+                                                                    }
+
                                                                 val itemHasNote =
                                                                     hasNote(
-                                                                        row.sourceTopicTitle,
-                                                                        cleanFavId
+                                                                        itemId = cleanFavId,
+                                                                        aliases = itemNoteAliases
                                                                     )
 
                                                                 Row(
                                                                     modifier = Modifier
                                                                         .fillMaxWidth()
+                                                                        .clickable {
+                                                                            explainFromSearch =
+                                                                                Triple(
+                                                                                    belt,
+                                                                                    row.sourceTopicTitle,
+                                                                                    itemRaw
+                                                                                )
+                                                                        }
                                                                         .background(
                                                                             color =
                                                                                 if (isCoach) {
@@ -3855,7 +3993,7 @@ fun SummaryScreen(
                                                                                     },
                                                                                 maxLines = 3,
                                                                                 overflow =
-                                                                                    androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                                                                                    TextOverflow.Ellipsis,
                                                                                 modifier = Modifier.fillMaxWidth()
                                                                             )
 
@@ -3876,7 +4014,7 @@ fun SummaryScreen(
                                                                                         },
                                                                                     maxLines = 1,
                                                                                     overflow =
-                                                                                        androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                                                                                        TextOverflow.Ellipsis,
                                                                                     modifier = Modifier.fillMaxWidth()
                                                                                 )
                                                                             }
@@ -3944,8 +4082,7 @@ fun SummaryScreen(
                                                                                     textAlign = TextAlign.Center,
                                                                                     maxLines = 2,
                                                                                     overflow =
-                                                                                        androidx.compose.ui.text.style
-                                                                                            .TextOverflow.Ellipsis
+                                                                                        TextOverflow.Ellipsis
                                                                                 )
                                                                             }
 
@@ -4082,8 +4219,7 @@ fun SummaryScreen(
                                                                                                 TextAlign.Center,
                                                                                             maxLines = 2,
                                                                                             overflow =
-                                                                                                androidx.compose.ui.text.style
-                                                                                                    .TextOverflow.Ellipsis
+                                                                                                TextOverflow.Ellipsis
                                                                                         )
                                                                                     }
                                                                                 }
@@ -4201,8 +4337,7 @@ fun SummaryScreen(
                                                                                 textAlign = TextAlign.Center,
                                                                                 maxLines = 2,
                                                                                 overflow =
-                                                                                    androidx.compose.ui.text.style
-                                                                                        .TextOverflow.Ellipsis
+                                                                                    TextOverflow.Ellipsis
                                                                             )
                                                                         }
                                                                     }

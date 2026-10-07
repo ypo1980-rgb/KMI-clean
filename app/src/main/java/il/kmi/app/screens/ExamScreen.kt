@@ -1,6 +1,9 @@
+@file:Suppress(
+    "SpellCheckingInspection"
+)
+
 package il.kmi.app.screens
 
-import android.content.SharedPreferences
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -10,15 +13,16 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.core.content.edit
 import il.kmi.shared.domain.Belt
 import il.kmi.app.R
 import il.kmi.app.favorites.FavoritesStore
+import il.kmi.app.notes.ExerciseNotesStore
+import il.kmi.app.domain.CanonicalIds
+import il.kmi.shared.domain.content.ExerciseIdentityRegistry
 import il.kmi.app.ui.KmiTtsManager
 import il.kmi.app.ui.dialogs.ExerciseExplanationDialog
 import il.kmi.app.ui.dialogs.ExerciseNoteEditorDialog
@@ -46,53 +50,6 @@ private fun normalizeFavoriteId(raw: String): String =
     raw.substringAfter("::", raw)
         .substringAfter(":", raw)
         .trim()
-
-private fun exerciseNoteIdFor(raw: String): String {
-    return normalizeFavoriteId(toDisplayItem(raw))
-        .ifBlank { normalizeFavoriteId(raw) }
-        .trim()
-}
-
-private fun readExerciseNote(
-    prefs: SharedPreferences,
-    primaryKey: String,
-    vararg legacyKeys: String
-): String {
-    val keys = buildList {
-        add(primaryKey)
-        addAll(legacyKeys)
-    }.distinct()
-
-    return keys
-        .asSequence()
-        .map { key -> prefs.getString(key, "").orEmpty().trim() }
-        .firstOrNull { it.isNotBlank() }
-        .orEmpty()
-}
-
-private fun saveExerciseNote(
-    prefs: SharedPreferences,
-    text: String,
-    primaryKey: String,
-    vararg legacyKeys: String
-) {
-    val clean = text.trim()
-
-    prefs.edit {
-        val keys = buildList {
-            add(primaryKey)
-            addAll(legacyKeys)
-        }.distinct()
-
-        keys.forEach { key ->
-            if (clean.isBlank()) {
-                remove(key)
-            } else {
-                putString(key, clean)
-            }
-        }
-    }
-}
 
 private fun findExplanationForExam(
     belt: Belt,
@@ -204,10 +161,124 @@ fun ExamScreen(
         return if (isEnglish) en else he
     }
 
-    val notePrefs = remember(context) {
-        context.getSharedPreferences("kmi_exercise_notes", android.content.Context.MODE_PRIVATE)
-    }
     val favorites: Set<String> by FavoritesStore.favoritesFlow.collectAsState(initial = emptySet())
+
+    fun noteAliasesFor(
+        targetBelt: Belt,
+        targetTopic: String,
+        rawItem: String
+    ): Set<String> {
+        val displayTitle =
+            toDisplayItem(rawItem)
+                .trim()
+
+        val registryId =
+            ExerciseIdentityRegistry.idFor(
+                belt = targetBelt,
+                hebrewTitle = displayTitle,
+                topicKey = targetTopic.trim()
+            )
+
+        val canonicalId =
+            CanonicalIds.canonicalFor(
+                belt = targetBelt,
+                topicTitle = targetTopic.trim(),
+                displayItem = rawItem
+            )
+
+        val explanationId =
+            CanonicalIds.resolveCanonicalForExplanation(
+                belt = targetBelt,
+                topicTitle = targetTopic.trim(),
+                rawItemFromRepo = rawItem
+            )
+
+        return setOf(
+            registryId,
+            canonicalId,
+            explanationId,
+            displayTitle,
+            rawItem.trim()
+        )
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+            .toSet()
+    }
+
+    fun loadExamNote(
+        targetBelt: Belt,
+        targetTopic: String,
+        rawItem: String
+    ): String {
+        val aliases =
+            noteAliasesFor(
+                targetBelt = targetBelt,
+                targetTopic = targetTopic,
+                rawItem = rawItem
+            )
+
+        val primaryId =
+            aliases.firstOrNull()
+                ?: return ""
+
+        return ExerciseNotesStore.loadNote(
+            context = context,
+            belt = targetBelt,
+            exerciseId = primaryId,
+            aliases = aliases,
+            allowLegacyMigration = true
+        )
+    }
+
+    fun saveExamNote(
+        targetBelt: Belt,
+        targetTopic: String,
+        rawItem: String,
+        note: String
+    ) {
+        val aliases =
+            noteAliasesFor(
+                targetBelt = targetBelt,
+                targetTopic = targetTopic,
+                rawItem = rawItem
+            )
+
+        val primaryId =
+            aliases.firstOrNull()
+                ?: return
+
+        ExerciseNotesStore.saveNote(
+            context = context,
+            belt = targetBelt,
+            exerciseId = primaryId,
+            note = note,
+            aliases = aliases
+        )
+    }
+
+    fun deleteExamNote(
+        targetBelt: Belt,
+        targetTopic: String,
+        rawItem: String
+    ) {
+        val aliases =
+            noteAliasesFor(
+                targetBelt = targetBelt,
+                targetTopic = targetTopic,
+                rawItem = rawItem
+            )
+
+        val primaryId =
+            aliases.firstOrNull()
+                ?: return
+
+        ExerciseNotesStore.deleteNote(
+            context = context,
+            belt = targetBelt,
+            exerciseId = primaryId,
+            aliases = aliases
+        )
+    }
 
     // ✅ רב-פלטפורמי (כרגע No-Op כדי לקמפל בלי תלות ב-R)
     val soundPlayer = remember { il.kmi.shared.platform.PlatformSoundPlayer(context) }
@@ -330,9 +401,76 @@ fun ExamScreen(
     }
 
     val total = items.size.coerceAtLeast(1)
-    val colorScheme = MaterialTheme.colorScheme
-    val isDarkMode =
-        colorScheme.background.luminance() < 0.5f
+    val colorScheme =
+        MaterialTheme.colorScheme
+
+    val currentRawItem =
+        items.getOrNull(currentIndex)
+
+    val currentDisplayItem =
+        currentRawItem
+            ?.let(::toDisplayItem)
+            .orEmpty()
+
+    val currentExamStatus: Boolean? =
+        remember(
+            belt,
+            currentRawItem
+        ) {
+
+            val statusId =
+                ExerciseIdentityRegistry.idFor(
+                    belt = belt,
+                    hebrewTitle = currentDisplayItem,
+                    topicKey = null
+                )
+
+            val prefs =
+                context.getSharedPreferences(
+                    "kmi_settings",
+                    android.content.Context.MODE_PRIVATE
+                )
+
+            val masteredKeys =
+                prefs.all.keys.filter { key ->
+                    key.startsWith(
+                        "mastered_${belt.id}_"
+                    )
+                }
+
+            val unknownKeys =
+                prefs.all.keys.filter { key ->
+                    key.startsWith(
+                        "unknown_${belt.id}_"
+                    )
+                }
+
+            val isKnown =
+                masteredKeys.any { key ->
+                    prefs.getStringSet(
+                        key,
+                        emptySet()
+                    )
+                        .orEmpty()
+                        .contains(statusId)
+                }
+
+            val isUnknown =
+                unknownKeys.any { key ->
+                    prefs.getStringSet(
+                        key,
+                        emptySet()
+                    )
+                        .orEmpty()
+                        .contains(statusId)
+                }
+
+            when {
+                isKnown -> true
+                isUnknown -> false
+                else -> null
+            }
+        }
 
     Scaffold(
         topBar = {
@@ -505,7 +643,29 @@ fun ExamScreen(
                             currentIndex,
                         totalCount =
                             total,
-                        centerLabel = null,
+                        centerLabel =
+                            when (currentExamStatus) {
+                                true ->
+                                    if (isEnglish) {
+                                        "Known"
+                                    } else {
+                                        "יודע"
+                                    }
+
+                                false ->
+                                    if (isEnglish) {
+                                        "Not known"
+                                    } else {
+                                        "לא יודע"
+                                    }
+
+                                null ->
+                                    if (isEnglish) {
+                                        "Not marked"
+                                    } else {
+                                        "לא סומן"
+                                    }
+                            },
                         isRunning =
                             isRunning,
                         isMuted =
@@ -606,27 +766,23 @@ fun ExamScreen(
         val favId = remember(item) { normalizeFavoriteId(item) }
         val isFav = favorites.contains(favId)
 
-        val noteId = remember(item) { exerciseNoteIdFor(item) }
-
-        val noteKey = remember(b, noteId) {
-            "note_${b.id}_${noteId}"
-        }
-
-        val legacyTopicNoteKey = remember(b, topic, favId) {
-            "note_${b.id}_${topic.trim()}_${favId}"
-        }
-
-        var noteText by remember(noteKey, legacyTopicNoteKey) {
+        var noteText by remember(
+            b,
+            topic,
+            item
+        ) {
             mutableStateOf(
-                readExerciseNote(
-                    prefs = notePrefs,
-                    primaryKey = noteKey,
-                    legacyTopicNoteKey
+                loadExamNote(
+                    targetBelt = b,
+                    targetTopic = topic,
+                    rawItem = item
                 )
             )
         }
 
-        var showNoteEditor by remember { mutableStateOf(false) }
+        var showNoteEditor by remember {
+            mutableStateOf(false)
+        }
 
         fun toggleFav() {
             if (item.isBlank()) return
@@ -651,11 +807,10 @@ fun ExamScreen(
             onDeleteNote = {
                 noteText = ""
 
-                saveExerciseNote(
-                    prefs = notePrefs,
-                    text = "",
-                    primaryKey = noteKey,
-                    legacyTopicNoteKey
+                deleteExamNote(
+                    targetBelt = b,
+                    targetTopic = topic,
+                    rawItem = item
                 )
             },
             onToggleFavorite = { toggleFav() }
@@ -673,11 +828,11 @@ fun ExamScreen(
                     val cleanNote = noteText.trim()
                     noteText = cleanNote
 
-                    saveExerciseNote(
-                        prefs = notePrefs,
-                        text = cleanNote,
-                        primaryKey = noteKey,
-                        legacyTopicNoteKey
+                    saveExamNote(
+                        targetBelt = b,
+                        targetTopic = topic,
+                        rawItem = item,
+                        note = cleanNote
                     )
 
                     showNoteEditor = false
@@ -707,27 +862,25 @@ fun ExamScreen(
         val favId = remember(rawItem) { normalizeFavoriteId(rawItem) }
         val isFav = favorites.contains(favId)
 
-        val noteId = remember(rawItem) { exerciseNoteIdFor(rawItem) }
+        val noteTopic =
+            ""
 
-        val noteKey = remember(belt, noteId) {
-            "note_${belt.id}_${noteId}"
-        }
-
-        val legacyExamNoteKey = remember(belt, favId) {
-            "note_${belt.id}_exam_${favId}"
-        }
-
-        var noteText by remember(noteKey, legacyExamNoteKey) {
+        var noteText by remember(
+            belt,
+            rawItem
+        ) {
             mutableStateOf(
-                readExerciseNote(
-                    prefs = notePrefs,
-                    primaryKey = noteKey,
-                    legacyExamNoteKey
+                loadExamNote(
+                    targetBelt = belt,
+                    targetTopic = noteTopic,
+                    rawItem = rawItem
                 )
             )
         }
 
-        var showNoteEditor by remember { mutableStateOf(false) }
+        var showNoteEditor by remember {
+            mutableStateOf(false)
+        }
 
         fun toggleFav() {
             if (rawItem.isBlank()) return
@@ -751,11 +904,10 @@ fun ExamScreen(
             onDeleteNote = {
                 noteText = ""
 
-                saveExerciseNote(
-                    prefs = notePrefs,
-                    text = "",
-                    primaryKey = noteKey,
-                    legacyExamNoteKey
+                deleteExamNote(
+                    targetBelt = belt,
+                    targetTopic = noteTopic,
+                    rawItem = rawItem
                 )
             },
             onToggleFavorite = { toggleFav() }
@@ -773,11 +925,11 @@ fun ExamScreen(
                     val cleanNote = noteText.trim()
                     noteText = cleanNote
 
-                    saveExerciseNote(
-                        prefs = notePrefs,
-                        text = cleanNote,
-                        primaryKey = noteKey,
-                        legacyExamNoteKey
+                    saveExamNote(
+                        targetBelt = belt,
+                        targetTopic = noteTopic,
+                        rawItem = rawItem,
+                        note = cleanNote
                     )
 
                     showNoteEditor = false

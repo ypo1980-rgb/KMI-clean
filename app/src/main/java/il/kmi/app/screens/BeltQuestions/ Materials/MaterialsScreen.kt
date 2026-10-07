@@ -87,6 +87,7 @@ import il.kmi.shared.domain.content.ExerciseIdentityRegistry
 import il.kmi.app.subscription.KmiAccess
 import il.kmi.app.progress.UserProgressRepository
 import il.kmi.app.notes.ExerciseNotesStore
+import il.kmi.app.exercises.sync.ExerciseSyncStore
 import il.kmi.app.ui.KmiTopBar
 import il.kmi.app.ui.pdf.KmiPdfHeader
 import il.kmi.app.ui.pdf.KmiPdfFooter
@@ -661,6 +662,18 @@ fun MaterialsScreen(
 
     fun cleanItem(topicTitle: String, item: String): String =
         CanonicalIds.cleanItem(topicTitle, item)
+
+    fun syncIdentityFor(
+        topicTitle: String,
+        rawItem: String
+    ) =
+        ExerciseSyncStore.resolveIdentity(
+            belt = belt,
+            topic = topicTitle,
+            subTopic =
+                materialParentSubTopic,
+            rawItem = rawItem
+        )
 
     fun exerciseIdentityIdFor(
         index: Int,
@@ -1251,18 +1264,66 @@ fun MaterialsScreen(
     }
 
     val excludedItems = remember { mutableStateListOf<String>() }
+
+    fun isExcludedByIdentity(
+        topicTitle: String,
+        rawItem: String
+    ): Boolean {
+        val identity =
+            syncIdentityFor(
+                topicTitle = topicTitle,
+                rawItem = rawItem
+            )
+
+        return identity.aliases.any { alias ->
+            excludedItems.contains(
+                alias
+            )
+        }
+    }
+
     LaunchedEffect(belt, excludedKeySuffix) {
         excludedItems.clear()
         excludedItems.addAll(
             sp.getStringSet("excluded_${belt.id}_$excludedKeySuffix", emptySet()) ?: emptySet()
         )
     }
-    fun toggleExclude(item: String) {
-        // ✅ item כאן כבר canonicalId
-        if (excludedItems.contains(item)) {
-            excludedItems.remove(item)
+    fun toggleExclude(
+        topicTitle: String,
+        rawItem: String
+    ) {
+        val identity =
+            syncIdentityFor(
+                topicTitle = topicTitle,
+                rawItem = rawItem
+            )
+
+        val aliases =
+            identity.aliases
+
+        val currentlyExcluded =
+            aliases.any { alias ->
+                excludedItems.contains(
+                    alias
+                )
+            }
+
+        if (currentlyExcluded) {
+            excludedItems.removeAll(
+                aliases.toSet()
+            )
         } else {
-            excludedItems.add(item)
+            aliases.forEach { alias ->
+                if (
+                    !excludedItems.contains(
+                        alias
+                    )
+                ) {
+                    excludedItems.add(
+                        alias
+                    )
+                }
+            }
         }
 
         sp.edit {
@@ -1288,50 +1349,35 @@ fun MaterialsScreen(
         )
     }
 
-    fun globalFavoriteIdFor(rawItem: String): String {
-        return rawItem
-            .substringAfter("::", rawItem)
-            .substringAfter(":", rawItem)
-            .trim()
+    fun globalFavoriteIdFor(
+        topicTitle: String,
+        rawItem: String
+    ): String {
+        return syncIdentityFor(
+            topicTitle = topicTitle,
+            rawItem = rawItem
+        ).exerciseId
     }
 
     fun favoriteAliasesFor(
         topicTitle: String,
         rawItem: String
     ): Set<String> {
-        val clean = cleanItem(topicTitle, rawItem).trim()
-
-        val registryId = ExerciseIdentityRegistry.resolve(
-            belt = belt,
-            hebrewTitle = clean,
-            topicKey = topicKey
-        ).id
-
-        val explanationId = CanonicalIds.resolveCanonicalForExplanation(
-            belt = belt,
+        return syncIdentityFor(
             topicTitle = topicTitle,
-            rawItemFromRepo = rawItem
-        )
-
-        val canonicalIdForTopic = canonicalFor(topicTitle, rawItem)
-        val canonicalIdForScreenTopic = canonicalFor(rawItem)
-
-        return setOf(
-            registryId,
-            explanationId,
-            canonicalIdForTopic,
-            canonicalIdForScreenTopic
-        )
-            .map { it.trim() }
-            .filter { it.isNotBlank() }
-            .toSet()
+            rawItem = rawItem
+        ).aliases
     }
 
     fun isFavoriteByAliases(
         topicTitle: String,
         rawItem: String
     ): Boolean {
-        val globalFavoriteId = globalFavoriteIdFor(rawItem)
+        val globalFavoriteId =
+            globalFavoriteIdFor(
+                topicTitle = topicTitle,
+                rawItem = rawItem
+            )
 
         return globalFavorites.contains(globalFavoriteId) ||
                 favoriteAliasesFor(topicTitle, rawItem).any { id ->
@@ -1348,7 +1394,11 @@ fun MaterialsScreen(
             rawItem = rawItem
         )
 
-        val globalFavoriteId = globalFavoriteIdFor(rawItem)
+        val globalFavoriteId =
+            globalFavoriteIdFor(
+                topicTitle = topicTitle,
+                rawItem = rawItem
+            )
         val nextFavorites = favorites.toMutableSet()
 
         val isCurrentlyFavorite =
@@ -2538,8 +2588,9 @@ fun MaterialsScreen(
                                             item
                                         ),
                                     isExcluded =
-                                        excludedItems.contains(
-                                            canonicalId
+                                        isExcludedByIdentity(
+                                            topicTitle = materialRootTopic,
+                                            rawItem = item
                                         ),
                                     hasNote =
                                         loadNote(
@@ -3597,7 +3648,11 @@ fun MaterialsScreen(
                                                     }
                                                 }
 
-                                            val isExcluded = excludedItems.contains(canonicalId)
+                                            val isExcluded =
+                                                isExcludedByIdentity(
+                                                    topicTitle = materialRootTopic,
+                                                    rawItem = item
+                                                )
                                             val isHighlighted =
                                                 highlight != null && canonicalId == highlight
 
@@ -3851,7 +3906,10 @@ fun MaterialsScreen(
                                                                 isFav = isFavorite,
                                                                 hasNote = noteText.isNotBlank(),
                                                                 onToggleExclude = {
-                                                                    toggleExclude(canonicalId)
+                                                                    toggleExclude(
+                                                                        topicTitle = materialRootTopic,
+                                                                        rawItem = item
+                                                                    )
                                                                 },
                                                                 onInfo = {
                                                                     pressed = true
@@ -3926,7 +3984,8 @@ fun MaterialsScreen(
                                                                         hasNote = noteText.isNotBlank(),
                                                                         onToggleExclude = {
                                                                             toggleExclude(
-                                                                                canonicalId
+                                                                                topicTitle = materialRootTopic,
+                                                                                rawItem = item
                                                                             )
                                                                         },
                                                                         onInfo = {
