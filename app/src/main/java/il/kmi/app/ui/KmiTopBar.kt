@@ -183,6 +183,11 @@ fun KmiTopBar(
     topBeltIconRes: Int? = null,
     topBeltIconDescription: String? = null,
     showTopBeltIcon: Boolean = false,
+    topBeltIconScale: Float = 1f,
+    topBeltIconRotation: Float? = null,
+    topBeltIconBottomPadding: Dp? = null,
+    centerTopBeltIcon: Boolean = false,
+    titleVerticalOffset: Dp = 0.dp,
     onPickSearchResult: ((String) -> Unit)? = null,
     showLogoInBar: Boolean = false,
     logoRes: Int? = R.drawable.kami_logo,
@@ -211,6 +216,8 @@ fun KmiTopBar(
 
     titleMaxLines: Int = 2,
     titleScale: Float = 1f,
+    titleLeftPadding: Dp? = null,
+    titleRightPadding: Dp? = null,
 
     isInsideAssistant: Boolean = false,
     onOpenAi: (() -> Unit)? = null,
@@ -1222,9 +1229,13 @@ fun KmiTopBar(
                             right = 58.dp
                         )
                     } else {
-                        Modifier.padding(
-                            start = 58.dp,
-                            end = 58.dp
+                        Modifier.absolutePadding(
+                            left =
+                                titleLeftPadding
+                                    ?: 58.dp,
+                            right =
+                                titleRightPadding
+                                    ?: 58.dp
                         )
                     }
                 )
@@ -1271,6 +1282,9 @@ fun KmiTopBar(
                 color = topBarTitleColor,
                 modifier = Modifier
                     .fillMaxWidth()
+                    .offset(
+                        y = titleVerticalOffset
+                    )
                     .then(
                         if (alignTitleEnd && titleMaxLines == 1) {
                             Modifier.basicMarquee(
@@ -1285,15 +1299,43 @@ fun KmiTopBar(
 
         if (shouldRenderTopBeltIcon && resolvedTopBeltIconRes != null) {
             val beltIconAlignment =
-                if (isEnglish) AbsoluteAlignment.BottomRight else AbsoluteAlignment.BottomLeft
+                if (centerTopBeltIcon) {
+                    Alignment.BottomCenter
+                } else {
+                    if (isEnglish) {
+                        AbsoluteAlignment.BottomRight
+                    } else {
+                        AbsoluteAlignment.BottomLeft
+                    }
+                }
 
             Box(
                 modifier = Modifier
                     .align(beltIconAlignment)
                     .padding(
-                        start = if (isEnglish) 0.dp else 6.dp,
-                        end = if (isEnglish) 6.dp else 0.dp,
-                        bottom = if (shouldShowRolePillBelowTitle) 22.dp else 9.dp
+                        start =
+                            if (centerTopBeltIcon) {
+                                0.dp
+                            } else if (isEnglish) {
+                                0.dp
+                            } else {
+                                6.dp
+                            },
+                        end =
+                            if (centerTopBeltIcon) {
+                                0.dp
+                            } else if (isEnglish) {
+                                6.dp
+                            } else {
+                                0.dp
+                            },
+                        bottom =
+                            topBeltIconBottomPadding
+                                ?: if (shouldShowRolePillBelowTitle) {
+                                    22.dp
+                                } else {
+                                    9.dp
+                                }
                     )
                     .zIndex(30f)
             ) {
@@ -1308,8 +1350,12 @@ fun KmiTopBar(
                     contentDescription =
                         topBeltIconDescription ?: title,
                     modifier = Modifier
-                        .width(82.dp)
-                        .height(38.dp)
+                        .width(
+                            82.dp * topBeltIconScale
+                        )
+                        .height(
+                            38.dp * topBeltIconScale
+                        )
                         .graphicsLayer {
                             /*
                              * בקובץ החגורה הצהובה יש יותר שטח
@@ -1323,12 +1369,15 @@ fun KmiTopBar(
                                     1f
                                 }
 
+                            scaleY = 1f
+
                             rotationZ =
-                                if (isEnglish) {
-                                    20f
-                                } else {
-                                    -20f
-                                }
+                                topBeltIconRotation
+                                    ?: if (isEnglish) {
+                                        20f
+                                    } else {
+                                        -20f
+                                    }
                         }
                 )
             }

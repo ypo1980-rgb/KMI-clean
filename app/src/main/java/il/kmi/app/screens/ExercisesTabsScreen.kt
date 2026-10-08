@@ -43,7 +43,6 @@ import il.kmi.app.favorites.FavoritesStore
 import il.kmi.app.notes.ExerciseNotesStore
 import il.kmi.app.exercises.sync.ExerciseSyncStore
 import il.kmi.app.domain.ContentRepo
-import il.kmi.shared.domain.content.ExerciseIdentityRegistry
 import android.app.Activity
 import androidx.compose.foundation.BorderStroke
 import il.kmi.app.screens.BeltQuestions.Materials.CoachMaterialProgress
@@ -1207,27 +1206,25 @@ fun ExercisesTabsScreen(
         ).exerciseId
     }
 
-    /*
-     * תמיכה גם במועדפים החדשים שנשמרים כ־ex_XXX
-     * וגם במועדפים ישנים שנשמרו לפי שם התרגיל.
-     */
-    val favoriteExerciseIds: Set<String> = remember(
-        favorites,
-        belt
-    ) {
-        favorites.mapTo(linkedSetOf()) { storedValue ->
-            val cleanValue = storedValue.trim()
+    fun favoriteAliasesFor(
+        raw: String
+    ): Set<String> {
+        val itemTopic =
+            topicForRawItem(
+                raw
+            )
 
-            if (cleanValue.matches(Regex("ex_\\d+"))) {
-                cleanValue
-            } else {
-                ExerciseIdentityRegistry.idFor(
-                    belt = belt,
-                    hebrewTitle = cleanValue,
-                    topicKey = null
-                )
-            }
-        }
+        return ExerciseSyncStore.resolveIdentity(
+            belt = belt,
+            topic = itemTopic,
+            subTopic =
+                subTopicFilter
+                    ?.takeIf {
+                        it.isNotBlank()
+                    }
+                    ?.let(::dec),
+            rawItem = raw
+        ).aliases
     }
 
     val exerciseIdByRaw: Map<String, String> =
@@ -1247,14 +1244,23 @@ fun ExercisesTabsScreen(
 
     val favoriteRawItems: Set<String> =
         remember(
-            exerciseIdByRaw,
-            favoriteExerciseIds
+            itemList,
+            favorites,
+            belt,
+            topic,
+            subTopicFilter,
+            allTopicItems
         ) {
-            exerciseIdByRaw
-                .filterValues { exerciseId ->
-                    exerciseId in favoriteExerciseIds
+            itemList.filterTo(
+                linkedSetOf()
+            ) { raw ->
+
+                favoriteAliasesFor(
+                    raw
+                ).any { alias ->
+                    alias in favorites
                 }
-                .keys
+            }
         }
 
     fun isFavoriteRawItem(
@@ -1594,15 +1600,25 @@ fun ExercisesTabsScreen(
                 rawItem = raw
             )
 
-        val stored =
-            sp.getStringSet(
-                "excluded_${belt.id}_$exclusionKeySuffix",
-                emptySet()
-            )
-                ?: emptySet()
+        val exclusionKeys =
+            sp.all.keys
+                .filter { key ->
+                    key.startsWith(
+                        "excluded_${belt.id}_"
+                    )
+                }
 
-        return identity.aliases.any { alias ->
-            alias in stored
+        return exclusionKeys.any { key ->
+            val stored =
+                sp.getStringSet(
+                    key,
+                    emptySet()
+                )
+                    ?: emptySet()
+
+            identity.aliases.any { alias ->
+                alias in stored
+            }
         }
     }
 
@@ -1627,41 +1643,81 @@ fun ExercisesTabsScreen(
                 rawItem = raw
             )
 
-        val key =
-            "excluded_${belt.id}_$exclusionKeySuffix"
+        val exclusionKeys =
+            sp.all.keys
+                .filter { key ->
+                    key.startsWith(
+                        "excluded_${belt.id}_"
+                    )
+                }
 
-        val stored =
-            (
+        val currentlyExcluded =
+            exclusionKeys.any { key ->
+                val stored =
                     sp.getStringSet(
                         key,
                         emptySet()
                     )
                         ?: emptySet()
-                    )
-                .toMutableSet()
 
-        val currentlyExcluded =
-            identity.aliases.any { alias ->
-                alias in stored
+                identity.aliases.any { alias ->
+                    alias in stored
+                }
             }
 
         if (currentlyExcluded) {
-            identity.aliases.forEach { alias ->
-                stored.remove(
-                    alias
-                )
+
+            sp.edit {
+                exclusionKeys.forEach { key ->
+
+                    val stored =
+                        (
+                                sp.getStringSet(
+                                    key,
+                                    emptySet()
+                                )
+                                    ?: emptySet()
+                                )
+                            .toMutableSet()
+
+                    identity.aliases.forEach { alias ->
+                        stored.remove(
+                            alias
+                        )
+                    }
+
+                    putStringSet(
+                        key,
+                        stored
+                    )
+                }
             }
+
         } else {
+
+            val key =
+                "excluded_${belt.id}_$exclusionKeySuffix"
+
+            val stored =
+                (
+                        sp.getStringSet(
+                            key,
+                            emptySet()
+                        )
+                            ?: emptySet()
+                        )
+                    .toMutableSet()
+
             stored.addAll(
                 identity.aliases
             )
-        }
 
-        sp.edit {
-            putStringSet(
-                key,
-                stored
-            )
+            sp.edit {
+                putStringSet(
+                    key,
+                    stored
+                )
+            }
         }
 
         exclusionsRefreshKey++
@@ -1963,15 +2019,13 @@ fun ExercisesTabsScreen(
     fun toggleFavorite(
         rawItem: String
     ) {
-        val itemTopic =
-            topicForRawItem(
-                rawItem
-            )
-
-        val favoriteId =
+        val identity =
             ExerciseSyncStore.resolveIdentity(
                 belt = belt,
-                topic = itemTopic,
+                topic =
+                    topicForRawItem(
+                        rawItem
+                    ),
                 subTopic =
                     subTopicFilter
                         ?.takeIf {
@@ -1979,11 +2033,23 @@ fun ExercisesTabsScreen(
                         }
                         ?.let(::dec),
                 rawItem = rawItem
-            ).exerciseId
+            )
 
-        FavoritesStore.toggle(
-            favoriteId
-        )
+        val existingFavorite =
+            identity.aliases
+                .firstOrNull { alias ->
+                    alias in favorites
+                }
+
+        if (existingFavorite != null) {
+            FavoritesStore.toggle(
+                existingFavorite
+            )
+        } else {
+            FavoritesStore.toggle(
+                identity.exerciseId
+            )
+        }
     }
 
     /**
@@ -2367,9 +2433,10 @@ fun ExercisesTabsScreen(
 
             val favCount = remember(
                 itemList,
-                favoriteExerciseIds,
+                favorites,
                 belt,
                 topic,
+                subTopicFilter,
                 allTopicItems
             ) {
                 itemList.count { item ->
@@ -2574,9 +2641,10 @@ fun ExercisesTabsScreen(
                     itemList,
                     coachStatuses,
                     unknownItems,
-                    favoriteExerciseIds,
+                    favorites,
                     belt,
-                    topic
+                    topic,
+                    subTopicFilter
                 ) {
                     derivedStateOf {
                         if (isCoach) {
@@ -2957,7 +3025,8 @@ fun ExercisesTabsScreen(
                                                         itemIsExcluded ||
                                                         itemHasNote ||
                                                         isFav ||
-                                                        itemIsUnknown
+                                                        itemIsUnknown ||
+                                                        itemIsPartiallyKnown
                                                     ) {
                                                         Spacer(
                                                             Modifier.height(9.dp)

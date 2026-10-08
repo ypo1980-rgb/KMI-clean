@@ -2670,30 +2670,133 @@ private fun BeltGroupsContent(
         }
     }
 
+    fun hardExclusionAliasesFor(
+        belt: Belt,
+        topic: String,
+        rawItem: String
+    ): Set<String> {
+
+        val registryResolved =
+            ExerciseIdentityRegistry.resolve(
+                belt = belt,
+                hebrewTitle = rawItem,
+                topicKey = null
+            )
+
+        val knownIdentity =
+            if (registryResolved.isKnown) {
+                ExerciseIdentityRegistry.knownById(
+                    registryResolved.id
+                )
+            } else {
+                null
+            }
+
+        val candidateTopics =
+            buildSet {
+
+                if (topic.isNotBlank()) {
+                    add(
+                        topic.trim()
+                    )
+                }
+
+                knownIdentity
+                    ?.topicKeys
+                    ?.forEach { topicKey ->
+                        if (topicKey.isNotBlank()) {
+                            add(
+                                topicKey.trim()
+                            )
+                        }
+                    }
+            }
+
+        return buildSet {
+
+            add(
+                rawItem.trim()
+            )
+
+            add(
+                registryResolved.id
+            )
+
+            knownIdentity?.let { identity ->
+
+                add(
+                    identity.hebrewTitle
+                )
+
+                addAll(
+                    identity.aliases
+                )
+            }
+
+            candidateTopics.forEach { candidateTopic ->
+
+                val syncIdentity =
+                    ExerciseSyncStore.resolveIdentity(
+                        belt = belt,
+                        topic = candidateTopic,
+                        subTopic = null,
+                        rawItem = rawItem
+                    )
+
+                add(
+                    syncIdentity.exerciseId
+                )
+
+                addAll(
+                    syncIdentity.aliases
+                )
+            }
+        }
+            .map { value ->
+                normalizeStatusPart(
+                    value
+                )
+            }
+            .filter { value ->
+                value.isNotBlank()
+            }
+            .toSet()
+    }
+
     fun isHardExcluded(
         belt: Belt,
         topic: String,
         rawItem: String
     ): Boolean {
-        val identity =
-            syncIdentityFor(
+        val aliases =
+            hardExclusionAliasesFor(
                 belt = belt,
                 topic = topic,
                 rawItem = rawItem
             )
 
-        val stored =
-            prefs.getStringSet(
-                exclusionKeyFor(
-                    belt = belt,
-                    topic = topic
-                ),
-                emptySet()
-            )
-                ?: emptySet()
+        val exclusionKeys =
+            prefs.all.keys
+                .filter { key ->
+                    key.startsWith(
+                        "excluded_${belt.id}_"
+                    )
+                }
 
-        return identity.aliases.any { alias ->
-            alias in stored
+        return exclusionKeys.any { key ->
+
+            val stored =
+                prefs.getStringSet(
+                    key,
+                    emptySet()
+                )
+                    ?: emptySet()
+
+            stored.any { storedValue ->
+                normalizeStatusPart(
+                    storedValue
+                ) in aliases
+            }
         }
     }
 
@@ -2709,44 +2812,105 @@ private fun BeltGroupsContent(
                 rawItem = rawItem
             )
 
-        val key =
-            exclusionKeyFor(
+        val exclusionKeys =
+            prefs.all.keys
+                .filter { key ->
+                    key.startsWith(
+                        "excluded_${belt.id}_"
+                    )
+                }
+
+        val normalizedAliases =
+            hardExclusionAliasesFor(
                 belt = belt,
-                topic = topic
+                topic = topic,
+                rawItem = rawItem
             )
 
-        val stored =
-            (
+        val currentlyExcluded =
+            exclusionKeys.any { key ->
+
+                val stored =
                     prefs.getStringSet(
                         key,
                         emptySet()
                     )
                         ?: emptySet()
-                    )
-                .toMutableSet()
 
-        val currentlyExcluded =
-            identity.aliases.any { alias ->
-                alias in stored
+                val normalizedStored =
+                    stored
+                        .map { value ->
+                            normalizeStatusPart(
+                                value
+                            )
+                        }
+                        .filter { value ->
+                            value.isNotBlank()
+                        }
+                        .toSet()
+
+                normalizedAliases.any { alias ->
+                    alias in normalizedStored
+                }
             }
 
         if (currentlyExcluded) {
-            identity.aliases.forEach { alias ->
-                stored.remove(
-                    alias
-                )
+
+            prefs.edit {
+
+                exclusionKeys.forEach { key ->
+
+                    val stored =
+                        (
+                                prefs.getStringSet(
+                                    key,
+                                    emptySet()
+                                )
+                                    ?: emptySet()
+                                )
+                            .toMutableSet()
+
+                    stored.removeAll { storedValue ->
+                        normalizeStatusPart(
+                            storedValue
+                        ) in normalizedAliases
+                    }
+
+                    putStringSet(
+                        key,
+                        stored
+                    )
+                }
             }
+
         } else {
+
+            val key =
+                exclusionKeyFor(
+                    belt = belt,
+                    topic = topic
+                )
+
+            val stored =
+                (
+                        prefs.getStringSet(
+                            key,
+                            emptySet()
+                        )
+                            ?: emptySet()
+                        )
+                    .toMutableSet()
+
             stored.addAll(
                 identity.aliases
             )
-        }
 
-        prefs.edit {
-            putStringSet(
-                key,
-                stored
-            )
+            prefs.edit {
+                putStringSet(
+                    key,
+                    stored
+                )
+            }
         }
 
         exclusionsRefreshKey++
@@ -3139,12 +3303,7 @@ private fun BeltGroupsContent(
                             favoriteId in favoriteIds
 
                         val isExcluded =
-                            remember(
-                                belt,
-                                title,
-                                rawItem,
-                                exclusionsRefreshKey
-                            ) {
+                            exclusionsRefreshKey.let {
                                 isHardExcluded(
                                     belt = belt,
                                     topic = title,
@@ -4111,6 +4270,55 @@ private fun HardExerciseRowCard(
                         verticalArrangement =
                             Arrangement.spacedBy(3.dp)
                     ) {
+                        if (isExcluded) {
+                            Surface(
+                                shape =
+                                    RoundedCornerShape(10.dp),
+                                color =
+                                    MaterialTheme
+                                        .colorScheme
+                                        .surfaceVariant,
+                                border =
+                                    BorderStroke(
+                                        width = 1.dp,
+                                        color =
+                                            MaterialTheme
+                                                .colorScheme
+                                                .onSurfaceVariant
+                                                .copy(
+                                                    alpha = 0.14f
+                                                )
+                                    ),
+                                shadowElevation = 0.dp
+                            ) {
+                                Text(
+                                    text =
+                                        if (isEnglish) {
+                                            "Excluded"
+                                        } else {
+                                            "מוחרג"
+                                        },
+                                    style =
+                                        KmiTypography
+                                            .caption
+                                            .copy(
+                                                fontWeight =
+                                                    FontWeight.ExtraBold
+                                            ),
+                                    color =
+                                        MaterialTheme
+                                            .colorScheme
+                                            .onSurfaceVariant,
+                                    modifier =
+                                        Modifier.padding(
+                                            horizontal = 7.dp,
+                                            vertical = 2.dp
+                                        ),
+                                    maxLines = 1
+                                )
+                            }
+                        }
+
                         if (isFavorite) {
                             Surface(
                                 shape =

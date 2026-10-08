@@ -14,8 +14,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.ExpandLess
-import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material3.*
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.runtime.*
@@ -66,12 +64,14 @@ import il.kmi.shared.domain.content.ExerciseTitlesEn
 import il.kmi.shared.domain.content.ExerciseIdentityRegistry
 import il.kmi.app.ui.dialogs.ExerciseExplanationDialog
 import il.kmi.app.ui.dialogs.ExerciseNoteEditorDialog
-import il.kmi.app.domain.CanonicalIds
 import il.kmi.app.domain.ExerciseExplanationResolver
 import il.kmi.app.notes.ExerciseNotesStore
+import il.kmi.app.exercises.sync.ExerciseSyncStore
 import il.kmi.app.progress.CoachGroupProgressSummary
 import il.kmi.app.progress.UserProgressComparison
 import il.kmi.app.progress.UserProgressRepository
+import il.kmi.app.screens.BeltQuestions.ByTopic.SubjectRootCardPremium
+import il.kmi.app.screens.BeltQuestions.Materials.MaterialsExerciseStatusOption
 import il.yuval.ui.theme.kmiSectionHeaderBackground
 
 /* ------------------------------ MarkState (3 states) ------------------------------ */
@@ -176,6 +176,32 @@ private fun summaryExerciseIdentityIdFor(
     return "${resolved.id}_row_$index"
 }
 
+private fun summarySyncIdentityFor(
+    belt: Belt,
+    topicKey: String,
+    topicTitle: String,
+    item: String
+) =
+    ExerciseSyncStore.resolveIdentity(
+        belt = belt,
+        topic = topicTitle,
+        subTopic =
+            topicKey
+                .trim()
+                .takeIf { key ->
+                    key.startsWith(
+                        "${topicTitle.trim()}__"
+                    )
+                }
+                ?.removePrefix(
+                    "${topicTitle.trim()}__"
+                )
+                ?.takeIf { subTopic ->
+                    subTopic.isNotBlank()
+                },
+        rawItem = item
+    )
+
 private fun findCanonicalItem(b: Belt, t: String, displayItem: String): String? {
     val wanted = norm(displayItem)
 
@@ -234,15 +260,6 @@ private fun resolveCanonicalIdForExplanation(
 private fun beltContentFor(belt: Belt): SharedContentRepo.BeltContent? {
     // ✅ מקור אמת: shared ContentRepo.data
     return SharedContentRepo.data[belt]
-}
-
-/**
- * ✅ טקסט לתצוגה בלבד (כמו MaterialsScreen):
- * מנקה prefixים ומחזיר displayName מה-formatter.
- */
-
-private fun canonicalFromRepo(topicTitle: String, rawItemFromRepo: String): String {
-    return cleanItem(topicTitle, rawItemFromRepo).trim()
 }
 
 private fun topicDisplayName(topicTitle: String, isEnglish: Boolean): String {
@@ -325,7 +342,12 @@ private fun exerciseDisplayNameForUi(
             s = s.removePrefix("$topicTrim::").trim()
         }
 
-        if (topicTrim.isNotBlank() && s.startsWith(topicTrim)) {
+        if (
+            topicTrim.isNotBlank() &&
+            topicTrim != "קוואלר" &&
+            topicTrim != "קאוולר" &&
+            s.startsWith(topicTrim)
+        ) {
             s = s.removePrefix(topicTrim).trim()
             s = s.trimStart('-', '–', '—', ':').trim()
         }
@@ -338,7 +360,21 @@ private fun exerciseDisplayNameForUi(
 
     val base = formatted.ifBlank { cleaned }.trim()
 
-    if (!isEnglish) return base
+    val isKavaler =
+        topicTrim == "קוואלר" ||
+                topicTrim == "קאוולר"
+
+    val displayBase =
+        if (isKavaler) {
+            base.replace(
+                Regex("""^(קוואלר|קאוולר)\s*[-–—]?\s*(?=קוואלר|קאוולר)"""),
+                ""
+            ).trim()
+        } else {
+            base
+        }
+
+    if (!isEnglish) return displayBase
 
     val candidates: List<String> = listOf(
         base,
@@ -364,7 +400,7 @@ private fun exerciseDisplayNameForUi(
         }
     }
 
-    return base
+    return displayBase
 }
 
 /* ------------------------------ ProgressMeter ------------------------------ */
@@ -451,10 +487,42 @@ fun ProgressMeter(
                     item = raw
                 )
 
-                when (topicSnap[statusId] ?: topicSnap[legacyStatusId]) {
-                    true -> yes++
-                    false -> no++
-                    null -> none++
+                val syncIdentity =
+                    summarySyncIdentityFor(
+                        belt = belt,
+                        topicKey = tp.trim(),
+                        topicTitle = tp,
+                        item = raw
+                    )
+
+                val value =
+                    buildList {
+                        add(
+                            statusId
+                        )
+
+                        addAll(
+                            syncIdentity.aliases
+                        )
+
+                        add(
+                            legacyStatusId
+                        )
+                    }
+                        .distinct()
+                        .firstNotNullOfOrNull { candidateId ->
+                            topicSnap[candidateId]
+                        }
+
+                when (value) {
+                    true ->
+                        yes++
+
+                    false ->
+                        no++
+
+                    null ->
+                        none++
                 }
             }
         }
@@ -1510,6 +1578,46 @@ fun SummaryScreen(
     val isEnglish = languageManager.getCurrentLanguage() == AppLanguage.ENGLISH
     fun tr(he: String, en: String): String = if (isEnglish) en else he
 
+    fun subjectIdForSummaryTopic(
+        topicTitle: String
+    ): String? {
+        return when (
+            norm(
+                topicTitle
+            )
+        ) {
+            norm("הגנות") ->
+                "defense_root"
+
+            norm("עבודת ידיים") ->
+                "hands_root"
+
+            norm("שחרורים") ->
+                "releases"
+
+            norm("בלימות וגלגולים"),
+            norm("גלגולים ובלימות") ->
+                "rolls_breakfalls"
+
+            norm("עמידת מוצא") ->
+                "topic_ready_stance"
+
+            norm("הכנה לעבודת קרקע"),
+            norm("עבודת קרקע") ->
+                "topic_ground_prep"
+
+            norm("קוואלר"),
+            norm("קאוולר") ->
+                "topic_kavaler"
+
+            norm("בעיטות") ->
+                "kicks"
+
+            else ->
+                null
+        }
+    }
+
     /*
   * מסך הסיכום מקבל את כל צבעיו מ-AppTheme.
   * כך אין ערכת צבעים מקומית נוספת ואין צורך לבדוק
@@ -1534,8 +1642,6 @@ fun SummaryScreen(
    * רקע כל שורה משלב את צבע החגורה עם צבע המשטח
    * של ערכת הנושא, ולכן מתאים גם למצב בהיר וגם לכהה.
    */
-    val summaryTopicTitleColor =
-        summaryColors.onSurface
 
     val summarySubTopicTitleColor =
         summaryColors.tertiary
@@ -1550,11 +1656,6 @@ fun SummaryScreen(
         belt.color
             .copy(alpha = 0.16f)
             .compositeOver(summaryColors.surface)
-
-    val summaryTopicDividerColor =
-        belt.color
-            .copy(alpha = 0.42f)
-            .compositeOver(summaryColors.outlineVariant)
 
     val scroll = rememberScrollState()
     val focusManager = LocalFocusManager.current
@@ -1631,62 +1732,22 @@ fun SummaryScreen(
         rawItem: String,
         statusTopicKey: String? = null
     ): Set<String> {
-        val clean =
-            cleanItem(
-                topicTitle,
-                rawItem
-            ).trim()
+        val subTopic =
+            statusTopicKey
+                ?.substringAfter(
+                    "${topicTitle.trim()}__",
+                    ""
+                )
+                ?.takeIf {
+                    it.isNotBlank()
+                }
 
-        val registryId =
-            ExerciseIdentityRegistry.resolve(
-                belt = belt,
-                hebrewTitle = clean,
-                topicKey =
-                    statusTopicKey
-                        ?.trim()
-                        ?.takeIf {
-                            it.isNotBlank()
-                        }
-                        ?: topicTitle
-                            .trim()
-                            .takeIf {
-                                it.isNotBlank()
-                            }
-            ).id
-
-        val explanationId =
-            CanonicalIds.resolveCanonicalForExplanation(
-                belt = belt,
-                topicTitle = topicTitle,
-                rawItemFromRepo = rawItem
-            )
-
-        val canonicalId =
-            CanonicalIds.canonicalFor(
-                belt = belt,
-                topicTitle = topicTitle,
-                displayItem = rawItem
-            )
-
-        val localCanonicalId =
-            canonicalFromRepo(
-                topicTitle = topicTitle,
-                rawItemFromRepo = rawItem
-            )
-
-        return setOf(
-            registryId,
-            explanationId,
-            canonicalId,
-            localCanonicalId
-        )
-            .map {
-                it.trim()
-            }
-            .filter {
-                it.isNotBlank()
-            }
-            .toSet()
+        return ExerciseSyncStore.resolveIdentity(
+            belt = belt,
+            topic = topicTitle,
+            subTopic = subTopic,
+            rawItem = rawItem
+        ).aliases
     }
 
     fun loadNote(
@@ -1962,14 +2023,34 @@ fun SummaryScreen(
 
     fun loadCoachSummaryStatuses(
         row: SummaryExerciseRow,
-        statusId: String
+        statusId: String,
+        aliases: Collection<String> =
+            emptyList()
     ): List<CoachSummaryStatus> {
 
-        val key =
-            coachProgressBaseKey(
-                row = row,
-                statusId = statusId
-            )
+        val candidateIds =
+            buildList {
+                add(
+                    statusId
+                )
+
+                addAll(
+                    aliases
+                )
+            }
+                .flatMap { candidateId ->
+                    listOf(
+                        candidateId,
+                        candidateId.substringBefore("__")
+                    )
+                }
+                .map { candidateId ->
+                    candidateId.trim()
+                }
+                .filter { candidateId ->
+                    candidateId.isNotBlank()
+                }
+                .distinct()
 
         val selectableStatuses =
             listOf(
@@ -1981,40 +2062,56 @@ fun SummaryScreen(
         val selectedStatuses =
             selectableStatuses
                 .filter { status ->
-                    notesSp.getBoolean(
-                        "${key}_${status.storageValue}_selected",
-                        false
-                    )
+
+                    candidateIds.any { candidateId ->
+
+                        val key =
+                            coachProgressBaseKey(
+                                row = row,
+                                statusId = candidateId
+                            )
+
+                        notesSp.getBoolean(
+                            "${key}_${status.storageValue}_selected",
+                            false
+                        )
+                    }
                 }
                 .take(2)
 
-        /*
-         * המבנה החדש קיים — מחזירים את כל
-         * הסימונים שנבחרו, עד שניים.
-         */
         if (selectedStatuses.isNotEmpty()) {
             return selectedStatuses
         }
 
-        /*
-         * תאימות לסימונים הישנים שנשמרו
-         * לפני המעבר ל־2 מתוך 3.
-         */
         val legacyStatus =
-            CoachSummaryStatus.fromStorage(
-                notesSp.getString(
-                    "${key}_status",
-                    null
-                )
-            )
+            candidateIds
+                .firstNotNullOfOrNull { candidateId ->
 
-        return if (
-            legacyStatus ==
-            CoachSummaryStatus.NOT_TAUGHT
-        ) {
+                    val key =
+                        coachProgressBaseKey(
+                            row = row,
+                            statusId = candidateId
+                        )
+
+                    CoachSummaryStatus
+                        .fromStorage(
+                            notesSp.getString(
+                                "${key}_status",
+                                null
+                            )
+                        )
+                        .takeIf { status ->
+                            status !=
+                                    CoachSummaryStatus.NOT_TAUGHT
+                        }
+                }
+
+        return if (legacyStatus == null) {
             emptyList()
         } else {
-            listOf(legacyStatus)
+            listOf(
+                legacyStatus
+            )
         }
     }
 
@@ -2046,12 +2143,21 @@ fun SummaryScreen(
                         item = row.itemRaw
                     )
 
+                val syncIdentity =
+                    summarySyncIdentityFor(
+                        belt = belt,
+                        topicKey = row.statusTopicKey,
+                        topicTitle = row.sourceTopicTitle,
+                        item = row.itemRaw
+                    )
+
                 loadedStatuses[
                     topicTitle to statusId
                 ] =
                     loadCoachSummaryStatuses(
                         row = row,
-                        statusId = statusId
+                        statusId = statusId,
+                        aliases = syncIdentity.aliases
                     )
             }
         }
@@ -2127,30 +2233,71 @@ fun SummaryScreen(
                         rows.forEach { row ->
                             val topicSnap = snapshotsByStatusTopicKey[row.statusTopicKey].orEmpty()
 
-                            val statusId = summaryExerciseIdentityIdFor(
-                                belt = belt,
-                                topicKey = row.statusTopicKey,
-                                topicTitle = row.sourceTopicTitle,
-                                index = row.indexInStatusGroup,
-                                item = row.itemRaw
-                            )
+                            val statusId =
+                                summaryExerciseIdentityIdFor(
+                                    belt = belt,
+                                    topicKey = row.statusTopicKey,
+                                    topicTitle = row.sourceTopicTitle,
+                                    index = row.indexInStatusGroup,
+                                    item = row.itemRaw
+                                )
 
-                            val legacyStatusId = summaryLegacyStatusIdFor(
-                                belt = belt,
-                                topicKey = row.statusTopicKey,
-                                index = row.indexInStatusGroup,
-                                item = row.itemRaw
-                            )
+                            val legacyStatusId =
+                                summaryLegacyStatusIdFor(
+                                    belt = belt,
+                                    topicKey = row.statusTopicKey,
+                                    index = row.indexInStatusGroup,
+                                    item = row.itemRaw
+                                )
 
-                            val v: Boolean? = topicSnap[statusId] ?: topicSnap[legacyStatusId]
+                            val syncIdentity =
+                                summarySyncIdentityFor(
+                                    belt = belt,
+                                    topicKey = row.statusTopicKey,
+                                    topicTitle = row.sourceTopicTitle,
+                                    item = row.itemRaw
+                                )
 
-                            val state = when (v) {
-                                true -> MarkState.YES
-                                false -> MarkState.NO
-                                null -> MarkState.NONE
-                            }
+                            val candidateIds =
+                                buildList {
+                                    add(
+                                        statusId
+                                    )
 
-                            map[topicTitle to statusId] = state
+                                    addAll(
+                                        syncIdentity.aliases
+                                    )
+
+                                    add(
+                                        legacyStatusId
+                                    )
+                                }
+                                    .filter { candidate ->
+                                        candidate.isNotBlank()
+                                    }
+                                    .distinct()
+
+                            val v: Boolean? =
+                                candidateIds
+                                    .firstNotNullOfOrNull { candidateId ->
+                                        topicSnap[candidateId]
+                                    }
+
+                            val state =
+                                when (v) {
+                                    true ->
+                                        MarkState.YES
+
+                                    false ->
+                                        MarkState.NO
+
+                                    null ->
+                                        MarkState.NONE
+                                }
+
+                            map[
+                                topicTitle to statusId
+                            ] = state
                         }
                     }
 
@@ -2206,11 +2353,22 @@ fun SummaryScreen(
                                     )
                                         .orEmpty()
 
-                                if (
+                                val syncIdentity =
+                                    summarySyncIdentityFor(
+                                        belt = belt,
+                                        topicKey = row.statusTopicKey,
+                                        topicTitle = row.sourceTopicTitle,
+                                        item = row.itemRaw
+                                    )
+
+                                val isPartiallyKnown =
                                     statusId in savedPartialIds ||
-                                    legacyStatusId in
-                                    savedPartialIds
-                                ) {
+                                            legacyStatusId in savedPartialIds ||
+                                            syncIdentity.aliases.any { alias ->
+                                                alias in savedPartialIds
+                                            }
+
+                                if (isPartiallyKnown) {
                                     add(
                                         topicTitle to statusId
                                     )
@@ -2609,36 +2767,61 @@ fun SummaryScreen(
                     modifier = Modifier.fillMaxWidth()
                 ) {
                     il.kmi.app.ui.KmiTopBar(
-                    title = if (isEnglish) "Summary $beltLabel - ${overallPct}%" else "סיכום $beltLabel - ${overallPct}%",
-                    onShare = { sharePdf(null) },
-                    onPickSearchResult = { key -> handlePickFromTopBar(key) },
-                    onShareWhatsApp = { sharePdf("com.whatsapp") },
-                    onHome = { onBackHome() },
-                    showBottomActions = true,
-                    extraActions = { },
-                    centerTitle = false,
-                    showTopHome = false,
-                    showBackNavigation = false,
-                    alignTitleEnd = true,
-
-                    currentLang =
-                        if (isEnglish) {
-                            "en"
-                        } else {
-                            "he"
-                        },
-
-                    onToggleLanguage = {
-                        val newLang =
-                            if (langManager.getCurrentLanguage() == AppLanguage.HEBREW) {
-                                AppLanguage.ENGLISH
+                        title =
+                            if (isSummaryLoading) {
+                                if (isEnglish) {
+                                    "Summary $beltLabel"
+                                } else {
+                                    "סיכום $beltLabel"
+                                }
                             } else {
-                                AppLanguage.HEBREW
-                            }
+                                if (isEnglish) {
+                                    "Summary $beltLabel - ${overallPct}%"
+                                } else {
+                                    "סיכום $beltLabel - ${overallPct}%"
+                                }
+                            },
+                        onShare = { sharePdf(null) },
+                        onPickSearchResult = { key -> handlePickFromTopBar(key) },
+                        onShareWhatsApp = { sharePdf("com.whatsapp") },
+                        onBack = { onBack() },
+                        onHome = { onBackHome() },
+                        showBottomActions = true,
+                        extraActions = { },
+                        centerTitle = true,
+                        showTopHome = false,
+                        showBackNavigation = true,
+                        alignTitleEnd = false,
+                        titleMaxLines = 1,
+                        titleScale = 0.82f,
+                        titleLeftPadding = 32.dp,
+                        titleRightPadding = 48.dp,
 
-                        langManager.setLanguage(newLang)
-                        (contextLang as? Activity)?.recreate()
-                    }
+                        topBeltIconScale = 1f,
+                        topBeltIconRotation = 0f,
+                        topBeltIconBottomPadding = 1.dp,
+                        centerTopBeltIcon = true,
+
+                        titleVerticalOffset = (-14).dp,
+
+                        currentLang =
+                            if (isEnglish) {
+                                "en"
+                            } else {
+                                "he"
+                            },
+
+                        onToggleLanguage = {
+                            val newLang =
+                                if (langManager.getCurrentLanguage() == AppLanguage.HEBREW) {
+                                    AppLanguage.ENGLISH
+                                } else {
+                                    AppLanguage.HEBREW
+                                }
+
+                            langManager.setLanguage(newLang)
+                            (contextLang as? Activity)?.recreate()
+                        }
                     )
                     SummarySecondaryTabs()
                 }
@@ -2784,10 +2967,12 @@ fun SummaryScreen(
             }
 
             val cleanFavId =
-                cleanItem(
-                    t,
-                    canonical
-                )
+                ExerciseSyncStore.resolveIdentity(
+                    belt = b,
+                    topic = t,
+                    subTopic = null,
+                    rawItem = iRaw
+                ).exerciseId
 
             val dialogNoteAliases =
                 remember(
@@ -2848,6 +3033,7 @@ fun SummaryScreen(
                 isFavorite = isFav,
                 accentColor = b.color,
                 isEnglish = isEnglish,
+                isCoach = isCoach,
                 onDismiss = {
                     explainFromSearch = null
                     focusManager.clearFocus()
@@ -3395,7 +3581,7 @@ fun SummaryScreen(
                                 .clip(RoundedCornerShape(18.dp))
                                 .verticalScroll(scroll)
                                 .padding(bottom = 88.dp),
-                            verticalArrangement = Arrangement.spacedBy(0.dp)
+                            verticalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
                             if (itemsByTopic.isEmpty()) {
                                 Card(
@@ -3434,40 +3620,9 @@ fun SummaryScreen(
                                 val topicEntries =
                                     itemsByTopic.entries.toList()
 
-                                topicEntries.forEachIndexed { index, entry ->
+                                topicEntries.forEachIndexed { topicIndex, entry ->
                                     val topicTitle = entry.key
                                     val items = entry.value
-
-                                    val isFirstTopic =
-                                        index == 0
-
-                                    val isLastTopic =
-                                        index == topicEntries.lastIndex
-
-                                    val topicCardShape =
-                                        when {
-                                            isFirstTopic && isLastTopic ->
-                                                RoundedCornerShape(18.dp)
-
-                                            isFirstTopic ->
-                                                RoundedCornerShape(
-                                                    topStart = 18.dp,
-                                                    topEnd = 18.dp,
-                                                    bottomStart = 0.dp,
-                                                    bottomEnd = 0.dp
-                                                )
-
-                                            isLastTopic ->
-                                                RoundedCornerShape(
-                                                    topStart = 0.dp,
-                                                    topEnd = 0.dp,
-                                                    bottomStart = 18.dp,
-                                                    bottomEnd = 18.dp
-                                                )
-
-                                            else ->
-                                                RoundedCornerShape(0.dp)
-                                        }
 
                                     val (done, total) =
                                         topicStats[topicTitle] ?: (0 to 0)
@@ -3482,6 +3637,52 @@ fun SummaryScreen(
                                     val isTopicExpanded =
                                         topicExpandedState[topicTitle] ?: false
 
+                                    val topicCount =
+                                        topicEntries.size.coerceAtLeast(1)
+
+                                    val topicPosition =
+                                        if (topicCount <= 1) {
+                                            0f
+                                        } else {
+                                            topicIndex.toFloat() /
+                                                    (topicCount - 1).toFloat()
+                                        }
+
+                                    val topicBaseColor =
+                                        if (belt == Belt.WHITE) {
+                                            Color(0xFF8A939D)
+                                        } else {
+                                            belt.color
+                                        }
+
+                                    val topicBackgroundAlpha =
+                                        0.10f +
+                                                (0.16f * topicPosition)
+
+                                    val topicBackgroundStrongAlpha =
+                                        0.14f +
+                                                (0.20f * topicPosition)
+
+                                    val topicBackgroundColors =
+                                        listOf(
+                                            topicBaseColor
+                                                .copy(
+                                                    alpha =
+                                                        topicBackgroundAlpha
+                                                )
+                                                .compositeOver(
+                                                    summaryColors.surface
+                                                ),
+                                            topicBaseColor
+                                                .copy(
+                                                    alpha =
+                                                        topicBackgroundStrongAlpha
+                                                )
+                                                .compositeOver(
+                                                    summaryColors.surface
+                                                )
+                                        )
+
                                     val rowsBySubTopic = items
                                         .groupBy { row ->
                                             row.subTopicTitle?.trim().orEmpty()
@@ -3493,21 +3694,17 @@ fun SummaryScreen(
                                     Card(
                                         modifier = Modifier.fillMaxWidth(),
                                         colors = CardDefaults.cardColors(
-                                            containerColor = summaryTopicRowColor
+                                            containerColor = Color.Transparent
                                         ),
                                         elevation = CardDefaults.cardElevation(
                                             defaultElevation = 0.dp
                                         ),
-                                        shape = topicCardShape
+                                        shape = RoundedCornerShape(22.dp)
                                     ) {
                                         Column(
                                             modifier = Modifier
-                                                .fillMaxWidth()
-                                                .padding(
-                                                    horizontal = 12.dp,
-                                                    vertical = 8.dp
-                                                ),
-                                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                                                .fillMaxWidth(),
+                                            verticalArrangement = Arrangement.spacedBy(10.dp)
                                         ) {
                                             androidx.compose.runtime.CompositionLocalProvider(
                                                 androidx.compose.ui.platform.LocalLayoutDirection provides
@@ -3517,90 +3714,41 @@ fun SummaryScreen(
                                                             LayoutDirection.Rtl
                                                         }
                                             ) {
-                                                Row(
-                                                    modifier =
-                                                        Modifier
-                                                            .fillMaxWidth()
-                                                            .clickable {
-                                                                topicExpandedState[
-                                                                    topicTitle
-                                                                ] =
-                                                                    !isTopicExpanded
-                                                            }
-                                                            .padding(
-                                                                vertical = 2.dp
-                                                            ),
-                                                    verticalAlignment =
-                                                        Alignment.CenterVertically
-                                                ) {
-                                                    Text(
-                                                        text =
-                                                            if (isEnglish) {
-                                                                "${
-                                                                    topicDisplayName(
-                                                                        topicTitle,
-                                                                        true
-                                                                    )
-                                                                } - $pct%"
-                                                            } else {
-                                                                "$topicTitle – $pct%"
-                                                            },
-                                                        style =
-                                                            KmiTypography.cardTitle.copy(
-                                                                fontWeight =
-                                                                    FontWeight.Black
-                                                            ),
-                                                        textAlign =
-                                                            if (isEnglish) {
-                                                                TextAlign.Left
-                                                            } else {
-                                                                TextAlign.Right
-                                                            },
-                                                        maxLines = 2,
-                                                        modifier = Modifier
-                                                            .weight(1f)
-                                                            .fillMaxWidth(),
-                                                        color =
-                                                            summaryTopicTitleColor
-                                                    )
-
-                                                    Spacer(
-                                                        Modifier.width(4.dp)
-                                                    )
-
-                                                    IconButton(
-                                                        onClick = {
-                                                            topicExpandedState[topicTitle] =
-                                                                !isTopicExpanded
+                                                SubjectRootCardPremium(
+                                                    title =
+                                                        topicDisplayName(
+                                                            topicTitle = topicTitle,
+                                                            isEnglish = isEnglish
+                                                        ),
+                                                    subtitle = "",
+                                                    subjectId =
+                                                        subjectIdForSummaryTopic(
+                                                            topicTitle
+                                                        ) ?: "general",
+                                                    countText =
+                                                        if (isEnglish) {
+                                                            "$total exercises"
+                                                        } else {
+                                                            "$total תרגילים"
                                                         },
-                                                        modifier = Modifier.size(40.dp)
-                                                    ) {
-                                                        Icon(
-                                                            imageVector =
-                                                                if (isTopicExpanded) {
-                                                                    Icons.Filled.ExpandLess
-                                                                } else {
-                                                                    Icons.Filled.ExpandMore
-                                                                },
-                                                            contentDescription =
-                                                                if (isTopicExpanded) {
-                                                                    tr(
-                                                                        "סגירת כרטיס הנושא",
-                                                                        "Collapse topic card"
-                                                                    )
-                                                                } else {
-                                                                    tr(
-                                                                        "פתיחת כרטיס הנושא",
-                                                                        "Expand topic card"
-                                                                    )
-                                                                },
-                                                            tint = belt.color,
-                                                            modifier = Modifier.size(
-                                                                26.dp * LocalAppIconScale.current
-                                                            )
-                                                        )
+                                                    progressPercent = pct,
+                                                    showLeftBadge = true,
+                                                    isDarkMode =
+                                                        MaterialTheme.colorScheme.surface
+                                                            .luminance() < 0.5f,
+                                                    showExpandArrow = true,
+                                                    isExpanded = isTopicExpanded,
+                                                    backgroundColorsOverride =
+                                                        topicBackgroundColors,
+                                                    accentOverride =
+                                                        topicBaseColor,
+                                                    onClick = {
+                                                        topicExpandedState[
+                                                            topicTitle
+                                                        ] =
+                                                            !isTopicExpanded
                                                     }
-                                                }
+                                                )
                                             }
 
                                             if (!isTopicExpanded) {
@@ -3754,12 +3902,8 @@ fun SummaryScreen(
                                                                 }
                                                             }
 
-                                                            rowsInSubTopic.forEach { row ->
+                                                            rowsInSubTopic.forEachIndexed { rowIndex, row ->
                                                                 val itemRaw = row.itemRaw
-                                                                val canonicalId = canonicalFromRepo(
-                                                                    row.sourceTopicTitle,
-                                                                    itemRaw
-                                                                )
 
                                                                 val statusId =
                                                                     summaryExerciseIdentityIdFor(
@@ -3835,11 +3979,16 @@ fun SummaryScreen(
                                                                         Color.White
                                                                     }
 
-                                                                val cleanFavId =
-                                                                    cleanItem(
-                                                                        row.sourceTopicTitle,
-                                                                        canonicalId
+                                                                val itemIdentity =
+                                                                    ExerciseSyncStore.resolveIdentity(
+                                                                        belt = belt,
+                                                                        topic = row.sourceTopicTitle,
+                                                                        subTopic = row.subTopicTitle,
+                                                                        rawItem = itemRaw
                                                                     )
+
+                                                                val cleanFavId =
+                                                                    itemIdentity.exerciseId
 
                                                                 val itemNoteAliases =
                                                                     remember(
@@ -3861,93 +4010,86 @@ fun SummaryScreen(
                                                                         aliases = itemNoteAliases
                                                                     )
 
-                                                                Row(
+                                                                val itemIsFavorite =
+                                                                    itemIdentity.aliases.any { alias ->
+                                                                        alias in favorites
+                                                                    }
+
+                                                                val itemIsExcluded =
+                                                                    notesSp.all.keys
+                                                                        .asSequence()
+                                                                        .filter { key ->
+                                                                            key.startsWith(
+                                                                                "excluded_${belt.id}_"
+                                                                            )
+                                                                        }
+                                                                        .any { key ->
+
+                                                                            val stored =
+                                                                                notesSp.getStringSet(
+                                                                                    key,
+                                                                                    emptySet()
+                                                                                )
+                                                                                    ?: emptySet()
+
+                                                                            stored.any { storedValue ->
+                                                                                ExerciseSyncStore.matches(
+                                                                                    identity = itemIdentity,
+                                                                                    storedId = storedValue
+                                                                                )
+                                                                            }
+                                                                        }
+
+                                                                Surface(
+                                                                    onClick = {
+                                                                        explainFromSearch =
+                                                                            Triple(
+                                                                                belt,
+                                                                                row.sourceTopicTitle,
+                                                                                itemRaw
+                                                                            )
+                                                                    },
                                                                     modifier = Modifier
                                                                         .fillMaxWidth()
-                                                                        .clickable {
-                                                                            explainFromSearch =
-                                                                                Triple(
-                                                                                    belt,
-                                                                                    row.sourceTopicTitle,
-                                                                                    itemRaw
-                                                                                )
-                                                                        }
-                                                                        .background(
-                                                                            color =
-                                                                                if (isCoach) {
-                                                                                    when (coachPrimaryStatus) {
-                                                                                        CoachSummaryStatus.PRACTICED ->
-                                                                                            Color(
-                                                                                                0xFF2F9B4E
-                                                                                            )
-                                                                                                .copy(
-                                                                                                    alpha = 0.07f
-                                                                                                )
-                                                                                                .compositeOver(
-                                                                                                    summaryColors.surface
-                                                                                                )
-
-                                                                                        CoachSummaryStatus.TAUGHT ->
-                                                                                            Color(
-                                                                                                0xFFF3A062
-                                                                                            )
-                                                                                                .copy(
-                                                                                                    alpha = 0.07f
-                                                                                                )
-                                                                                                .compositeOver(
-                                                                                                    summaryColors.surface
-                                                                                                )
-
-                                                                                        CoachSummaryStatus.NEEDS_REINFORCEMENT ->
-                                                                                            Color(
-                                                                                                0xFF3478D4
-                                                                                            )
-                                                                                                .copy(
-                                                                                                    alpha = 0.07f
-                                                                                                )
-                                                                                                .compositeOver(
-                                                                                                    summaryColors.surface
-                                                                                                )
-
-                                                                                        CoachSummaryStatus.NOT_TAUGHT ->
-                                                                                            Color.Transparent
-                                                                                    }
-                                                                                } else {
-                                                                                    when {
-                                                                                        isPartiallyKnown ->
-                                                                                            Color(
-                                                                                                0xFFF28C28
-                                                                                            )
-                                                                                                .copy(
-                                                                                                    alpha = 0.075f
-                                                                                                )
-                                                                                                .compositeOver(
-                                                                                                    summaryColors.surface
-                                                                                                )
-
-                                                                                        state == MarkState.YES ->
-                                                                                            belt.color
-                                                                                                .copy(
-                                                                                                    alpha = 0.075f
-                                                                                                )
-                                                                                                .compositeOver(
-                                                                                                    summaryColors.surface
-                                                                                                )
-
-                                                                                        else ->
-                                                                                            Color.Transparent
-                                                                                    }
-                                                                                },
-                                                                            shape = RoundedCornerShape(
-                                                                                14.dp
-                                                                            )
-                                                                        )
                                                                         .padding(
-                                                                            horizontal = 8.dp,
-                                                                            vertical = 6.dp
+                                                                            horizontal = 8.dp
+                                                                        )
+                                                                        .heightIn(min = 82.dp),
+                                                                    shape =
+                                                                        RoundedCornerShape(
+                                                                            18.dp
                                                                         ),
-                                                                    verticalAlignment = Alignment.CenterVertically
+                                                                    color =
+                                                                        MaterialTheme.colorScheme.surface,
+                                                                    border =
+                                                                        BorderStroke(
+                                                                            width = 1.dp,
+                                                                            color =
+                                                                                if (
+                                                                                    MaterialTheme.colorScheme.surface
+                                                                                        .luminance() < 0.5f
+                                                                                ) {
+                                                                                    belt.color.copy(
+                                                                                        alpha = 0.55f
+                                                                                    )
+                                                                                } else {
+                                                                                    MaterialTheme.colorScheme
+                                                                                        .outlineVariant
+                                                                                        .copy(alpha = 0.85f)
+                                                                                }
+                                                                        ),
+                                                                    tonalElevation = 0.dp,
+                                                                    shadowElevation = 2.dp
                                                                 ) {
+                                                                    Column(
+                                                                        modifier = Modifier
+                                                                            .fillMaxWidth()
+                                                                            .padding(
+                                                                                horizontal = 4.dp,
+                                                                                vertical = 5.dp
+                                                                            ),
+                                                                        verticalArrangement = Arrangement.SpaceBetween
+                                                                    ) {
                                                                     /*
                                                                      * הטקסט מופיע ראשון בתוך Row:
                                                                      *
@@ -3967,8 +4109,13 @@ fun SummaryScreen(
                                                                     ) {
                                                                         Column(
                                                                             modifier = Modifier
-                                                                                .weight(1f)
-                                                                                .fillMaxWidth(),
+                                                                                .fillMaxWidth()
+                                                                                .padding(
+                                                                                    start = 10.dp,
+                                                                                    end = 6.dp,
+                                                                                    top = 2.dp,
+                                                                                    bottom = 3.dp
+                                                                                ),
                                                                             horizontalAlignment =
                                                                                 if (isEnglish) {
                                                                                     Alignment.Start
@@ -3983,8 +4130,13 @@ fun SummaryScreen(
                                                                                         itemRaw,
                                                                                         isEnglish
                                                                                     ),
-                                                                                style = KmiTypography.body,
-                                                                                color = summaryPrimaryText,
+                                                                                style =
+                                                                                    KmiTypography.body.copy(
+                                                                                        fontWeight =
+                                                                                            FontWeight.SemiBold
+                                                                                    ),
+                                                                                color =
+                                                                                    MaterialTheme.colorScheme.onSurface,
                                                                                 textAlign =
                                                                                     if (isEnglish) {
                                                                                         TextAlign.Left
@@ -3997,149 +4149,199 @@ fun SummaryScreen(
                                                                                 modifier = Modifier.fillMaxWidth()
                                                                             )
 
-                                                                            if (itemHasNote) {
-                                                                                Text(
-                                                                                    text = tr(
-                                                                                        "יש הערה שמורה",
-                                                                                        "Saved note exists"
-                                                                                    ),
-                                                                                    style = KmiTypography.caption,
-                                                                                    color =
-                                                                                        MaterialTheme.colorScheme.primary,
-                                                                                    textAlign =
-                                                                                        if (isEnglish) {
-                                                                                            TextAlign.Left
-                                                                                        } else {
-                                                                                            TextAlign.Right
-                                                                                        },
-                                                                                    maxLines = 1,
-                                                                                    overflow =
-                                                                                        TextOverflow.Ellipsis,
-                                                                                    modifier = Modifier.fillMaxWidth()
+                                                                            if (
+                                                                                itemHasNote ||
+                                                                                itemIsExcluded ||
+                                                                                itemIsFavorite
+                                                                            ) {
+                                                                                Spacer(
+                                                                                    Modifier.height(
+                                                                                        4.dp
+                                                                                    )
                                                                                 )
+
+                                                                                Row(
+                                                                                    horizontalArrangement =
+                                                                                        Arrangement.spacedBy(
+                                                                                            5.dp
+                                                                                        ),
+                                                                                    verticalAlignment =
+                                                                                        Alignment.CenterVertically
+                                                                                ) {
+                                                                                    if (itemHasNote) {
+                                                                                        Surface(
+                                                                                            shape = RoundedCornerShape(
+                                                                                                8.dp
+                                                                                            ),
+                                                                                            color = Color(
+                                                                                                0xFFFFF3CD
+                                                                                            ),
+                                                                                            border = BorderStroke(
+                                                                                                width = 1.dp,
+                                                                                                color = Color(
+                                                                                                    0xFFE0B84F
+                                                                                                )
+                                                                                                    .copy(
+                                                                                                        alpha = 0.55f
+                                                                                                    )
+                                                                                            ),
+                                                                                            tonalElevation = 0.dp,
+                                                                                            shadowElevation = 0.dp
+                                                                                        ) {
+                                                                                            Text(
+                                                                                                text = tr(
+                                                                                                    "הערה",
+                                                                                                    "Note"
+                                                                                                ),
+                                                                                                style =
+                                                                                                    KmiTypography.caption.copy(
+                                                                                                        fontWeight =
+                                                                                                            FontWeight.ExtraBold
+                                                                                                    ),
+                                                                                                color = Color(
+                                                                                                    0xFF9A6B00
+                                                                                                ),
+                                                                                                modifier =
+                                                                                                    Modifier.padding(
+                                                                                                        horizontal = 7.dp,
+                                                                                                        vertical = 2.dp
+                                                                                                    ),
+                                                                                                maxLines = 1
+                                                                                            )
+                                                                                        }
+                                                                                    }
+
+                                                                                    if (itemIsExcluded) {
+                                                                                        Surface(
+                                                                                            shape = RoundedCornerShape(
+                                                                                                8.dp
+                                                                                            ),
+                                                                                            color =
+                                                                                                MaterialTheme.colorScheme
+                                                                                                    .surfaceVariant,
+                                                                                            border = BorderStroke(
+                                                                                                width = 1.dp,
+                                                                                                color =
+                                                                                                    MaterialTheme.colorScheme
+                                                                                                        .outline
+                                                                                                        .copy(
+                                                                                                            alpha = 0.24f
+                                                                                                        )
+                                                                                            ),
+                                                                                            tonalElevation = 0.dp,
+                                                                                            shadowElevation = 0.dp
+                                                                                        ) {
+                                                                                            Text(
+                                                                                                text = tr(
+                                                                                                    "מוחרג",
+                                                                                                    "Excluded"
+                                                                                                ),
+                                                                                                style =
+                                                                                                    KmiTypography.caption.copy(
+                                                                                                        fontWeight =
+                                                                                                            FontWeight.ExtraBold
+                                                                                                    ),
+                                                                                                color =
+                                                                                                    MaterialTheme.colorScheme
+                                                                                                        .onSurfaceVariant,
+                                                                                                modifier =
+                                                                                                    Modifier.padding(
+                                                                                                        horizontal = 7.dp,
+                                                                                                        vertical = 2.dp
+                                                                                                    ),
+                                                                                                maxLines = 1
+                                                                                            )
+                                                                                        }
+                                                                                    }
+
+                                                                                    if (itemIsFavorite) {
+                                                                                        Surface(
+                                                                                            shape = RoundedCornerShape(
+                                                                                                8.dp
+                                                                                            ),
+                                                                                            color = Color(
+                                                                                                0xFFFFF3CD
+                                                                                            ),
+                                                                                            border = BorderStroke(
+                                                                                                width = 1.dp,
+                                                                                                color = Color(
+                                                                                                    0xFFE0B84F
+                                                                                                )
+                                                                                                    .copy(
+                                                                                                        alpha = 0.55f
+                                                                                                    )
+                                                                                            ),
+                                                                                            tonalElevation = 0.dp,
+                                                                                            shadowElevation = 0.dp
+                                                                                        ) {
+                                                                                            Text(
+                                                                                                text = tr(
+                                                                                                    "מועדף",
+                                                                                                    "Favorite"
+                                                                                                ),
+                                                                                                style =
+                                                                                                    KmiTypography.caption.copy(
+                                                                                                        fontWeight =
+                                                                                                            FontWeight.ExtraBold
+                                                                                                    ),
+                                                                                                color = Color(
+                                                                                                    0xFF9A6B00
+                                                                                                ),
+                                                                                                modifier =
+                                                                                                    Modifier.padding(
+                                                                                                        horizontal = 7.dp,
+                                                                                                        vertical = 2.dp
+                                                                                                    ),
+                                                                                                maxLines = 1
+                                                                                            )
+                                                                                        }
+                                                                                    }
+                                                                                }
                                                                             }
                                                                         }
                                                                     }
 
-                                                                    Spacer(Modifier.width(6.dp))
+                                                                    val singleStatusColor =
+                                                                        if (isCoach) {
+                                                                            when {
+                                                                                CoachSummaryStatus.NEEDS_REINFORCEMENT in coachStatuses ->
+                                                                                    Color(0xFF3478D4)
 
-                                                                    if (isCoach) {
+                                                                                CoachSummaryStatus.PRACTICED in coachStatuses ->
+                                                                                    Color(0xFF2F9B4E)
 
-                                                                        /*
-                                                                         * אם לא נבחר שום סטטוס,
-                                                                         * ממשיכים להציג אייקון אפור "לא נלמד".
-                                                                         */
-                                                                        if (coachStatuses.isEmpty()) {
+                                                                                CoachSummaryStatus.TAUGHT in coachStatuses ->
+                                                                                    Color(0xFFF3A062)
 
-                                                                            Column(
-                                                                                modifier = Modifier.widthIn(
-                                                                                    min = 58.dp
-                                                                                ),
-                                                                                horizontalAlignment =
-                                                                                    Alignment.CenterHorizontally
-                                                                            ) {
-                                                                                Surface(
-                                                                                    modifier = Modifier.size(
-                                                                                        36.dp
-                                                                                    ),
-                                                                                    shape = CircleShape,
-                                                                                    color = summaryColors.outline,
-                                                                                    shadowElevation = 0.dp,
-                                                                                    tonalElevation = 0.dp
-                                                                                ) {
-                                                                                    Box(
-                                                                                        modifier = Modifier.fillMaxSize(),
-                                                                                        contentAlignment = Alignment.Center
-                                                                                    ) {
-                                                                                        Text(
-                                                                                            text = "—",
-                                                                                            color = Color.White,
-                                                                                            fontWeight = FontWeight.ExtraBold,
-                                                                                            textAlign = TextAlign.Center,
-                                                                                            style = KmiTypography.action
-                                                                                        )
-                                                                                    }
-                                                                                }
-
-                                                                                Spacer(
-                                                                                    Modifier.height(
-                                                                                        2.dp
-                                                                                    )
-                                                                                )
-
-                                                                                Text(
-                                                                                    text =
-                                                                                        tr(
-                                                                                            "לא נלמד",
-                                                                                            "Not taught"
-                                                                                        ),
-                                                                                    style =
-                                                                                        KmiTypography.caption.copy(
-                                                                                            fontWeight =
-                                                                                                FontWeight.ExtraBold
-                                                                                        ),
-                                                                                    color = summaryColors.onSurfaceVariant,
-                                                                                    textAlign = TextAlign.Center,
-                                                                                    maxLines = 2,
-                                                                                    overflow =
-                                                                                        TextOverflow.Ellipsis
-                                                                                )
+                                                                                else ->
+                                                                                    summaryColors.outline
                                                                             }
-
                                                                         } else {
+                                                                            when {
+                                                                                isPartiallyKnown ->
+                                                                                    Color(0xFFF28C28)
 
-                                                                            /*
-                                                                             * עד שני סטטוסים מוצגים זה לצד זה.
-                                                                             */
-                                                                            Row(
-                                                                                horizontalArrangement =
-                                                                                    Arrangement.spacedBy(
-                                                                                        6.dp
-                                                                                    ),
-                                                                                verticalAlignment =
-                                                                                    Alignment.Top
-                                                                            ) {
-                                                                                coachStatuses.forEach { status ->
+                                                                                state == MarkState.YES ->
+                                                                                    Color(0xFF4CAF50)
 
-                                                                                    val coachColor =
-                                                                                        when (status) {
-                                                                                            CoachSummaryStatus.TAUGHT ->
-                                                                                                Color(
-                                                                                                    0xFFF3A062
-                                                                                                )
+                                                                                state == MarkState.NO ->
+                                                                                    Color(0xFFE53935)
 
-                                                                                            CoachSummaryStatus.PRACTICED ->
-                                                                                                Color(
-                                                                                                    0xFF2F9B4E
-                                                                                                )
+                                                                                else ->
+                                                                                    summaryColors.outline
+                                                                            }
+                                                                        }
 
-                                                                                            CoachSummaryStatus.NEEDS_REINFORCEMENT ->
-                                                                                                Color(
-                                                                                                    0xFF3478D4
-                                                                                                )
-
-                                                                                            CoachSummaryStatus.NOT_TAUGHT ->
-                                                                                                Color(
-                                                                                                    0xFF8A939D
-                                                                                                )
-                                                                                        }
-
-                                                                                    val coachMark =
-                                                                                        when (status) {
-                                                                                            CoachSummaryStatus.TAUGHT ->
-                                                                                                "✓"
-
-                                                                                            CoachSummaryStatus.PRACTICED ->
-                                                                                                "↻"
-
-                                                                                            CoachSummaryStatus.NEEDS_REINFORCEMENT ->
-                                                                                                "!"
-
-                                                                                            CoachSummaryStatus.NOT_TAUGHT ->
-                                                                                                "—"
-                                                                                        }
-
-                                                                                    val coachLabel =
+                                                                    val singleStatusText =
+                                                                        if (isCoach) {
+                                                                            if (coachStatuses.isEmpty()) {
+                                                                                tr(
+                                                                                    "לא נלמד",
+                                                                                    "Not taught"
+                                                                                )
+                                                                            } else {
+                                                                                coachStatuses
+                                                                                    .map { status ->
                                                                                         when (status) {
                                                                                             CoachSummaryStatus.TAUGHT ->
                                                                                                 tr(
@@ -4165,194 +4367,209 @@ fun SummaryScreen(
                                                                                                     "Not taught"
                                                                                                 )
                                                                                         }
-
-                                                                                    Column(
-                                                                                        modifier = Modifier.widthIn(
-                                                                                            min = 58.dp,
-                                                                                            max = 72.dp
-                                                                                        ),
-                                                                                        horizontalAlignment =
-                                                                                            Alignment.CenterHorizontally
-                                                                                    ) {
-                                                                                        Surface(
-                                                                                            modifier = Modifier.size(
-                                                                                                36.dp
-                                                                                            ),
-                                                                                            shape = CircleShape,
-                                                                                            color = coachColor,
-                                                                                            shadowElevation = 0.dp,
-                                                                                            tonalElevation = 0.dp
-                                                                                        ) {
-                                                                                            Box(
-                                                                                                modifier =
-                                                                                                    Modifier.fillMaxSize(),
-                                                                                                contentAlignment =
-                                                                                                    Alignment.Center
-                                                                                            ) {
-                                                                                                Text(
-                                                                                                    text = coachMark,
-                                                                                                    color = Color.White,
-                                                                                                    fontWeight =
-                                                                                                        FontWeight.ExtraBold,
-                                                                                                    textAlign =
-                                                                                                        TextAlign.Center,
-                                                                                                    style = KmiTypography.action
-                                                                                                )
-                                                                                            }
-                                                                                        }
-
-                                                                                        Spacer(
-                                                                                            Modifier.height(
-                                                                                                2.dp
-                                                                                            )
-                                                                                        )
-
-                                                                                        Text(
-                                                                                            text = coachLabel,
-                                                                                            style =
-                                                                                                KmiTypography.caption.copy(
-                                                                                                    fontWeight =
-                                                                                                        FontWeight.ExtraBold
-                                                                                                ),
-                                                                                            color = coachColor,
-                                                                                            textAlign =
-                                                                                                TextAlign.Center,
-                                                                                            maxLines = 2,
-                                                                                            overflow =
-                                                                                                TextOverflow.Ellipsis
-                                                                                        )
                                                                                     }
-                                                                                }
+                                                                                    .joinToString(
+                                                                                        separator = " · "
+                                                                                    )
                                                                             }
+                                                                        } else {
+                                                                            when {
+                                                                                isPartiallyKnown ->
+                                                                                    tr(
+                                                                                        "יודע חלקית",
+                                                                                        "Partially known"
+                                                                                    )
 
+                                                                                state == MarkState.YES ->
+                                                                                    tr(
+                                                                                        "יודע",
+                                                                                        "Known"
+                                                                                    )
+
+                                                                                state == MarkState.NO ->
+                                                                                    tr(
+                                                                                        "לא יודע",
+                                                                                        "Not known"
+                                                                                    )
+
+                                                                                else ->
+                                                                                    tr(
+                                                                                        "לא סומן",
+                                                                                        "Unmarked"
+                                                                                    )
+                                                                            }
                                                                         }
 
-                                                                    } else {
+                                                                    val singleStatusMark =
+                                                                        if (isCoach) {
+                                                                            when {
+                                                                                CoachSummaryStatus.NEEDS_REINFORCEMENT in coachStatuses ->
+                                                                                    "!"
 
-                                                                        /*
-                                                                         * משתמש רגיל נשאר בדיוק כפי שהיה:
-                                                                         * יודע / לא יודע / לא סומן.
-                                                                         */
-                                                                        Column(
+                                                                                CoachSummaryStatus.PRACTICED in coachStatuses ->
+                                                                                    "↻"
+
+                                                                                CoachSummaryStatus.TAUGHT in coachStatuses ->
+                                                                                    "✓"
+
+                                                                                else ->
+                                                                                    "—"
+                                                                            }
+                                                                        } else {
+                                                                            when {
+                                                                                isPartiallyKnown ->
+                                                                                    "◐"
+
+                                                                                state == MarkState.YES ->
+                                                                                    "✓"
+
+                                                                                state == MarkState.NO ->
+                                                                                    "✗"
+
+                                                                                else ->
+                                                                                    "—"
+                                                                            }
+                                                                        }
+
+                                                                        Spacer(
                                                                             modifier =
-                                                                                Modifier.width(
-                                                                                    78.dp
-                                                                                ),
-                                                                            horizontalAlignment =
-                                                                                Alignment.CenterHorizontally
-                                                                        ) {
-                                                                            Surface(
-                                                                                modifier = Modifier.size(
-                                                                                    28.dp
-                                                                                ),
-                                                                                shape = CircleShape,
-                                                                                color = statusBackgroundColor,
-                                                                                shadowElevation = 0.dp,
-                                                                                tonalElevation = 0.dp
-                                                                            ) {
-                                                                                Box(
-                                                                                    modifier = Modifier.fillMaxSize(),
-                                                                                    contentAlignment = Alignment.Center
-                                                                                ) {
-                                                                                    if (state == MarkState.NONE) {
-                                                                                        Box(
-                                                                                            modifier = Modifier
-                                                                                                .size(
-                                                                                                    9.dp
-                                                                                                )
-                                                                                                .border(
-                                                                                                    width = 1.7.dp,
-                                                                                                    color =
-                                                                                                        statusForegroundColor,
-                                                                                                    shape = CircleShape
-                                                                                                )
-                                                                                        )
-                                                                                    } else {
-                                                                                        Text(
-                                                                                            text =
-                                                                                                if (
-                                                                                                    isPartiallyKnown
-                                                                                                ) {
-                                                                                                    "◐"
-                                                                                                } else if (
-                                                                                                    state == MarkState.YES
-                                                                                                ) {
-                                                                                                    "✓"
-                                                                                                } else {
-                                                                                                    "✗"
-                                                                                                },
-                                                                                            color =
-                                                                                                statusForegroundColor,
-                                                                                            style =
-                                                                                                KmiTypography.action,
-                                                                                            fontWeight =
-                                                                                                FontWeight.ExtraBold,
-                                                                                            textAlign =
-                                                                                                TextAlign.Center
-                                                                                        )
+                                                                                Modifier.height(
+                                                                                    3.dp
+                                                                                )
+                                                                        )
+
+                                                                        val singleStatusUpdatedAt =
+                                                                            if (isCoach) {
+                                                                                val selectedStatus =
+                                                                                    when {
+                                                                                        CoachSummaryStatus.NEEDS_REINFORCEMENT in
+                                                                                                coachStatuses ->
+                                                                                            CoachSummaryStatus.NEEDS_REINFORCEMENT
+
+                                                                                        CoachSummaryStatus.PRACTICED in
+                                                                                                coachStatuses ->
+                                                                                            CoachSummaryStatus.PRACTICED
+
+                                                                                        CoachSummaryStatus.TAUGHT in
+                                                                                                coachStatuses ->
+                                                                                            CoachSummaryStatus.TAUGHT
+
+                                                                                        else ->
+                                                                                            CoachSummaryStatus.NOT_TAUGHT
                                                                                     }
+
+                                                                                if (
+                                                                                    selectedStatus ==
+                                                                                    CoachSummaryStatus.NOT_TAUGHT
+                                                                                ) {
+                                                                                    0L
+                                                                                } else {
+                                                                                    notesSp.getLong(
+                                                                                        "${
+                                                                                            coachProgressBaseKey(
+                                                                                                row = row,
+                                                                                                statusId = statusId
+                                                                                            )
+                                                                                        }_${selectedStatus.storageValue}_updated_at",
+                                                                                        0L
+                                                                                    )
                                                                                 }
+                                                                            } else {
+                                                                                notesSp.getLong(
+                                                                                    "trainee_material_updated_at_" +
+                                                                                            "${belt.id}_" +
+                                                                                            "${row.statusTopicKey}_" +
+                                                                                            statusId,
+                                                                                    0L
+                                                                                )
                                                                             }
 
-                                                                            Spacer(Modifier.height(2.dp))
+                                                                        val singleStatusDateText =
+                                                                            if (singleStatusUpdatedAt > 0L) {
+                                                                                java.text.SimpleDateFormat(
+                                                                                    "dd/MM/yy",
+                                                                                    java.util.Locale.getDefault()
+                                                                                ).format(
+                                                                                    java.util.Date(
+                                                                                        singleStatusUpdatedAt
+                                                                                    )
+                                                                                )
+                                                                            } else {
+                                                                                ""
+                                                                            }
 
-                                                                            Text(
-                                                                                text =
-                                                                                    if (
-                                                                                        isPartiallyKnown
-                                                                                    ) {
-                                                                                        tr(
-                                                                                            "יודע חלקית",
-                                                                                            "Partially known"
-                                                                                        )
+                                                                        Box(
+                                                                            modifier =
+                                                                                Modifier.fillMaxWidth(),
+                                                                            contentAlignment =
+                                                                                if (isEnglish) {
+                                                                                    Alignment.CenterStart
+                                                                                } else {
+                                                                                    Alignment.CenterEnd
+                                                                                }
+                                                                        ) {
+                                                                            MaterialsExerciseStatusOption(
+                                                                                selected =
+                                                                                    if (isCoach) {
+                                                                                        coachStatuses.isNotEmpty()
                                                                                     } else {
-                                                                                        when (
-                                                                                            state
-                                                                                        ) {
-                                                                                            MarkState.YES ->
-                                                                                                tr(
-                                                                                                    "יודע",
-                                                                                                    "Known"
-                                                                                                )
-
-                                                                                            MarkState.NO ->
-                                                                                                tr(
-                                                                                                    "לא יודע",
-                                                                                                    "Not known"
-                                                                                                )
-
-                                                                                            MarkState.NONE ->
-                                                                                                tr(
-                                                                                                    "לא סומן",
-                                                                                                    "Unmarked"
-                                                                                                )
-                                                                                        }
+                                                                                        isPartiallyKnown ||
+                                                                                                state != MarkState.NONE
                                                                                     },
-                                                                                style =
-                                                                                    KmiTypography.caption.copy(
-                                                                                        fontWeight =
-                                                                                            FontWeight.ExtraBold
-                                                                                    ),
-                                                                                color = statusBackgroundColor,
-                                                                                textAlign = TextAlign.Center,
-                                                                                maxLines = 2,
-                                                                                overflow =
-                                                                                    TextOverflow.Ellipsis
+                                                                                symbol =
+                                                                                    singleStatusMark,
+                                                                                label =
+                                                                                    singleStatusText,
+                                                                                dateText =
+                                                                                    singleStatusDateText,
+                                                                                activeColor =
+                                                                                    singleStatusColor,
+                                                                                modifier =
+                                                                                    Modifier
+                                                                                        .width(76.dp)
+                                                                                        .padding(
+                                                                                            horizontal = 2.dp,
+                                                                                            vertical = 1.dp
+                                                                                        ),
+                                                                                showSymbol = false,
+                                                                                onClick = {
+                                                                                    explainFromSearch =
+                                                                                        Triple(
+                                                                                            belt,
+                                                                                            row.sourceTopicTitle,
+                                                                                            itemRaw
+                                                                                        )
+                                                                                }
                                                                             )
                                                                         }
                                                                     }
+                                                                }
+
+                                                                if (
+                                                                    rowIndex <
+                                                                    rowsInSubTopic.lastIndex
+                                                                ) {
+                                                                    HorizontalDivider(
+                                                                        modifier =
+                                                                            Modifier
+                                                                                .fillMaxWidth()
+                                                                                .padding(
+                                                                                    horizontal = 10.dp
+                                                                                ),
+                                                                        thickness = 0.5.dp,
+                                                                        color =
+                                                                            summaryColors
+                                                                                .outlineVariant
+                                                                                .copy(
+                                                                                    alpha = 0.28f
+                                                                                )
+                                                                    )
                                                                 }
                                                             }
                                                         }
                                                     }
                                                 }
                                             }
-
-                                            HorizontalDivider(
-                                                modifier = Modifier.fillMaxWidth(),
-                                                thickness = 1.dp,
-                                                color = summaryTopicDividerColor
-                                            )
                                         }
                                     }
                                 }

@@ -1151,6 +1151,7 @@ fun BeltQuestionsByTopicScreen(
                 onExpandedChange = { quickMenuExpanded = it },
                 triggerMode = QuickMenuTriggerMode.SideRail,
                 includePractice = true,
+                includeSummary = false,
                 hasFullAccess = hasAccess,
                 onLockedItemClick = { onOpenSubscription() },
                 onWeakPoints = {
@@ -1705,24 +1706,28 @@ private fun InlineSubTopicsExpansionCard(
 }
 
 @Composable
-private fun SubjectRootCardPremium(
+internal fun SubjectRootCardPremium(
     title: String,
     subtitle: String = "",
     subjectId: String,
     countText: String,
+    progressPercent: Int? = null,
     showLeftBadge: Boolean = false,
     isDarkMode: Boolean = false,
     showExpandArrow: Boolean = false,
     isExpanded: Boolean = false,
+    backgroundColorsOverride: List<Color>? = null,
+    accentOverride: Color? = null,
     modifier: Modifier = Modifier,
     onClick: () -> Unit
 ) {
     val isEnglish = rememberIsEnglish()
 
     val accent =
-        remember(subjectId) {
-            subjectAccentColor(subjectId)
-        }
+        accentOverride
+            ?: remember(subjectId) {
+                subjectAccentColor(subjectId)
+            }
 
     val icon =
         remember(subjectId) {
@@ -1735,9 +1740,10 @@ private fun SubjectRootCardPremium(
         }
 
     val lightBackgroundColors =
-        remember(subjectId) {
-            subjectPremiumBackgroundColors(subjectId)
-        }
+        backgroundColorsOverride
+            ?: remember(subjectId) {
+                subjectPremiumBackgroundColors(subjectId)
+            }
 
     /*
      * במצב כהה הכרטיס נטמע בתוך המשטח הכהה של רשימת
@@ -2012,17 +2018,54 @@ private fun SubjectRootCardPremium(
 
                             Spacer(modifier = Modifier.height(2.dp))
 
-                            Text(
-                                text = countText,
-                                style = KmiTypography.caption.copy(
-                                    fontWeight = FontWeight.ExtraBold
-                                ),
-                                textAlign = TextAlign.Start,
-                                color = countColor,
-                                modifier = Modifier.fillMaxWidth(),
-                                maxLines = 2,
-                                overflow = TextOverflow.Ellipsis
-                            )
+                            if (progressPercent != null) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.Start,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = "$progressPercent%",
+                                        style = KmiTypography.cardTitle.copy(
+                                            fontWeight = FontWeight.Black
+                                        ),
+                                        color = accent,
+                                        maxLines = 1
+                                    )
+
+                                    Spacer(Modifier.width(6.dp))
+
+                                    Text(
+                                        text = "·",
+                                        style = KmiTypography.caption,
+                                        color = countColor
+                                    )
+
+                                    Spacer(Modifier.width(6.dp))
+
+                                    Text(
+                                        text = countText,
+                                        style = KmiTypography.caption.copy(
+                                            fontWeight = FontWeight.Bold
+                                        ),
+                                        color = countColor,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+                            } else {
+                                Text(
+                                    text = countText,
+                                    style = KmiTypography.caption.copy(
+                                        fontWeight = FontWeight.ExtraBold
+                                    ),
+                                    textAlign = TextAlign.Start,
+                                    color = countColor,
+                                    modifier = Modifier.fillMaxWidth(),
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
                         }
                     } else {
                         Row(
@@ -2143,18 +2186,46 @@ private fun SubjectRootCardPremium(
 
                             Spacer(modifier = Modifier.height(2.dp))
 
-                            Text(
-                                text = countText,
-                                style = KmiTypography.caption.copy(
-                                    fontWeight = FontWeight.ExtraBold
-                                ),
-                                textAlign = TextAlign.Right,
-                                color = countColor,
-                                modifier = Modifier.fillMaxWidth(),
-                                maxLines = 1,
-                                softWrap = false,
-                                overflow = TextOverflow.Ellipsis
-                            )
+                            if (progressPercent != null) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = "$progressPercent%",
+                                        style = KmiTypography.cardTitle.copy(
+                                            fontWeight = FontWeight.Black
+                                        ),
+                                        color = accent,
+                                        maxLines = 1
+                                    )
+
+                                    Text(
+                                        text = countText,
+                                        style = KmiTypography.caption.copy(
+                                            fontWeight = FontWeight.Bold
+                                        ),
+                                        color = countColor,
+                                        textAlign = TextAlign.Right,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+                            } else {
+                                Text(
+                                    text = countText,
+                                    style = KmiTypography.caption.copy(
+                                        fontWeight = FontWeight.ExtraBold
+                                    ),
+                                    textAlign = TextAlign.Right,
+                                    color = countColor,
+                                    modifier = Modifier.fillMaxWidth(),
+                                    maxLines = 1,
+                                    softWrap = false,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
                         }
 
                         Spacer(modifier = Modifier.width(5.dp))

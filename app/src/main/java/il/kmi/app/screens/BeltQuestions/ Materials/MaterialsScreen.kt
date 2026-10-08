@@ -3683,6 +3683,7 @@ fun MaterialsScreen(
                                                 Column(
                                                     modifier = Modifier
                                                         .fillMaxWidth()
+                                                        .heightIn(min = 116.dp)
                                                         .padding(
                                                             horizontal = 0.dp,
                                                             vertical = 3.dp
@@ -3789,6 +3790,7 @@ fun MaterialsScreen(
                                                                             fontWeight =
                                                                                 FontWeight.SemiBold
                                                                         ),
+                                                                    minLines = 2,
                                                                     maxLines = 3,
                                                                     overflow =
                                                                         TextOverflow.Ellipsis
@@ -5336,7 +5338,7 @@ internal fun MaterialsExerciseStatusCard(
 }
 
 @Composable
-private fun MaterialsExerciseStatusOption(
+internal fun MaterialsExerciseStatusOption(
     selected: Boolean,
     symbol: String,
     label: String,

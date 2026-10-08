@@ -36,6 +36,7 @@ import il.kmi.app.domain.CanonicalIds
 import il.kmi.app.domain.ExerciseExplanationResolver
 import il.kmi.app.favorites.FavoritesStore
 import il.kmi.app.notes.ExerciseNotesStore
+import il.kmi.app.exercises.sync.ExerciseSyncStore
 import il.kmi.shared.domain.ContentRepo as SharedContentRepo
 import android.app.Activity
 import android.media.AudioManager
@@ -114,11 +115,6 @@ private fun findExplanationForPractice(
         "אין עדיין הסבר זמין לתרגיל זה."
     }
 }
-
-private fun normalizeFavoriteId(raw: String): String =
-    raw.substringAfter("::", raw)
-        .substringAfter(":", raw)
-        .trim()
 
 private fun decTokenPart(s: String): String =
     runCatching {
@@ -286,56 +282,34 @@ fun RandomPracticeScreen(
             .displayName(rawItem)
             .trim()
 
+    val selectedSubjectFilter =
+        remember(
+            belt,
+            topicFilter
+        ) {
+            resolvePracticeSubjectFilter(
+                rawFilter = topicFilter,
+                belt = belt
+            )
+        }
+
     fun noteAliasesFor(
         targetBelt: Belt,
         targetTopic: String,
         rawItem: String
     ): Set<String> {
-        val cleanTopic =
-            targetTopic.trim()
-
-        val displayTitle =
-            displayName(rawItem)
-                .ifBlank {
-                    rawItem
-                }
-                .trim()
-
-        val registryId =
-            ExerciseIdentityRegistry.idFor(
-                belt = targetBelt,
-                hebrewTitle = displayTitle,
-                topicKey = cleanTopic
-            )
-
-        val canonicalId =
-            CanonicalIds.canonicalFor(
-                belt = targetBelt,
-                topicTitle = cleanTopic,
-                displayItem = rawItem
-            )
-
-        val explanationId =
-            CanonicalIds.resolveCanonicalForExplanation(
-                belt = targetBelt,
-                topicTitle = cleanTopic,
-                rawItemFromRepo = rawItem
-            )
-
-        return setOf(
-            registryId,
-            canonicalId,
-            explanationId,
-            displayTitle,
-            rawItem.trim()
-        )
-            .map {
-                it.trim()
-            }
-            .filter {
-                it.isNotBlank()
-            }
-            .toSet()
+        return ExerciseSyncStore.resolveIdentity(
+            belt = targetBelt,
+            topic = targetTopic.trim(),
+            subTopic =
+                selectedSubjectFilter
+                    ?.takeIf { filter ->
+                        filter.topic.normHeb() ==
+                                targetTopic.normHeb()
+                    }
+                    ?.subTopic,
+            rawItem = rawItem
+        ).aliases
     }
 
     fun loadPracticeNote(
@@ -418,36 +392,18 @@ fun RandomPracticeScreen(
         targetTopic: String,
         rawItem: String
     ): Set<String> {
-        val cleanTopic =
-            targetTopic.trim()
-
-        val displayTitle =
-            displayName(rawItem)
-                .ifBlank {
-                    rawItem
-                }
-                .trim()
-
-        val registryId =
-            ExerciseIdentityRegistry.idFor(
-                belt = targetBelt,
-                hebrewTitle = displayTitle,
-                topicKey = cleanTopic
-            )
-
-        return setOf(
-            registryId,
-            displayTitle,
-            rawItem.trim(),
-            normalizeFavoriteId(rawItem)
-        )
-            .map {
-                it.trim()
-            }
-            .filter {
-                it.isNotBlank()
-            }
-            .toSet()
+        return ExerciseSyncStore.resolveIdentity(
+            belt = targetBelt,
+            topic = targetTopic.trim(),
+            subTopic =
+                selectedSubjectFilter
+                    ?.takeIf { filter ->
+                        filter.topic.normHeb() ==
+                                targetTopic.normHeb()
+                    }
+                    ?.subTopic,
+            rawItem = rawItem
+        ).aliases
     }
 
     fun isFavoriteGlobal(
@@ -469,31 +425,25 @@ fun RandomPracticeScreen(
         targetTopic: String,
         rawItem: String
     ) {
-        val aliases =
-            favoriteAliasesFor(
-                targetBelt = targetBelt,
-                targetTopic = targetTopic,
+        val identity =
+            ExerciseSyncStore.resolveIdentity(
+                belt = targetBelt,
+                topic = targetTopic.trim(),
+                subTopic =
+                    selectedSubjectFilter
+                        ?.takeIf { filter ->
+                            filter.topic.normHeb() ==
+                                    targetTopic.normHeb()
+                        }
+                        ?.subTopic,
                 rawItem = rawItem
             )
 
-        val displayTitle =
-            displayName(rawItem)
-                .ifBlank {
-                    rawItem
-                }
-                .trim()
-
-        val canonicalId =
-            ExerciseIdentityRegistry.idFor(
-                belt = targetBelt,
-                hebrewTitle = displayTitle,
-                topicKey = targetTopic.trim()
-            )
-
         val existing =
-            aliases.filter { candidate ->
-                candidate in favorites
-            }
+            identity.aliases
+                .filter { candidate ->
+                    candidate in favorites
+                }
 
         if (existing.isNotEmpty()) {
             existing.forEach { storedId ->
@@ -503,7 +453,7 @@ fun RandomPracticeScreen(
             }
         } else {
             FavoritesStore.toggle(
-                canonicalId
+                identity.exerciseId
             )
         }
     }
@@ -545,15 +495,7 @@ fun RandomPracticeScreen(
         )
     }
 
-    val selectedSubjectFilter =
-        remember(belt, topicFilter) {
-            resolvePracticeSubjectFilter(
-                rawFilter = topicFilter,
-                belt = belt
-            )
-        }
-
-    // ✅ מקור עיקרי: shared PracticeFacade (כולל __UNKNOWN__/__FAVS_ALL__/__ALL__/TOPICS_PICK_TOKEN)
+    // ✅ מקור עיקרי: shared PracticeFacade
     val practiceItems:
             List<il.kmi.shared.practice.PracticeItem> =
         remember(
@@ -782,9 +724,72 @@ fun RandomPracticeScreen(
                         topicTitle,
                         rawItem,
                         disp ->
-                    val excluded = sp.getStringSet("excluded_${beltId}_${topicTitle}", emptySet())
-                        ?: emptySet()
-                    (rawItem in excluded) || (disp in excluded)
+
+                    val targetBelt =
+                        Belt.fromId(
+                            beltId
+                        ) ?: belt
+
+                    val identity =
+                        ExerciseSyncStore.resolveIdentity(
+                            belt = targetBelt,
+                            topic = topicTitle.trim(),
+                            subTopic =
+                                selectedSubjectFilter
+                                    ?.takeIf { filter ->
+                                        filter.topic.normHeb() ==
+                                                topicTitle.normHeb()
+                                    }
+                                    ?.subTopic,
+                            rawItem = rawItem
+                        )
+
+                    val candidateIds =
+                        buildSet {
+                            addAll(
+                                identity.aliases
+                            )
+
+                            add(
+                                identity.exerciseId
+                            )
+
+                            add(
+                                rawItem.trim()
+                            )
+
+                            add(
+                                disp.trim()
+                            )
+                        }
+                            .map { value ->
+                                value.normHeb()
+                            }
+                            .filter { value ->
+                                value.isNotBlank()
+                            }
+                            .toSet()
+
+                    sp.all.keys
+                        .asSequence()
+                        .filter { key ->
+                            key.startsWith(
+                                "excluded_${beltId}_"
+                            )
+                        }
+                        .any { key ->
+
+                            val stored =
+                                sp.getStringSet(
+                                    key,
+                                    emptySet()
+                                )
+                                    ?: emptySet()
+
+                            stored.any { storedValue ->
+                                storedValue.normHeb() in candidateIds
+                            }
+                        }
                 },
                 canonicalKeyFor = { rawItem -> canonicalKeyFor(rawItem) },
                 displayNameFor = { rawItem -> displayName(rawItem) }
@@ -955,6 +960,14 @@ fun RandomPracticeScreen(
     val practiceStatusMap = remember(belt.id, practiceKey) {
         mutableStateMapOf<String, Boolean?>()
     }
+
+    val practicePartiallyKnownMap =
+        remember(
+            belt.id,
+            practiceKey
+        ) {
+            mutableStateMapOf<String, Boolean>()
+        }
 
     // ✅ מאזין לשינויים של סימוני יודע/לא יודע מכל המסכים
     val marksVersion by (vm?.marksVersion ?: kotlinx.coroutines.flow.flowOf(0))
@@ -1153,6 +1166,68 @@ fun RandomPracticeScreen(
             .distinct()
     }
 
+    fun isPartiallyKnownFromSources(
+        item: il.kmi.shared.practice.PracticeItem
+    ): Boolean {
+
+        val topicKeys =
+            statusTopicKeysFor(
+                item
+            )
+
+        return topicKeys.any { key ->
+
+            val statusId =
+                statusIdForPractice(
+                    item = item,
+                    statusKey = key
+                )
+
+            val legacyStatusId =
+                legacyStatusIdForPractice(
+                    item = item,
+                    statusKey = key
+                )
+
+            val topicTitle =
+                topicTitleFromStatusKey(
+                    key
+                )
+
+            val subTopicTitle =
+                subTopicTitleFromStatusKey(
+                    key
+                )
+
+            val rawItem =
+                rawAndIndexForStatusKey(
+                    item = item,
+                    statusKey = key
+                ).first
+
+            val identity =
+                ExerciseSyncStore.resolveIdentity(
+                    belt = belt,
+                    topic = topicTitle,
+                    subTopic = subTopicTitle,
+                    rawItem = rawItem
+                )
+
+            val partiallyKnownSet =
+                sp.getStringSet(
+                    "partially_known_${belt.id}_${key}",
+                    emptySet()
+                )
+                    ?: emptySet()
+
+            statusId in partiallyKnownSet ||
+                    legacyStatusId in partiallyKnownSet ||
+                    identity.aliases.any { alias ->
+                        alias in partiallyKnownSet
+                    }
+        }
+    }
+
     fun persistWrongKeys() {
         sp.edit {
             putStringSet(
@@ -1164,72 +1239,209 @@ fun RandomPracticeScreen(
 
     fun setPracticeStatus(
         item: il.kmi.shared.practice.PracticeItem?,
-        newStatus: Boolean?
+        newStatus: Boolean?,
+        partiallyKnown: Boolean = false
     ) {
-        if (item == null) return
+        if (item == null) {
+            return
+        }
 
-        val topicKeys = statusTopicKeysFor(item)
+        val topicKeys =
+            statusTopicKeysFor(
+                item
+            )
 
-        val primaryStatusId = primaryStatusIdForPractice(item)
+        val primaryStatusId =
+            primaryStatusIdForPractice(
+                item
+            )
 
-        // ✅ עדכון מיידי במסך התרגול לפי statusId החדש
-        practiceStatusMap[primaryStatusId] = newStatus
+        val storedValue =
+            if (partiallyKnown) {
+                false
+            } else {
+                newStatus
+            }
 
-        // ✅ שמירה לכל מפתחות הסימון האפשריים:
-        // נושא ראשי / כללי / תת־נושא.
+        practiceStatusMap[
+            primaryStatusId
+        ] = storedValue
+
+        practicePartiallyKnownMap[
+            primaryStatusId
+        ] = partiallyKnown
+
         topicKeys.forEach { key ->
-            val statusId = statusIdForPractice(
-                item = item,
-                statusKey = key
-            )
 
-            val legacyStatusId = legacyStatusIdForPractice(
-                item = item,
-                statusKey = key
-            )
+            val statusId =
+                statusIdForPractice(
+                    item = item,
+                    statusKey = key
+                )
 
-            practiceStatusMap[statusId] = newStatus
+            val legacyStatusId =
+                legacyStatusIdForPractice(
+                    item = item,
+                    statusKey = key
+                )
+
+            practiceStatusMap[
+                statusId
+            ] = storedValue
+
+            practicePartiallyKnownMap[
+                statusId
+            ] = partiallyKnown
 
             vm?.setItemStatusNullable(
                 belt = belt,
                 topic = key,
                 item = statusId,
-                value = newStatus
+                value = storedValue
             )
 
-            // ✅ שמירה מקומית תואמת ל-MaterialsScreen / SummaryScreen
-            val masteredKey = "mastered_${belt.id}_${key}"
-            val unknownKey = "unknown_${belt.id}_${key}"
+            val masteredKey =
+                "mastered_${belt.id}_${key}"
+
+            val unknownKey =
+                "unknown_${belt.id}_${key}"
+
+            val partiallyKnownKey =
+                "partially_known_${belt.id}_${key}"
 
             val masteredSet =
-                (sp.getStringSet(masteredKey, emptySet()) ?: emptySet()).toMutableSet()
-            val unknownSet = (sp.getStringSet(unknownKey, emptySet()) ?: emptySet()).toMutableSet()
+                (
+                        sp.getStringSet(
+                            masteredKey,
+                            emptySet()
+                        )
+                            ?: emptySet()
+                        )
+                    .toMutableSet()
 
-            when (newStatus) {
-                true -> {
-                    masteredSet.add(statusId)
-                    unknownSet.remove(statusId)
+            val unknownSet =
+                (
+                        sp.getStringSet(
+                            unknownKey,
+                            emptySet()
+                        )
+                            ?: emptySet()
+                        )
+                    .toMutableSet()
 
-                    // מנקים fallback ישן אם היה
-                    masteredSet.remove(legacyStatusId)
-                    unknownSet.remove(legacyStatusId)
+            val partiallyKnownSet =
+                (
+                        sp.getStringSet(
+                            partiallyKnownKey,
+                            emptySet()
+                        )
+                            ?: emptySet()
+                        )
+                    .toMutableSet()
+
+            when {
+                partiallyKnown -> {
+                    masteredSet.remove(
+                        statusId
+                    )
+
+                    unknownSet.add(
+                        statusId
+                    )
+
+                    partiallyKnownSet.add(
+                        statusId
+                    )
+
+                    masteredSet.remove(
+                        legacyStatusId
+                    )
+
+                    unknownSet.remove(
+                        legacyStatusId
+                    )
+
+                    partiallyKnownSet.remove(
+                        legacyStatusId
+                    )
                 }
 
-                false -> {
-                    unknownSet.add(statusId)
-                    masteredSet.remove(statusId)
+                newStatus == true -> {
+                    masteredSet.add(
+                        statusId
+                    )
 
-                    // מנקים fallback ישן אם היה
-                    masteredSet.remove(legacyStatusId)
-                    unknownSet.remove(legacyStatusId)
+                    unknownSet.remove(
+                        statusId
+                    )
+
+                    partiallyKnownSet.remove(
+                        statusId
+                    )
+
+                    masteredSet.remove(
+                        legacyStatusId
+                    )
+
+                    unknownSet.remove(
+                        legacyStatusId
+                    )
+
+                    partiallyKnownSet.remove(
+                        legacyStatusId
+                    )
                 }
 
-                null -> {
-                    masteredSet.remove(statusId)
-                    unknownSet.remove(statusId)
+                newStatus == false -> {
+                    unknownSet.add(
+                        statusId
+                    )
 
-                    masteredSet.remove(legacyStatusId)
-                    unknownSet.remove(legacyStatusId)
+                    masteredSet.remove(
+                        statusId
+                    )
+
+                    partiallyKnownSet.remove(
+                        statusId
+                    )
+
+                    masteredSet.remove(
+                        legacyStatusId
+                    )
+
+                    unknownSet.remove(
+                        legacyStatusId
+                    )
+
+                    partiallyKnownSet.remove(
+                        legacyStatusId
+                    )
+                }
+
+                else -> {
+                    masteredSet.remove(
+                        statusId
+                    )
+
+                    unknownSet.remove(
+                        statusId
+                    )
+
+                    partiallyKnownSet.remove(
+                        statusId
+                    )
+
+                    masteredSet.remove(
+                        legacyStatusId
+                    )
+
+                    unknownSet.remove(
+                        legacyStatusId
+                    )
+
+                    partiallyKnownSet.remove(
+                        legacyStatusId
+                    )
                 }
             }
 
@@ -1243,14 +1455,25 @@ fun RandomPracticeScreen(
                     unknownKey,
                     unknownSet
                 )
+
+                putStringSet(
+                    partiallyKnownKey,
+                    partiallyKnownSet
+                )
             }
         }
 
-        // ✅ תאימות למסך "כל הרשימות" / רשימת לא יודע:
-        // נשאר לפי canonicalKey של PracticeFacade, כי זה מנגנון בחירת תרגילים בלבד.
-        when (newStatus) {
-            false -> wrongCanonicalKeys.add(item.canonicalKey)
-            true, null -> wrongCanonicalKeys.remove(item.canonicalKey)
+        if (
+            storedValue == false &&
+            !partiallyKnown
+        ) {
+            wrongCanonicalKeys.add(
+                item.canonicalKey
+            )
+        } else {
+            wrongCanonicalKeys.remove(
+                item.canonicalKey
+            )
         }
 
         persistWrongKeys()
@@ -1309,6 +1532,15 @@ fun RandomPracticeScreen(
         currentStatusId?.let {
             practiceStatusMap[it]
         }
+
+    val currentPracticePartiallyKnown =
+        currentStatusId
+            ?.let { statusId ->
+                practicePartiallyKnownMap[
+                    statusId
+                ] == true
+            }
+            ?: false
 
     suspend fun readPracticeStatusFromSources(
         safeVm: KmiViewModel?,
@@ -1419,12 +1651,29 @@ fun RandomPracticeScreen(
         val item = currentPracticeItem ?: return@LaunchedEffect
         val statusId = currentStatusId ?: return@LaunchedEffect
 
-        val (fromSources, _) = readPracticeStatusFromSources(
-            safeVm = vm,
-            item = item
-        )
+        val (fromSources, _) =
+            readPracticeStatusFromSources(
+                safeVm = vm,
+                item = item
+            )
 
-        practiceStatusMap[statusId] = fromSources
+        val partiallyKnown =
+            isPartiallyKnownFromSources(
+                item
+            )
+
+        practiceStatusMap[
+            statusId
+        ] =
+            if (partiallyKnown) {
+                false
+            } else {
+                fromSources
+            }
+
+        practicePartiallyKnownMap[
+            statusId
+        ] = partiallyKnown
     }
 
     // הסטטוס נטען רק עבור התרגיל הנוכחי.
@@ -1548,10 +1797,12 @@ fun RandomPracticeScreen(
     }
 
     // ===== דיאלוג בחירת זמן =====
-    var showDurationDialog by rememberSaveable { mutableStateOf(true) }
-    if (showDurationDialog) {
-        PracticeStartConfigDialog(
-            show = showDurationDialog,
+    var showDurationDialog by rememberSaveable {
+        mutableStateOf(true)
+    }
+
+    PracticeStartConfigDialog(
+        show = showDurationDialog,
             isEnglish = isEnglish,
             initialMinutes = durationMinutes,
             initialHalfAlert = beepHalfTimeState,
@@ -1631,7 +1882,6 @@ fun RandomPracticeScreen(
                 }
             }
         )
-    }
 
     // ===== טיימר =====
     LaunchedEffect(
@@ -1946,22 +2196,29 @@ fun RandomPracticeScreen(
                                 totalCount =
                                     weightedItems.size,
                                 centerLabel =
-                                    when (currentPracticeStatus) {
-                                        true ->
+                                    when {
+                                        currentPracticePartiallyKnown ->
+                                            if (isEnglish) {
+                                                "Partial"
+                                            } else {
+                                                "חלקית"
+                                            }
+
+                                        currentPracticeStatus == true ->
                                             if (isEnglish) {
                                                 "Known"
                                             } else {
                                                 "יודע"
                                             }
 
-                                        false ->
+                                        currentPracticeStatus == false ->
                                             if (isEnglish) {
                                                 "Not known"
                                             } else {
                                                 "לא יודע"
                                             }
 
-                                        null ->
+                                        else ->
                                             if (isEnglish) {
                                                 "Not marked"
                                             } else {
@@ -2021,18 +2278,47 @@ fun RandomPracticeScreen(
                                     }
                                 },
                                 onCenterClick = {
-                                    val nextStatus =
-                                        when (currentPracticeStatus) {
-                                            null -> true
-                                            true -> false
-                                            false -> null
+
+                                    val currentItem =
+                                        weightedPracticeItems
+                                            .getOrNull(
+                                                currentIndex
+                                            )
+
+                                    when {
+                                        currentPracticeStatus == null &&
+                                                !currentPracticePartiallyKnown -> {
+                                            setPracticeStatus(
+                                                item = currentItem,
+                                                newStatus = true,
+                                                partiallyKnown = false
+                                            )
                                         }
 
-                                    setPracticeStatus(
-                                        weightedPracticeItems
-                                            .getOrNull(currentIndex),
-                                        nextStatus
-                                    )
+                                        currentPracticeStatus == true -> {
+                                            setPracticeStatus(
+                                                item = currentItem,
+                                                newStatus = false,
+                                                partiallyKnown = true
+                                            )
+                                        }
+
+                                        currentPracticePartiallyKnown -> {
+                                            setPracticeStatus(
+                                                item = currentItem,
+                                                newStatus = false,
+                                                partiallyKnown = false
+                                            )
+                                        }
+
+                                        else -> {
+                                            setPracticeStatus(
+                                                item = currentItem,
+                                                newStatus = null,
+                                                partiallyKnown = false
+                                            )
+                                        }
+                                    }
                                 },
                                 onCardClick = {
                                     showHelp = true
