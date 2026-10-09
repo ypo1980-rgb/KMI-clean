@@ -57,6 +57,7 @@ import il.yuval.ui.theme.kmiSectionHeaderBackground
 import il.yuval.ui.theme.kmiSectionHeaderContentColor
 import il.kmi.app.ui.practice.PracticeBottomControls
 import il.kmi.app.ui.practice.PracticeExerciseCenterCard
+import il.kmi.app.ui.practice.PracticeExerciseProgressDots
 import java.util.Locale
 import kotlin.time.Duration.Companion.seconds
 
@@ -1518,6 +1519,43 @@ fun RandomPracticeScreen(
             weightedPracticeItems.getOrNull(currentIndex)
         }
 
+    var practiceNotesRefreshKey by remember {
+        mutableIntStateOf(0)
+    }
+
+    val currentPracticeTopic =
+        currentPracticeItem?.topicTitle?.trim().orEmpty()
+
+    val currentPracticeRawItem =
+        remember(currentPracticeItem) {
+            currentPracticeItem?.let { item ->
+                statusRawItemFor(item)
+            }.orEmpty()
+        }
+
+    val currentPracticeIsFavorite =
+        currentPracticeItem != null &&
+                isFavoriteGlobal(
+                    targetBelt = belt,
+                    targetTopic = currentPracticeTopic,
+                    rawItem = currentPracticeRawItem
+                )
+
+    val currentPracticeHasNote =
+        remember(
+            belt,
+            currentPracticeTopic,
+            currentPracticeRawItem,
+            practiceNotesRefreshKey
+        ) {
+            currentPracticeRawItem.isNotBlank() &&
+                    loadPracticeNote(
+                        targetBelt = belt,
+                        targetTopic = currentPracticeTopic,
+                        rawItem = currentPracticeRawItem
+                    ).isNotBlank()
+        }
+
     val currentStatusId =
         remember(
             currentPracticeItem
@@ -2126,7 +2164,9 @@ fun RandomPracticeScreen(
 
             val subjectHeaderPadding = 56.dp
 
-            if (weightedItems.isEmpty()) {
+            if (showDurationDialog) {
+                // ממתינים לאישור בחירת זמן התרגול.
+            } else if (weightedItems.isEmpty()) {
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
@@ -2160,21 +2200,22 @@ fun RandomPracticeScreen(
                                 start = 16.dp,
                                 end = 16.dp,
                                 top = 14.dp,
-                                bottom = 150.dp
+                                bottom = 76.dp
                             ),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        Column(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            PracticeExerciseCenterCard(
+                        PracticeExerciseCenterCard(
                                 belt = belt,
                                 exerciseTitle =
                                     weightedPracticeItems
                                         .getOrNull(currentIndex)
                                         ?.let { uiTitleFor(it) }
                                         .orEmpty(),
+                                isFavorite = currentPracticeIsFavorite,
+                                hasNote = currentPracticeHasNote,
+                                isExcluded = false,
+                                isEnglish = isEnglish,
+                                showProgress = false,
                                 exerciseSubtitle =
                                     currentPracticeItem
                                         ?.topicTitle
@@ -2320,25 +2361,31 @@ fun RandomPracticeScreen(
                                         }
                                     }
                                 },
-                                onCardClick = {
-                                    showHelp = true
-                                }
+                            onCardClick = {
+                                showHelp = true
+                            }
+                        )
+
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .weight(1f),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            PracticeExerciseProgressDots(
+                                belt = belt,
+                                currentIndex = currentIndex,
+                                totalCount = weightedItems.size
                             )
                         }
                     }
 
                     PracticeBottomControls(
                         isEnglish = isEnglish,
-                        showSkip =
-                            currentIndex <
-                                    weightedItems.lastIndex,
+                        showSkip = currentIndex < weightedPracticeItems.lastIndex,
                         modifier = Modifier
                             .align(Alignment.BottomCenter)
-                            .padding(
-                                start = 16.dp,
-                                end = 16.dp,
-                                bottom = 8.dp
-                            ),
+                            .fillMaxWidth(),
                         onHelp = {
                             showHelp = true
                         },
@@ -2585,6 +2632,8 @@ fun RandomPracticeScreen(
                                 targetTopic = noteTopic,
                                 rawItem = safeItem
                             )
+
+                            practiceNotesRefreshKey++
                         },
                         onToggleFavorite = {
                             toggleFav()
@@ -2612,6 +2661,7 @@ fun RandomPracticeScreen(
                                     note = cleanNote
                                 )
 
+                                practiceNotesRefreshKey++
                                 showNoteEditor = false
                             }
                         )

@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.runtime.LaunchedEffect
 import kotlinx.coroutines.delay
 import il.kmi.app.ui.practice.PracticeExerciseCenterCard
+import il.kmi.app.ui.practice.PracticeExerciseProgressDots
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -43,6 +44,7 @@ import il.kmi.app.domain.CanonicalIds
 import il.kmi.app.domain.ExerciseExplanationResolver
 import il.kmi.app.favorites.FavoritesStore
 import il.kmi.app.notes.ExerciseNotesStore
+import il.kmi.app.exercises.sync.ExerciseSyncStore
 import il.kmi.app.ui.dialogs.ExerciseExplanationDialog
 import il.kmi.app.ui.dialogs.ExerciseNoteEditorDialog
 import il.kmi.shared.domain.content.ExerciseIdentityRegistry
@@ -279,8 +281,15 @@ fun PracticeByTopicsScreen(
     fun exerciseAliasesFor(
         item: PracticeByTopicsItem
     ): Set<String> {
-        val cleanTitle =
-            item.title.trim()
+        val cleanTitle = item.title.trim()
+
+        val identity =
+            ExerciseSyncStore.resolveIdentity(
+                belt = item.belt,
+                topic = item.topic.trim(),
+                subTopic = item.subTopic,
+                rawItem = item.title
+            )
 
         val registryId =
             ExerciseIdentityRegistry.idFor(
@@ -303,18 +312,16 @@ fun PracticeByTopicsScreen(
                 rawItemFromRepo = item.title
             )
 
-        return setOf(
-            registryId,
-            canonicalId,
-            explanationId,
-            cleanTitle
-        )
-            .map {
-                it.trim()
-            }
-            .filter {
-                it.isNotBlank()
-            }
+        return buildSet {
+            add(identity.exerciseId)
+            addAll(identity.aliases)
+            add(registryId)
+            add(canonicalId)
+            add(explanationId)
+            add(cleanTitle)
+        }
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
             .toSet()
     }
 
@@ -384,11 +391,20 @@ fun PracticeByTopicsScreen(
     fun favoriteIdFor(
         item: PracticeByTopicsItem
     ): String {
-        return ExerciseIdentityRegistry.idFor(
+        return ExerciseSyncStore.resolveIdentity(
             belt = item.belt,
-            hebrewTitle = item.title.trim(),
-            topicKey = item.topic.trim()
-        )
+            topic = item.topic.trim(),
+            subTopic = item.subTopic,
+            rawItem = item.title
+        ).exerciseId
+    }
+
+    fun isFavoriteFor(
+        item: PracticeByTopicsItem
+    ): Boolean {
+        return exerciseAliasesFor(item).any { id ->
+            id in favorites
+        }
     }
 
     val practiceItems =
@@ -502,6 +518,85 @@ fun PracticeByTopicsScreen(
     val totalItems =
         practiceItems.size
 
+    val knowledgeStatusPrefs = remember(context) {
+        context.getSharedPreferences(
+            "kmi_settings",
+            android.content.Context.MODE_PRIVATE
+        )
+    }
+
+    val currentKnowledgeLabel =
+        remember(currentItem) {
+
+            if (currentItem == null) {
+                "לא סומן"
+            } else {
+                val aliases =
+                    exerciseAliasesFor(currentItem)
+
+                val topicKeys = buildList {
+                    add(currentItem.topic.trim())
+
+                    currentItem.subTopic
+                        ?.trim()
+                        ?.takeIf { it.isNotBlank() }
+                        ?.let { subTopic ->
+                            add(
+                                "${currentItem.topic.trim()}__$subTopic"
+                            )
+                        }
+
+                    add("כללי")
+                }.distinct()
+
+                fun hasStoredStatus(
+                    prefix: String
+                ): Boolean {
+                    return topicKeys.any { topicKey ->
+
+                        val storageKey =
+                            "${prefix}_${currentItem.belt.id}_$topicKey"
+
+                        val storedIds =
+                            knowledgeStatusPrefs.getStringSet(
+                                storageKey,
+                                emptySet()
+                            ).orEmpty()
+
+                        aliases.any { alias ->
+                            alias in storedIds
+                        }
+                    }
+                }
+
+                when {
+                    hasStoredStatus("partially_known") ->
+                        "חלקית"
+
+                    hasStoredStatus("mastered") ->
+                        "יודע"
+
+                    hasStoredStatus("unknown") ->
+                        "לא יודע"
+
+                    else ->
+                        "לא סומן"
+                }
+            }
+        }
+
+    val currentIsFavorite =
+        currentItem?.let { item ->
+            isFavoriteFor(item)
+        } ?: false
+
+    val currentHasNote =
+        remember(currentItem, notesRefreshKey) {
+            currentItem?.let { item ->
+                loadNote(item).isNotBlank()
+            } ?: false
+        }
+
     LaunchedEffect(
         currentIndex,
         durationMinutes
@@ -600,7 +695,9 @@ fun PracticeByTopicsScreen(
 
             val sectionHeaderPadding = 56.dp
 
-            if (currentItem == null) {
+            if (showStartDialog) {
+                // ממתינים לאישור בחירת זמן התרגול.
+            } else if (currentItem == null) {
 
                 Box(
                     modifier = Modifier
@@ -665,7 +762,7 @@ fun PracticeByTopicsScreen(
                                 start = 16.dp,
                                 end = 16.dp,
                                 top = 14.dp,
-                                bottom = 150.dp
+                                bottom = 76.dp
                             ),
                         horizontalAlignment =
                             Alignment.CenterHorizontally
@@ -678,6 +775,10 @@ fun PracticeByTopicsScreen(
                                 currentItem.title,
                             exerciseSubtitle =
                                 null,
+                            isFavorite = currentIsFavorite,
+                            hasNote = currentHasNote,
+                            isExcluded = false,
+                            isEnglish = false,
                             timeText =
                                 String.format(
                                     Locale.getDefault(),
@@ -689,8 +790,9 @@ fun PracticeByTopicsScreen(
                                 currentIndex,
                             totalCount =
                                 totalItems,
+                            showProgress = false,
                             centerLabel =
-                                null,
+                                currentKnowledgeLabel,
                             isRunning =
                                 isRunning,
                             isMuted =
@@ -707,6 +809,19 @@ fun PracticeByTopicsScreen(
                                 showHelp = true
                             }
                         )
+
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .weight(1f),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            PracticeExerciseProgressDots(
+                                belt = currentItem.belt,
+                                currentIndex = currentIndex,
+                                totalCount = totalItems
+                            )
+                        }
                     }
 
                     PracticeBottomControls(
@@ -715,14 +830,8 @@ fun PracticeByTopicsScreen(
                             currentIndex <
                                     practiceItems.lastIndex,
                         modifier = Modifier
-                            .align(
-                                Alignment.BottomCenter
-                            )
-                            .padding(
-                                start = 16.dp,
-                                end = 16.dp,
-                                bottom = 8.dp
-                            ),
+                            .align(Alignment.BottomCenter)
+                            .fillMaxWidth(),
                         onHelp = {
                             showHelp = true
                         },
@@ -763,7 +872,7 @@ fun PracticeByTopicsScreen(
             }
 
         val isFavorite =
-            favoriteId in favorites
+            isFavoriteFor(currentItem)
 
         val noteText =
             remember(

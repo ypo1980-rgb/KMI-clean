@@ -21,6 +21,7 @@ import il.kmi.shared.domain.Belt
 import il.kmi.app.R
 import il.kmi.app.favorites.FavoritesStore
 import il.kmi.app.notes.ExerciseNotesStore
+import il.kmi.app.exercises.sync.ExerciseSyncStore
 import il.kmi.app.domain.CanonicalIds
 import il.kmi.shared.domain.content.ExerciseIdentityRegistry
 import il.kmi.app.ui.KmiTtsManager
@@ -40,16 +41,12 @@ import java.util.Locale
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 import il.kmi.app.ui.practice.PracticeExerciseCenterCard
+import il.kmi.app.ui.practice.PracticeExerciseProgressDots
 
 //===============================================================
 
 // ✅ קבוע אחד למבחן (לא דיאלוג, לא שינוי, לא כפילויות)
 private const val EXAM_SECONDS_PER_EXERCISE = 20
-
-private fun normalizeFavoriteId(raw: String): String =
-    raw.substringAfter("::", raw)
-        .substringAfter(":", raw)
-        .trim()
 
 private fun findExplanationForExam(
     belt: Belt,
@@ -193,13 +190,23 @@ fun ExamScreen(
                 rawItemFromRepo = rawItem
             )
 
-        return setOf(
-            registryId,
-            canonicalId,
-            explanationId,
-            displayTitle,
-            rawItem.trim()
-        )
+        val syncIdentity =
+            ExerciseSyncStore.resolveIdentity(
+                belt = targetBelt,
+                topic = targetTopic.trim(),
+                subTopic = null,
+                rawItem = rawItem
+            )
+
+        return buildSet {
+            add(syncIdentity.exerciseId)
+            addAll(syncIdentity.aliases)
+            add(registryId)
+            add(canonicalId)
+            add(explanationId)
+            add(displayTitle)
+            add(rawItem.trim())
+        }
             .map { it.trim() }
             .filter { it.isNotBlank() }
             .toSet()
@@ -287,43 +294,109 @@ fun ExamScreen(
     var showHelp by rememberSaveable { mutableStateOf(false) }
     var pickedSearchKey by rememberSaveable { mutableStateOf<String?>(null) }
 
-    // ----- שליפת פריטי המבחן (ללא רפלקציה / ללא JVM) -----
-    val baseItems: List<String> = remember(belt) {
-        il.kmi.shared.exam.ExamFacade.buildExamItems(
-            beltId = belt.id,
-            topicTitlesProvider = { beltId ->
-                val appBelt =
-                    Belt.fromId(beltId) ?: belt
+    // ----- פריטי מבחן עם הנושא המקורי -----
+    val baseExamItems:
+            List<il.kmi.shared.exam.ExamFacade.ExamItem> =
+        remember(belt) {
+            il.kmi.shared.exam.ExamFacade.buildExamItemsWithTopics(
+                beltId = belt.id,
+                topicTitlesProvider = { beltId ->
+                    val appBelt =
+                        Belt.fromId(beltId) ?: belt
 
-                runCatching {
-                    il.kmi.app.search.KmiSearchBridge
-                        .topicTitlesFor(appBelt)
-                }.getOrDefault(emptyList())
-            },
-            itemsProvider = { beltId, topicTitle ->
-                val appBelt =
-                    Belt.fromId(beltId) ?: belt
+                    runCatching {
+                        il.kmi.app.search.KmiSearchBridge
+                            .topicTitlesFor(appBelt)
+                    }.getOrDefault(emptyList())
+                },
+                itemsProvider = { beltId, topicTitle ->
+                    val appBelt =
+                        Belt.fromId(beltId) ?: belt
 
-                runCatching {
-                    il.kmi.app.search.KmiSearchBridge
-                        .itemsFor(
-                            appBelt,
-                            topicTitle
+                    runCatching {
+                        il.kmi.app.search.KmiSearchBridge
+                            .itemsFor(
+                                appBelt,
+                                topicTitle
+                            )
+                    }.getOrDefault(emptyList())
+                }
+            )
+        }
+
+    // שומרים על ההתנהגות הקודמת:
+    // תרגיל בעל אותו שם מופיע פעם אחת במבחן.
+    val baseItems =
+        remember(baseExamItems) {
+            baseExamItems
+                .distinctBy { it.rawItem }
+        }
+
+    val examItems =
+        remember(baseItems, excludedItems) {
+
+            val prefs =
+                context.getSharedPreferences(
+                    "kmi_settings",
+                    android.content.Context.MODE_PRIVATE
+                )
+
+            val storedExclusions =
+                prefs.all.keys
+                    .asSequence()
+                    .filter { key ->
+                        key.startsWith("excluded_${belt.id}_")
+                    }
+                    .flatMap { key ->
+                        prefs.getStringSet(
+                            key,
+                            emptySet<String>()
                         )
-                }.getOrDefault(emptyList())
-            }
-        )
-    }
+                            .orEmpty()
+                            .asSequence()
+                    }
+                    .toSet()
 
-    val items: List<String> = remember(baseItems, excludedItems) {
-        baseItems
-            .filterNot { it in excludedItems }
-            .shuffled()
-    }
+            baseItems
+                .filterNot { examItem ->
 
-    val displayItems: List<String> = remember(items) {
-        items.map(::toDisplayItem)
-    }
+                    val identity =
+                        ExerciseSyncStore.resolveIdentity(
+                            belt = belt,
+                            topic = examItem.topicTitle,
+                            subTopic = null,
+                            rawItem = examItem.rawItem
+                        )
+
+                    val candidateIds =
+                        identity.aliases + identity.exerciseId
+
+                    examItem.rawItem in excludedItems ||
+                            candidateIds.any { id ->
+                                id in excludedItems ||
+                                        id in storedExclusions
+                            } ||
+                            storedExclusions.any { storedId ->
+                                ExerciseSyncStore.matches(
+                                    identity = identity,
+                                    storedId = storedId
+                                )
+                            }
+                }
+                .shuffled()
+        }
+
+    // רשימת String נשארת לתאימות
+    // לטיימר, להקראה ולכרטיס התרגיל.
+    val items: List<String> =
+        remember(examItems) {
+            examItems.map { it.rawItem }
+        }
+
+    val displayItems: List<String> =
+        remember(items) {
+            items.map(::toDisplayItem)
+        }
 
     var currentIndex by remember {
         mutableIntStateOf(0)
@@ -404,26 +477,142 @@ fun ExamScreen(
     val colorScheme =
         MaterialTheme.colorScheme
 
+    val currentExamItem =
+        examItems.getOrNull(currentIndex)
+
     val currentRawItem =
-        items.getOrNull(currentIndex)
+        currentExamItem?.rawItem
+
+    val currentExamTopic =
+        currentExamItem?.topicTitle.orEmpty()
 
     val currentDisplayItem =
         currentRawItem
             ?.let(::toDisplayItem)
             .orEmpty()
 
+    val currentExamIdentity =
+        remember(belt, currentExamTopic, currentRawItem) {
+            ExerciseSyncStore.resolveIdentity(
+                belt = belt,
+                topic = currentExamTopic,
+                subTopic = null,
+                rawItem = currentRawItem.orEmpty()
+            )
+        }
+
+    val currentExamIsFavorite =
+        currentExamIdentity.exerciseId in favorites ||
+                currentExamIdentity.aliases.any { it in favorites }
+
+    var examNotesRefreshKey by remember {
+        mutableIntStateOf(0)
+    }
+
+    val currentExamHasNote =
+        remember(
+            belt,
+            currentExamTopic,
+            currentRawItem,
+            examNotesRefreshKey
+        ) {
+            currentRawItem?.let { raw ->
+                ExerciseNotesStore.hasNote(
+                    context = context,
+                    belt = belt,
+                    exerciseId = currentExamIdentity.exerciseId,
+                    aliases = noteAliasesFor(
+                        targetBelt = belt,
+                        targetTopic = currentExamTopic,
+                        rawItem = raw
+                    ),
+                    allowLegacyMigration = true
+                )
+            } ?: false
+        }
+
+    val currentExamPartiallyKnown =
+        remember(belt, currentExamTopic, currentRawItem) {
+            if (currentRawItem.isNullOrBlank()) {
+                false
+            } else {
+                val identity =
+                    ExerciseSyncStore.resolveIdentity(
+                        belt = belt,
+                        topic = currentExamTopic,
+                        subTopic = null,
+                        rawItem = currentRawItem
+                    )
+
+                val candidateIds =
+                    buildSet {
+                        add(identity.exerciseId)
+                        addAll(identity.aliases)
+                        add(
+                            ExerciseIdentityRegistry.idFor(
+                                belt = belt,
+                                hebrewTitle = currentDisplayItem,
+                                topicKey = null
+                            )
+                        )
+                    }
+
+                val prefs =
+                    context.getSharedPreferences(
+                        "kmi_settings",
+                        android.content.Context.MODE_PRIVATE
+                    )
+
+                prefs.all.keys
+                    .asSequence()
+                    .filter { key ->
+                        key.startsWith(
+                            "partially_known_${belt.id}_"
+                        )
+                    }
+                    .any { key ->
+                        prefs.getStringSet(
+                            key,
+                            emptySet()
+                        )
+                            .orEmpty()
+                            .any { storedId ->
+                                storedId in candidateIds
+                            }
+                    }
+            }
+        }
+
     val currentExamStatus: Boolean? =
         remember(
             belt,
+            currentExamTopic,
             currentRawItem
         ) {
 
-            val statusId =
-                ExerciseIdentityRegistry.idFor(
+            val identity =
+                ExerciseSyncStore.resolveIdentity(
                     belt = belt,
-                    hebrewTitle = currentDisplayItem,
-                    topicKey = null
+                    topic = currentExamTopic,
+                    subTopic = null,
+                    rawItem = currentRawItem.orEmpty()
                 )
+
+            val candidateIds =
+                buildSet {
+                    add(identity.exerciseId)
+                    addAll(identity.aliases)
+
+                    add(
+                        ExerciseIdentityRegistry.idFor(
+                            belt = belt,
+                            hebrewTitle = currentDisplayItem,
+                            topicKey = null
+                        )
+                    )
+                }
+                    .filter { it.isNotBlank() }
+                    .toSet()
 
             val prefs =
                 context.getSharedPreferences(
@@ -452,7 +641,9 @@ fun ExamScreen(
                         emptySet()
                     )
                         .orEmpty()
-                        .contains(statusId)
+                        .any { storedId ->
+                            storedId in candidateIds
+                        }
                 }
 
             val isUnknown =
@@ -462,7 +653,9 @@ fun ExamScreen(
                         emptySet()
                     )
                         .orEmpty()
-                        .contains(statusId)
+                        .any { storedId ->
+                            storedId in candidateIds
+                        }
                 }
 
             when {
@@ -576,8 +769,8 @@ fun ExamScreen(
                     Text(
                         text =
                             tr(
-                                "בדקו את הידע וההתקדמות שלכם",
-                                "Test your knowledge and progress"
+                                "בדקו את הידע וההתקדמות",
+                                "Test knowledge and progress"
                             ),
                         modifier = Modifier.fillMaxWidth(),
                         color = kmiSectionHeaderContentColor(),
@@ -615,17 +808,13 @@ fun ExamScreen(
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
-                        .verticalScroll(
-                            rememberScrollState()
-                        )
                         .padding(
                             start = 16.dp,
                             end = 16.dp,
-                            top = 12.dp,
-                            bottom = 150.dp
+                            top = 8.dp,
+                            bottom = 76.dp
                         ),
-                    verticalArrangement =
-                        Arrangement.spacedBy(12.dp)
+                    horizontalAlignment = Alignment.CenterHorizontally
                 ) {
 
                     PracticeExerciseCenterCard(
@@ -633,6 +822,11 @@ fun ExamScreen(
                         exerciseTitle =
                             displayItems[currentIndex],
                         exerciseSubtitle = null,
+                        isFavorite = currentExamIsFavorite,
+                        hasNote = currentExamHasNote,
+                        isExcluded = false,
+                        isEnglish = isEnglish,
+                        showProgress = false,
                         timeText =
                             String.format(
                                 Locale.getDefault(),
@@ -644,27 +838,18 @@ fun ExamScreen(
                         totalCount =
                             total,
                         centerLabel =
-                            when (currentExamStatus) {
-                                true ->
-                                    if (isEnglish) {
-                                        "Known"
-                                    } else {
-                                        "יודע"
-                                    }
+                            when {
+                                currentExamPartiallyKnown ->
+                                    tr("חלקית", "Partial")
 
-                                false ->
-                                    if (isEnglish) {
-                                        "Not known"
-                                    } else {
-                                        "לא יודע"
-                                    }
+                                currentExamStatus == true ->
+                                    tr("יודע", "Known")
 
-                                null ->
-                                    if (isEnglish) {
-                                        "Not marked"
-                                    } else {
-                                        "לא סומן"
-                                    }
+                                currentExamStatus == false ->
+                                    tr("לא יודע", "Not known")
+
+                                else ->
+                                    tr("לא סומן", "Not marked")
                             },
                         isRunning =
                             isRunning,
@@ -704,6 +889,18 @@ fun ExamScreen(
                             showHelp = true
                         }
                     )
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        PracticeExerciseProgressDots(
+                            belt = belt,
+                            currentIndex = currentIndex,
+                            totalCount = items.size
+                        )
+                    }
                 }
 
                 PracticeBottomControls(
@@ -712,12 +909,7 @@ fun ExamScreen(
                         currentIndex <
                                 items.lastIndex,
                     modifier = Modifier
-                        .align(Alignment.BottomCenter)
-                        .padding(
-                            start = 16.dp,
-                            end = 16.dp,
-                            bottom = 12.dp
-                        ),
+                        .align(Alignment.BottomCenter),
                     onHelp = {
                         showHelp = true
                     },
@@ -763,8 +955,22 @@ fun ExamScreen(
                 )
             }
 
-        val favId = remember(item) { normalizeFavoriteId(item) }
-        val isFav = favorites.contains(favId)
+        val favoriteIdentity =
+            remember(b, topic, item) {
+                ExerciseSyncStore.resolveIdentity(
+                    belt = b,
+                    topic = topic,
+                    subTopic = null,
+                    rawItem = item
+                )
+            }
+
+        val favId = favoriteIdentity.exerciseId
+
+        val isFav =
+            favoriteIdentity.aliases.any { alias ->
+                alias in favorites
+            } || favId in favorites
 
         var noteText by remember(
             b,
@@ -812,6 +1018,8 @@ fun ExamScreen(
                     targetTopic = topic,
                     rawItem = item
                 )
+
+                examNotesRefreshKey++
             },
             onToggleFavorite = { toggleFav() }
         )
@@ -827,7 +1035,6 @@ fun ExamScreen(
                 onSave = {
                     val cleanNote = noteText.trim()
                     noteText = cleanNote
-
                     saveExamNote(
                         targetBelt = b,
                         targetTopic = topic,
@@ -835,6 +1042,7 @@ fun ExamScreen(
                         note = cleanNote
                     )
 
+                    examNotesRefreshKey++
                     showNoteEditor = false
                 }
             )
@@ -844,29 +1052,43 @@ fun ExamScreen(
     if (showHelp && currentIndex in items.indices) {
         val rawItem = items[currentIndex]
         val displayItem = displayItems[currentIndex]
+        val noteTopic = currentExamTopic
 
         val explanation =
             remember(
                 belt,
                 rawItem,
+                noteTopic,
                 isEnglish
             ) {
                 findExplanationForExam(
                     belt = belt,
                     rawItem = rawItem,
                     isEnglish = isEnglish,
-                    topic = ""
+                    topic = noteTopic
                 )
             }
 
-        val favId = remember(rawItem) { normalizeFavoriteId(rawItem) }
-        val isFav = favorites.contains(favId)
+        val favoriteIdentity =
+            remember(belt, noteTopic, rawItem) {
+                ExerciseSyncStore.resolveIdentity(
+                    belt = belt,
+                    topic = noteTopic,
+                    subTopic = null,
+                    rawItem = rawItem
+                )
+            }
 
-        val noteTopic =
-            ""
+        val favId = favoriteIdentity.exerciseId
+
+        val isFav =
+            favoriteIdentity.aliases.any { alias ->
+                alias in favorites
+            } || favId in favorites
 
         var noteText by remember(
             belt,
+            noteTopic,
             rawItem
         ) {
             mutableStateOf(

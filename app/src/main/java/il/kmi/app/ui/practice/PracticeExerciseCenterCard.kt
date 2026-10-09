@@ -30,7 +30,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -49,13 +52,18 @@ fun PracticeExerciseCenterCard(
     currentIndex: Int,
     totalCount: Int,
     centerLabel: String? = null,
+    isFavorite: Boolean = false,
+    isExcluded: Boolean = false,
+    hasNote: Boolean = false,
+    isEnglish: Boolean = false,
     isRunning: Boolean,
     isMuted: Boolean,
     onToggleRunning: () -> Unit,
     onToggleMute: () -> Unit,
     modifier: Modifier = Modifier,
     onCenterClick: (() -> Unit)? = null,
-    onCardClick: (() -> Unit)? = null
+    onCardClick: (() -> Unit)? = null,
+    showProgress: Boolean = true
 ) {
     val accent = belt.color
 
@@ -76,6 +84,7 @@ fun PracticeExerciseCenterCard(
                 MaterialTheme.colorScheme.error
 
             "חלקי",
+            "חלקית",
             "partial" ->
                 androidx.compose.ui.graphics.Color(
                     0xFFF9A825
@@ -140,28 +149,22 @@ fun PracticeExerciseCenterCard(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Image(
-                    painter =
-                        painterResource(
-                            id = beltImageRes(belt)
-                        ),
-                    contentDescription = belt.heb,
-                    modifier =
-                        Modifier
-                            .width(112.dp)
-                            .height(36.dp),
-                    contentScale = ContentScale.Fit
-                )
-
-                Text(
-                    text = belt.heb,
-                    style =
-                        KmiTypography.secondary.copy(
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(30.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = belt.heb,
+                        style = KmiTypography.cardTitle.copy(
                             fontWeight = FontWeight.Black
                         ),
-                    color = accent,
-                    textAlign = TextAlign.Center
-                )
+                        color = accent,
+                        textAlign = TextAlign.Center,
+                        maxLines = 1
+                    )
+                }
 
                 if (!exerciseSubtitle.isNullOrBlank()) {
                     Text(
@@ -179,29 +182,81 @@ fun PracticeExerciseCenterCard(
                 }
 
                 Box(
-                    modifier =
-                        Modifier
-                            .fillMaxWidth()
-                            .height(72.dp),
-                    contentAlignment =
-                        Alignment.Center
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(100.dp),
+                    contentAlignment = Alignment.Center
                 ) {
                     Text(
                         text = exerciseTitle,
-                        modifier =
-                            Modifier.fillMaxWidth(),
-                        style =
-                            KmiTypography.sectionTitle.copy(
-                                fontWeight = FontWeight.Black
-                            ),
-                        color =
-                            MaterialTheme
-                                .colorScheme
-                                .onSurface,
-                        textAlign =
-                            TextAlign.Center,
-                        maxLines = 3
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 25.dp),
+                        style = KmiTypography.sectionTitle.copy(
+                            fontWeight = FontWeight.Black
+                        ),
+                        color = MaterialTheme.colorScheme.onSurface,
+                        textAlign = TextAlign.Center,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis
                     )
+
+                    if (isFavorite || isExcluded || hasNote) {
+                        Row(
+                            modifier = Modifier
+                                .align(Alignment.BottomCenter)
+                                .fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(
+                                6.dp,
+                                Alignment.CenterHorizontally
+                            ),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            val tags = listOf(
+                                Triple(
+                                    if (isEnglish) "Note" else "הערה",
+                                    hasNote,
+                                    Color(0xFF9A6B00)
+                                ),
+                                Triple(
+                                    if (isEnglish) "Favorite" else "מועדף",
+                                    isFavorite,
+                                    Color(0xFF9A6B00)
+                                ),
+                                Triple(
+                                    if (isEnglish) "Excluded" else "מוחרג",
+                                    isExcluded,
+                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            )
+
+                            tags.forEach { (label, visible, color) ->
+                                if (visible) {
+                                    Surface(
+                                        shape = RoundedCornerShape(8.dp),
+                                        color = color.copy(alpha = 0.10f),
+                                        border = BorderStroke(
+                                            1.dp,
+                                            color.copy(alpha = 0.30f)
+                                        )
+                                    ) {
+                                        Text(
+                                            text = label,
+                                            modifier = Modifier.padding(
+                                                horizontal = 8.dp,
+                                                vertical = 3.dp
+                                            ),
+                                            style = KmiTypography.caption.copy(
+                                                fontWeight = FontWeight.ExtraBold
+                                            ),
+                                            color = color,
+                                            maxLines = 1
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
 
                 Surface(
@@ -431,8 +486,27 @@ fun PracticeExerciseCenterCard(
             }
         }
 
-        val safeTotalCount =
-            totalCount.coerceAtLeast(1)
+        if (showProgress) {
+            PracticeExerciseProgressDots(
+                belt = belt,
+                currentIndex = currentIndex,
+                totalCount = totalCount
+            )
+        }
+    }
+}
+
+@Composable
+fun PracticeExerciseProgressDots(
+    belt: Belt,
+    currentIndex: Int,
+    totalCount: Int,
+    modifier: Modifier = Modifier
+) {
+    val accent = belt.color
+
+    val safeTotalCount =
+        totalCount.coerceAtLeast(1)
 
         val progressRows =
             if (safeTotalCount <= 12) {
@@ -449,29 +523,14 @@ fun PracticeExerciseCenterCard(
                 )
             }
 
-        Box(
-            modifier =
-                Modifier
-                    .fillMaxWidth()
-                    .padding(
-                        top = 0.dp,
-                        bottom = 16.dp
-                    ),
-            contentAlignment = Alignment.Center
-        ) {
+    Box(
+        modifier = modifier.fillMaxWidth(),
+        contentAlignment = Alignment.Center
+    ) {
             Surface(
-                modifier =
-                    Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 18.dp)
-                        .offset(
-                            y =
-                                if (safeTotalCount > 12) {
-                                    (-12).dp
-                                } else {
-                                    0.dp
-                                }
-                        ),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 18.dp),
                 shape = RoundedCornerShape(14.dp),
                 color =
                     MaterialTheme
@@ -554,7 +613,7 @@ fun PracticeExerciseCenterCard(
             }
         }
     }
-}
+
 
 private fun beltImageRes(
     belt: Belt

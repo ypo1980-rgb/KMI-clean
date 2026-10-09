@@ -12,9 +12,11 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material3.Icon
@@ -42,103 +44,68 @@ fun PracticeBottomControls(
     onFinish: () -> Unit
 ) {
     Surface(
-        modifier =
-            modifier
-                .fillMaxWidth(),
-        shape =
-            RoundedCornerShape(24.dp),
-        color =
-            MaterialTheme
-                .colorScheme
-                .surface
-                .copy(alpha = 0.98f),
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(0.dp),
+        color = MaterialTheme.colorScheme.surface,
         tonalElevation = 0.dp,
         shadowElevation = 0.dp,
-        border =
-            BorderStroke(
-                width = 1.dp,
-                color =
-                    MaterialTheme
-                        .colorScheme
-                        .outlineVariant
-                        .copy(alpha = 0.70f)
-            )
+        border = BorderStroke(
+            1.dp,
+            MaterialTheme.colorScheme.outlineVariant
+        )
     ) {
-        Column(
-            modifier =
-                Modifier
-                    .fillMaxWidth()
-                    .padding(
-                        horizontal = 10.dp,
-                        vertical = 8.dp
-                    ),
-            verticalArrangement =
-                Arrangement.spacedBy(6.dp)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(6.dp),
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            PracticeBottomActionsRow(
-                isEnglish = isEnglish,
-                showSkip = showSkip,
-                onHelp = onHelp,
-                onSkip = onSkip
+            PracticeBottomPillButton(
+                text = if (isEnglish) "Help" else "עזרה",
+                leading = {
+                    Icon(
+                        imageVector = Icons.Outlined.Info,
+                        contentDescription = null
+                    )
+                },
+                container = MaterialTheme.colorScheme.secondaryContainer,
+                content = MaterialTheme.colorScheme.onSecondaryContainer,
+                overlayGradient = null,
+                modifier = Modifier.weight(1f),
+                onClick = onHelp
             )
 
-            Surface(
-                onClick = onFinish,
-                modifier =
-                    Modifier
-                        .fillMaxWidth()
-                        .height(46.dp),
-                shape =
-                    RoundedCornerShape(17.dp),
-                color =
-                    MaterialTheme
-                        .colorScheme
-                        .primaryContainer
-                        .copy(alpha = 0.72f),
-                contentColor =
-                    MaterialTheme
-                        .colorScheme
-                        .onPrimaryContainer,
-                tonalElevation = 0.dp,
-                shadowElevation = 0.dp,
-                border =
-                    BorderStroke(
-                        width = 1.dp,
-                        color =
-                            MaterialTheme
-                                .colorScheme
-                                .primary
-                                .copy(alpha = 0.22f)
-                    )
-            ) {
-                Box(
-                    modifier =
-                        Modifier.fillMaxSize(),
-                    contentAlignment =
-                        Alignment.Center
-                ) {
-                    Text(
-                        text =
-                            if (isEnglish) {
-                                "Finish and Return"
-                            } else {
-                                "סיום וחזרה"
-                            },
-                        style =
-                            KmiTypography.action.copy(
-                                fontWeight =
-                                    FontWeight.ExtraBold
-                            ),
-                        color =
-                            MaterialTheme
-                                .colorScheme
-                                .onPrimaryContainer,
-                        textAlign =
-                            TextAlign.Center,
-                        maxLines = 1
-                    )
-                }
+            if (showSkip) {
+                PracticeBottomPillButton(
+                    text = if (isEnglish) "Skip" else "דלג",
+                    leading = {
+                        Icon(
+                            imageVector = Icons.Filled.PlayArrow,
+                            contentDescription = null
+                        )
+                    },
+                    container = MaterialTheme.colorScheme.primary,
+                    content = MaterialTheme.colorScheme.onPrimary,
+                    modifier = Modifier.weight(1f),
+                    onClick = onSkip
+                )
             }
+
+            PracticeBottomPillButton(
+                text = if (isEnglish) "Finish" else "סיום",
+                leading = {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ExitToApp,
+                        contentDescription = null
+                    )
+                },
+                container = MaterialTheme.colorScheme.primaryContainer,
+                content = MaterialTheme.colorScheme.onPrimaryContainer,
+                overlayGradient = null,
+                modifier = Modifier.weight(1f),
+                onClick = onFinish
+            )
         }
     }
 }
@@ -273,7 +240,7 @@ private fun PracticeBottomPillButton(
                     content.copy(alpha = 0.20f)
             ),
         modifier =
-            modifier.heightIn(min = 48.dp)
+            modifier.height(58.dp)
     ) {
         Box(
             modifier =
@@ -290,39 +257,34 @@ private fun PracticeBottomPillButton(
                 )
             }
 
-            Row(
-                modifier =
-                    Modifier
-                        .fillMaxWidth()
-                        .padding(
-                            horizontal = 12.dp,
-                            vertical = 7.dp
-                        ),
-                verticalAlignment =
-                    Alignment.CenterVertically,
-                horizontalArrangement =
-                    Arrangement.Center
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(
+                        horizontal = 4.dp,
+                        vertical = 4.dp
+                    ),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(2.dp)
             ) {
-                if (leading != null) {
-                    leading()
-
-                    Spacer(
-                        modifier =
-                            Modifier.width(6.dp)
-                    )
-                }
-
                 Text(
                     text = text,
                     maxLines = 1,
-                    overflow =
-                        TextOverflow.Ellipsis,
-                    style =
-                        KmiTypography.action.copy(
-                            fontWeight =
-                                FontWeight.ExtraBold
-                        )
+                    overflow = TextOverflow.Ellipsis,
+                    textAlign = TextAlign.Center,
+                    style = KmiTypography.caption.copy(
+                        fontWeight = FontWeight.ExtraBold
+                    )
                 )
+
+                if (leading != null) {
+                    Box(
+                        modifier = Modifier.size(20.dp),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        leading()
+                    }
+                }
             }
         }
     }
