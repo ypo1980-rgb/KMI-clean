@@ -54,7 +54,6 @@ import kotlinx.coroutines.yield
 import kotlinx.coroutines.CancellationException
 import android.app.Activity
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.ui.AbsoluteAlignment
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.core.graphics.withTranslation
@@ -1652,8 +1651,6 @@ fun SummaryScreen(
     val summarySecondaryText =
         summaryColors.onSurfaceVariant
 
-    val summaryTopicRowColor =
-        belt.color
             .copy(alpha = 0.16f)
             .compositeOver(summaryColors.surface)
 
@@ -3581,7 +3578,7 @@ fun SummaryScreen(
                                 .clip(RoundedCornerShape(18.dp))
                                 .verticalScroll(scroll)
                                 .padding(bottom = 88.dp),
-                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                            verticalArrangement = Arrangement.spacedBy(2.dp)
                         ) {
                             if (itemsByTopic.isEmpty()) {
                                 Card(
@@ -3704,7 +3701,7 @@ fun SummaryScreen(
                                         Column(
                                             modifier = Modifier
                                                 .fillMaxWidth(),
-                                            verticalArrangement = Arrangement.spacedBy(10.dp)
+                                            verticalArrangement = Arrangement.spacedBy(6.dp)
                                         ) {
                                             androidx.compose.runtime.CompositionLocalProvider(
                                                 androidx.compose.ui.platform.LocalLayoutDirection provides
@@ -3853,7 +3850,7 @@ fun SummaryScreen(
                                                                 ),
                                                             verticalArrangement =
                                                                 Arrangement.spacedBy(
-                                                                    6.dp
+                                                                    0.dp
                                                                 )
                                                         ) {
                                                             if (hasRealSubTopic) {
@@ -3933,52 +3930,6 @@ fun SummaryScreen(
                                                                         .orEmpty()
                                                                         .take(2)
 
-                                                                val coachPrimaryStatus =
-                                                                    coachStatuses.firstOrNull()
-                                                                        ?: CoachSummaryStatus.NOT_TAUGHT
-
-                                                                val statusBackgroundColor =
-                                                                    if (isCoach) {
-                                                                        when (coachPrimaryStatus) {
-                                                                            CoachSummaryStatus.NOT_TAUGHT ->
-                                                                                summaryColors.outline
-
-                                                                            CoachSummaryStatus.TAUGHT ->
-                                                                                Color(0xFFF3A062)
-
-                                                                            CoachSummaryStatus.PRACTICED ->
-                                                                                Color(0xFF2F9B4E)
-
-                                                                            CoachSummaryStatus.NEEDS_REINFORCEMENT ->
-                                                                                Color(0xFF3478D4)
-                                                                        }
-                                                                    } else {
-                                                                        if (isPartiallyKnown) {
-                                                                            Color(0xFFF28C28)
-                                                                        } else {
-                                                                            when (state) {
-                                                                                MarkState.YES ->
-                                                                                    Color(0xFF4CAF50)
-
-                                                                                MarkState.NO ->
-                                                                                    Color(0xFFE53935)
-
-                                                                                MarkState.NONE ->
-                                                                                    summaryColors.onSurfaceVariant
-                                                                            }
-                                                                        }
-                                                                    }
-
-                                                                val statusForegroundColor =
-                                                                    if (
-                                                                        !isCoach &&
-                                                                        state == MarkState.NONE
-                                                                    ) {
-                                                                        summaryColors.onSurfaceVariant
-                                                                    } else {
-                                                                        Color.White
-                                                                    }
-
                                                                 val itemIdentity =
                                                                     ExerciseSyncStore.resolveIdentity(
                                                                         belt = belt,
@@ -4052,7 +4003,8 @@ fun SummaryScreen(
                                                                     modifier = Modifier
                                                                         .fillMaxWidth()
                                                                         .padding(
-                                                                            horizontal = 8.dp
+                                                                            horizontal = 0.dp,
+                                                                            vertical = 3.dp
                                                                         )
                                                                         .heightIn(min = 82.dp),
                                                                     shape =
@@ -4090,346 +4042,208 @@ fun SummaryScreen(
                                                                             ),
                                                                         verticalArrangement = Arrangement.SpaceBetween
                                                                     ) {
-                                                                    /*
-                                                                     * הטקסט מופיע ראשון בתוך Row:
-                                                                     *
-                                                                     * בעברית, בגלל RTL, הוא מוצמד לקצה הימני
-                                                                     * ואייקון הסטטוס עובר לקצה השמאלי.
-                                                                     *
-                                                                     * באנגלית, בגלל LTR, הטקסט מתחיל משמאל
-                                                                     * ואייקון הסטטוס עובר לקצה הימני.
-                                                                     */
-                                                                    androidx.compose.runtime.CompositionLocalProvider(
-                                                                        androidx.compose.ui.platform.LocalLayoutDirection provides
-                                                                                if (isEnglish) {
-                                                                                    LayoutDirection.Ltr
-                                                                                } else {
-                                                                                    LayoutDirection.Rtl
-                                                                                }
-                                                                    ) {
-                                                                        Column(
-                                                                            modifier = Modifier
-                                                                                .fillMaxWidth()
-                                                                                .padding(
-                                                                                    start = 10.dp,
-                                                                                    end = 6.dp,
-                                                                                    top = 2.dp,
-                                                                                    bottom = 3.dp
-                                                                                ),
-                                                                            horizontalAlignment =
-                                                                                if (isEnglish) {
-                                                                                    Alignment.Start
-                                                                                } else {
-                                                                                    Alignment.End
-                                                                                }
-                                                                        ) {
-                                                                            Text(
-                                                                                text =
-                                                                                    exerciseDisplayNameForUi(
-                                                                                        row.sourceTopicTitle,
-                                                                                        itemRaw,
-                                                                                        isEnglish
-                                                                                    ),
-                                                                                style =
-                                                                                    KmiTypography.body.copy(
-                                                                                        fontWeight =
-                                                                                            FontWeight.SemiBold
-                                                                                    ),
-                                                                                color =
-                                                                                    MaterialTheme.colorScheme.onSurface,
-                                                                                textAlign =
+                                                                        /*
+                                                                         * הטקסט מופיע ראשון בתוך Row:
+                                                                         *
+                                                                         * בעברית, בגלל RTL, הוא מוצמד לקצה הימני
+                                                                         * ואייקון הסטטוס עובר לקצה השמאלי.
+                                                                         *
+                                                                         * באנגלית, בגלל LTR, הטקסט מתחיל משמאל
+                                                                         * ואייקון הסטטוס עובר לקצה הימני.
+                                                                         */
+                                                                        androidx.compose.runtime.CompositionLocalProvider(
+                                                                            androidx.compose.ui.platform.LocalLayoutDirection provides
                                                                                     if (isEnglish) {
-                                                                                        TextAlign.Left
+                                                                                        LayoutDirection.Ltr
                                                                                     } else {
-                                                                                        TextAlign.Right
-                                                                                    },
-                                                                                maxLines = 3,
-                                                                                overflow =
-                                                                                    TextOverflow.Ellipsis,
-                                                                                modifier = Modifier.fillMaxWidth()
-                                                                            )
-
-                                                                            if (
-                                                                                itemHasNote ||
-                                                                                itemIsExcluded ||
-                                                                                itemIsFavorite
+                                                                                        LayoutDirection.Rtl
+                                                                                    }
+                                                                        ) {
+                                                                            Column(
+                                                                                modifier = Modifier
+                                                                                    .fillMaxWidth()
+                                                                                    .padding(
+                                                                                        start = 10.dp,
+                                                                                        end = 6.dp,
+                                                                                        top = 2.dp,
+                                                                                        bottom = 3.dp
+                                                                                    ),
+                                                                                horizontalAlignment =
+                                                                                    if (isEnglish) {
+                                                                                        Alignment.Start
+                                                                                    } else {
+                                                                                        Alignment.End
+                                                                                    }
                                                                             ) {
-                                                                                Spacer(
-                                                                                    Modifier.height(
-                                                                                        4.dp
-                                                                                    )
-                                                                                )
-
-                                                                                Row(
-                                                                                    horizontalArrangement =
-                                                                                        Arrangement.spacedBy(
-                                                                                            5.dp
+                                                                                Text(
+                                                                                    text =
+                                                                                        exerciseDisplayNameForUi(
+                                                                                            row.sourceTopicTitle,
+                                                                                            itemRaw,
+                                                                                            isEnglish
                                                                                         ),
-                                                                                    verticalAlignment =
-                                                                                        Alignment.CenterVertically
-                                                                                ) {
-                                                                                    if (itemHasNote) {
-                                                                                        Surface(
-                                                                                            shape = RoundedCornerShape(
-                                                                                                8.dp
-                                                                                            ),
-                                                                                            color = Color(
-                                                                                                0xFFFFF3CD
-                                                                                            ),
-                                                                                            border = BorderStroke(
-                                                                                                width = 1.dp,
-                                                                                                color = Color(
-                                                                                                    0xFFE0B84F
-                                                                                                )
-                                                                                                    .copy(
-                                                                                                        alpha = 0.55f
-                                                                                                    )
-                                                                                            ),
-                                                                                            tonalElevation = 0.dp,
-                                                                                            shadowElevation = 0.dp
-                                                                                        ) {
-                                                                                            Text(
-                                                                                                text = tr(
-                                                                                                    "הערה",
-                                                                                                    "Note"
-                                                                                                ),
-                                                                                                style =
-                                                                                                    KmiTypography.caption.copy(
-                                                                                                        fontWeight =
-                                                                                                            FontWeight.ExtraBold
-                                                                                                    ),
-                                                                                                color = Color(
-                                                                                                    0xFF9A6B00
-                                                                                                ),
-                                                                                                modifier =
-                                                                                                    Modifier.padding(
-                                                                                                        horizontal = 7.dp,
-                                                                                                        vertical = 2.dp
-                                                                                                    ),
-                                                                                                maxLines = 1
-                                                                                            )
-                                                                                        }
-                                                                                    }
+                                                                                    style =
+                                                                                        KmiTypography.body.copy(
+                                                                                            fontWeight =
+                                                                                                FontWeight.SemiBold
+                                                                                        ),
+                                                                                    color =
+                                                                                        MaterialTheme.colorScheme.onSurface,
+                                                                                    textAlign =
+                                                                                        if (isEnglish) {
+                                                                                            TextAlign.Left
+                                                                                        } else {
+                                                                                            TextAlign.Right
+                                                                                        },
+                                                                                    maxLines = 3,
+                                                                                    overflow =
+                                                                                        TextOverflow.Ellipsis,
+                                                                                    modifier = Modifier.fillMaxWidth()
+                                                                                )
+                                                                            }
+                                                                        }
 
-                                                                                    if (itemIsExcluded) {
-                                                                                        Surface(
-                                                                                            shape = RoundedCornerShape(
-                                                                                                8.dp
-                                                                                            ),
-                                                                                            color =
-                                                                                                MaterialTheme.colorScheme
-                                                                                                    .surfaceVariant,
-                                                                                            border = BorderStroke(
-                                                                                                width = 1.dp,
-                                                                                                color =
-                                                                                                    MaterialTheme.colorScheme
-                                                                                                        .outline
-                                                                                                        .copy(
-                                                                                                            alpha = 0.24f
-                                                                                                        )
-                                                                                            ),
-                                                                                            tonalElevation = 0.dp,
-                                                                                            shadowElevation = 0.dp
-                                                                                        ) {
-                                                                                            Text(
-                                                                                                text = tr(
-                                                                                                    "מוחרג",
-                                                                                                    "Excluded"
-                                                                                                ),
-                                                                                                style =
-                                                                                                    KmiTypography.caption.copy(
-                                                                                                        fontWeight =
-                                                                                                            FontWeight.ExtraBold
-                                                                                                    ),
-                                                                                                color =
-                                                                                                    MaterialTheme.colorScheme
-                                                                                                        .onSurfaceVariant,
-                                                                                                modifier =
-                                                                                                    Modifier.padding(
-                                                                                                        horizontal = 7.dp,
-                                                                                                        vertical = 2.dp
-                                                                                                    ),
-                                                                                                maxLines = 1
-                                                                                            )
-                                                                                        }
-                                                                                    }
+                                                                        val singleStatusColor =
+                                                                            if (isCoach) {
+                                                                                when {
+                                                                                    CoachSummaryStatus.NEEDS_REINFORCEMENT in coachStatuses ->
+                                                                                        Color(
+                                                                                            0xFF3478D4
+                                                                                        )
 
-                                                                                    if (itemIsFavorite) {
-                                                                                        Surface(
-                                                                                            shape = RoundedCornerShape(
-                                                                                                8.dp
-                                                                                            ),
-                                                                                            color = Color(
-                                                                                                0xFFFFF3CD
-                                                                                            ),
-                                                                                            border = BorderStroke(
-                                                                                                width = 1.dp,
-                                                                                                color = Color(
-                                                                                                    0xFFE0B84F
-                                                                                                )
-                                                                                                    .copy(
-                                                                                                        alpha = 0.55f
-                                                                                                    )
-                                                                                            ),
-                                                                                            tonalElevation = 0.dp,
-                                                                                            shadowElevation = 0.dp
-                                                                                        ) {
-                                                                                            Text(
-                                                                                                text = tr(
-                                                                                                    "מועדף",
-                                                                                                    "Favorite"
-                                                                                                ),
-                                                                                                style =
-                                                                                                    KmiTypography.caption.copy(
-                                                                                                        fontWeight =
-                                                                                                            FontWeight.ExtraBold
-                                                                                                    ),
-                                                                                                color = Color(
-                                                                                                    0xFF9A6B00
-                                                                                                ),
-                                                                                                modifier =
-                                                                                                    Modifier.padding(
-                                                                                                        horizontal = 7.dp,
-                                                                                                        vertical = 2.dp
-                                                                                                    ),
-                                                                                                maxLines = 1
-                                                                                            )
-                                                                                        }
-                                                                                    }
+                                                                                    CoachSummaryStatus.PRACTICED in coachStatuses ->
+                                                                                        Color(
+                                                                                            0xFF2F9B4E
+                                                                                        )
+
+                                                                                    CoachSummaryStatus.TAUGHT in coachStatuses ->
+                                                                                        Color(
+                                                                                            0xFFF3A062
+                                                                                        )
+
+                                                                                    else ->
+                                                                                        summaryColors.outline
+                                                                                }
+                                                                            } else {
+                                                                                when {
+                                                                                    isPartiallyKnown ->
+                                                                                        Color(
+                                                                                            0xFFF28C28
+                                                                                        )
+
+                                                                                    state == MarkState.YES ->
+                                                                                        Color(
+                                                                                            0xFF4CAF50
+                                                                                        )
+
+                                                                                    state == MarkState.NO ->
+                                                                                        Color(
+                                                                                            0xFFE53935
+                                                                                        )
+
+                                                                                    else ->
+                                                                                        summaryColors.outline
                                                                                 }
                                                                             }
-                                                                        }
-                                                                    }
 
-                                                                    val singleStatusColor =
-                                                                        if (isCoach) {
-                                                                            when {
-                                                                                CoachSummaryStatus.NEEDS_REINFORCEMENT in coachStatuses ->
-                                                                                    Color(0xFF3478D4)
+                                                                        val singleStatusText =
+                                                                            if (isCoach) {
+                                                                                if (coachStatuses.isEmpty()) {
+                                                                                    tr(
+                                                                                        "לא נלמד",
+                                                                                        "Not taught"
+                                                                                    )
+                                                                                } else {
+                                                                                    coachStatuses
+                                                                                        .map { status ->
+                                                                                            when (status) {
+                                                                                                CoachSummaryStatus.TAUGHT ->
+                                                                                                    tr(
+                                                                                                        "נלמד",
+                                                                                                        "Taught"
+                                                                                                    )
 
-                                                                                CoachSummaryStatus.PRACTICED in coachStatuses ->
-                                                                                    Color(0xFF2F9B4E)
+                                                                                                CoachSummaryStatus.PRACTICED ->
+                                                                                                    tr(
+                                                                                                        "תורגל",
+                                                                                                        "Practiced"
+                                                                                                    )
 
-                                                                                CoachSummaryStatus.TAUGHT in coachStatuses ->
-                                                                                    Color(0xFFF3A062)
+                                                                                                CoachSummaryStatus.NEEDS_REINFORCEMENT ->
+                                                                                                    tr(
+                                                                                                        "חיזוק",
+                                                                                                        "Reinforce"
+                                                                                                    )
 
-                                                                                else ->
-                                                                                    summaryColors.outline
-                                                                            }
-                                                                        } else {
-                                                                            when {
-                                                                                isPartiallyKnown ->
-                                                                                    Color(0xFFF28C28)
-
-                                                                                state == MarkState.YES ->
-                                                                                    Color(0xFF4CAF50)
-
-                                                                                state == MarkState.NO ->
-                                                                                    Color(0xFFE53935)
-
-                                                                                else ->
-                                                                                    summaryColors.outline
-                                                                            }
-                                                                        }
-
-                                                                    val singleStatusText =
-                                                                        if (isCoach) {
-                                                                            if (coachStatuses.isEmpty()) {
-                                                                                tr(
-                                                                                    "לא נלמד",
-                                                                                    "Not taught"
-                                                                                )
-                                                                            } else {
-                                                                                coachStatuses
-                                                                                    .map { status ->
-                                                                                        when (status) {
-                                                                                            CoachSummaryStatus.TAUGHT ->
-                                                                                                tr(
-                                                                                                    "נלמד",
-                                                                                                    "Taught"
-                                                                                                )
-
-                                                                                            CoachSummaryStatus.PRACTICED ->
-                                                                                                tr(
-                                                                                                    "תורגל",
-                                                                                                    "Practiced"
-                                                                                                )
-
-                                                                                            CoachSummaryStatus.NEEDS_REINFORCEMENT ->
-                                                                                                tr(
-                                                                                                    "חיזוק",
-                                                                                                    "Reinforce"
-                                                                                                )
-
-                                                                                            CoachSummaryStatus.NOT_TAUGHT ->
-                                                                                                tr(
-                                                                                                    "לא נלמד",
-                                                                                                    "Not taught"
-                                                                                                )
+                                                                                                CoachSummaryStatus.NOT_TAUGHT ->
+                                                                                                    tr(
+                                                                                                        "לא נלמד",
+                                                                                                        "Not taught"
+                                                                                                    )
+                                                                                            }
                                                                                         }
-                                                                                    }
-                                                                                    .joinToString(
-                                                                                        separator = " · "
-                                                                                    )
+                                                                                        .joinToString(
+                                                                                            separator = " · "
+                                                                                        )
+                                                                                }
+                                                                            } else {
+                                                                                when {
+                                                                                    isPartiallyKnown ->
+                                                                                        tr(
+                                                                                            "חלקית",
+                                                                                            "Partially"
+                                                                                        )
+
+                                                                                    state == MarkState.YES ->
+                                                                                        tr(
+                                                                                            "יודע",
+                                                                                            "Known"
+                                                                                        )
+
+                                                                                    state == MarkState.NO ->
+                                                                                        tr(
+                                                                                            "לא יודע",
+                                                                                            "Not known"
+                                                                                        )
+
+                                                                                    else ->
+                                                                                        tr(
+                                                                                            "לא סומן",
+                                                                                            "Unmarked"
+                                                                                        )
+                                                                                }
                                                                             }
-                                                                        } else {
-                                                                            when {
-                                                                                isPartiallyKnown ->
-                                                                                    tr(
-                                                                                        "יודע חלקית",
-                                                                                        "Partially known"
-                                                                                    )
 
-                                                                                state == MarkState.YES ->
-                                                                                    tr(
-                                                                                        "יודע",
-                                                                                        "Known"
-                                                                                    )
+                                                                        val singleStatusMark =
+                                                                            if (isCoach) {
+                                                                                when {
+                                                                                    CoachSummaryStatus.NEEDS_REINFORCEMENT in coachStatuses ->
+                                                                                        "!"
 
-                                                                                state == MarkState.NO ->
-                                                                                    tr(
-                                                                                        "לא יודע",
-                                                                                        "Not known"
-                                                                                    )
+                                                                                    CoachSummaryStatus.PRACTICED in coachStatuses ->
+                                                                                        "↻"
 
-                                                                                else ->
-                                                                                    tr(
-                                                                                        "לא סומן",
-                                                                                        "Unmarked"
-                                                                                    )
+                                                                                    CoachSummaryStatus.TAUGHT in coachStatuses ->
+                                                                                        "✓"
+
+                                                                                    else ->
+                                                                                        "—"
+                                                                                }
+                                                                            } else {
+                                                                                when {
+                                                                                    isPartiallyKnown ->
+                                                                                        "◐"
+
+                                                                                    state == MarkState.YES ->
+                                                                                        "✓"
+
+                                                                                    state == MarkState.NO ->
+                                                                                        "✗"
+
+                                                                                    else ->
+                                                                                        "—"
+                                                                                }
                                                                             }
-                                                                        }
-
-                                                                    val singleStatusMark =
-                                                                        if (isCoach) {
-                                                                            when {
-                                                                                CoachSummaryStatus.NEEDS_REINFORCEMENT in coachStatuses ->
-                                                                                    "!"
-
-                                                                                CoachSummaryStatus.PRACTICED in coachStatuses ->
-                                                                                    "↻"
-
-                                                                                CoachSummaryStatus.TAUGHT in coachStatuses ->
-                                                                                    "✓"
-
-                                                                                else ->
-                                                                                    "—"
-                                                                            }
-                                                                        } else {
-                                                                            when {
-                                                                                isPartiallyKnown ->
-                                                                                    "◐"
-
-                                                                                state == MarkState.YES ->
-                                                                                    "✓"
-
-                                                                                state == MarkState.NO ->
-                                                                                    "✗"
-
-                                                                                else ->
-                                                                                    "—"
-                                                                            }
-                                                                        }
 
                                                                         Spacer(
                                                                             modifier =
@@ -4498,72 +4312,172 @@ fun SummaryScreen(
                                                                                 ""
                                                                             }
 
-                                                                        Box(
-                                                                            modifier =
-                                                                                Modifier.fillMaxWidth(),
-                                                                            contentAlignment =
-                                                                                if (isEnglish) {
-                                                                                    Alignment.CenterStart
-                                                                                } else {
-                                                                                    Alignment.CenterEnd
-                                                                                }
+                                                                        CompositionLocalProvider(
+                                                                            androidx.compose.ui.platform.LocalLayoutDirection provides
+                                                                                    if (isEnglish) LayoutDirection.Ltr else LayoutDirection.Rtl
                                                                         ) {
-                                                                            MaterialsExerciseStatusOption(
-                                                                                selected =
-                                                                                    if (isCoach) {
-                                                                                        coachStatuses.isNotEmpty()
-                                                                                    } else {
-                                                                                        isPartiallyKnown ||
-                                                                                                state != MarkState.NONE
-                                                                                    },
-                                                                                symbol =
-                                                                                    singleStatusMark,
-                                                                                label =
-                                                                                    singleStatusText,
-                                                                                dateText =
-                                                                                    singleStatusDateText,
-                                                                                activeColor =
-                                                                                    singleStatusColor,
-                                                                                modifier =
-                                                                                    Modifier
-                                                                                        .width(76.dp)
-                                                                                        .padding(
-                                                                                            horizontal = 2.dp,
-                                                                                            vertical = 1.dp
-                                                                                        ),
-                                                                                showSymbol = false,
-                                                                                onClick = {
-                                                                                    explainFromSearch =
-                                                                                        Triple(
-                                                                                            belt,
-                                                                                            row.sourceTopicTitle,
-                                                                                            itemRaw
+                                                                            Row(
+                                                                                modifier = Modifier
+                                                                                    .fillMaxWidth()
+                                                                                    .height(40.dp),
+                                                                                verticalAlignment = Alignment.CenterVertically,
+                                                                                horizontalArrangement = Arrangement.spacedBy(
+                                                                                    4.dp
+                                                                                )
+                                                                            ) {
+
+                                                                                // הערה / מוחרג / מועדף — באותה שורה
+                                                                                Row(
+                                                                                    modifier = Modifier.weight(
+                                                                                        1f
+                                                                                    ),
+                                                                                    horizontalArrangement = Arrangement.spacedBy(
+                                                                                        4.dp
+                                                                                    ),
+                                                                                    verticalAlignment = Alignment.CenterVertically
+                                                                                ) {
+                                                                                    val visibleTags =
+                                                                                        listOf(
+                                                                                            Triple(
+                                                                                                tr(
+                                                                                                    "הערה",
+                                                                                                    "Note"
+                                                                                                ),
+                                                                                                Color(
+                                                                                                    0xFF9A6B00
+                                                                                                ),
+                                                                                                itemHasNote
+                                                                                            ),
+                                                                                            Triple(
+                                                                                                tr(
+                                                                                                    "מועדף",
+                                                                                                    "Favorite"
+                                                                                                ),
+                                                                                                Color(
+                                                                                                    0xFF9A6B00
+                                                                                                ),
+                                                                                                itemIsFavorite
+                                                                                            ),
+                                                                                            Triple(
+                                                                                                tr(
+                                                                                                    "מוחרג",
+                                                                                                    "Excluded"
+                                                                                                ),
+                                                                                                MaterialTheme.colorScheme.onSurfaceVariant,
+                                                                                                itemIsExcluded
+                                                                                            )
                                                                                         )
+
+                                                                                    visibleTags.forEach { (tagText, tagColor, isVisible) ->
+                                                                                        Box(
+                                                                                            modifier = Modifier.weight(
+                                                                                                1f
+                                                                                            ),
+                                                                                            contentAlignment = Alignment.Center
+                                                                                        ) {
+                                                                                            if (isVisible) {
+                                                                                                Surface(
+                                                                                                    shape = RoundedCornerShape(
+                                                                                                        8.dp
+                                                                                                    ),
+                                                                                                    color = tagColor.copy(
+                                                                                                        alpha = 0.10f
+                                                                                                    )
+                                                                                                        .compositeOver(
+                                                                                                            MaterialTheme.colorScheme.surface
+                                                                                                        ),
+                                                                                                    border = BorderStroke(
+                                                                                                        1.dp,
+                                                                                                        tagColor.copy(
+                                                                                                            alpha = 0.30f
+                                                                                                        )
+                                                                                                    ),
+                                                                                                    tonalElevation = 0.dp,
+                                                                                                    shadowElevation = 0.dp
+                                                                                                ) {
+                                                                                                    Text(
+                                                                                                        text = tagText,
+                                                                                                        modifier = Modifier.padding(
+                                                                                                            horizontal = 5.dp,
+                                                                                                            vertical = 5.dp
+                                                                                                        ),
+                                                                                                        style = KmiTypography.caption.copy(
+                                                                                                            fontWeight = FontWeight.ExtraBold
+                                                                                                        ),
+                                                                                                        color = tagColor,
+                                                                                                        textAlign = TextAlign.Center,
+                                                                                                        maxLines = 1,
+                                                                                                        overflow = TextOverflow.Ellipsis
+                                                                                                    )
+                                                                                                }
+                                                                                            }
+                                                                                        }
+                                                                                    }
                                                                                 }
-                                                                            )
+
+                                                                                    // סטטוס התרגיל — במידות של MaterialsScreen
+                                                                                    Box(
+                                                                                        modifier = Modifier.width(
+                                                                                            76.dp
+                                                                                        ),
+                                                                                        contentAlignment = Alignment.Center
+                                                                                    ) {
+                                                                                        MaterialsExerciseStatusOption(
+                                                                                            selected =
+                                                                                                if (isCoach) {
+                                                                                                    coachStatuses.isNotEmpty()
+                                                                                                } else {
+                                                                                                    isPartiallyKnown ||
+                                                                                                            state != MarkState.NONE
+                                                                                                },
+                                                                                            symbol = singleStatusMark,
+                                                                                            label = singleStatusText,
+                                                                                            dateText = singleStatusDateText,
+                                                                                            activeColor = singleStatusColor,
+                                                                                            modifier = Modifier
+                                                                                                .width(
+                                                                                                    76.dp
+                                                                                                )
+                                                                                                .padding(
+                                                                                                    horizontal = 2.dp,
+                                                                                                    vertical = 1.dp
+                                                                                                ),
+                                                                                            showSymbol = false,
+                                                                                            onClick = {
+                                                                                                explainFromSearch =
+                                                                                                    Triple(
+                                                                                                        belt,
+                                                                                                        row.sourceTopicTitle,
+                                                                                                        itemRaw
+                                                                                                    )
+                                                                                            }
+                                                                                        )
+                                                                                    }
+                                                                                }
+                                                                            }
                                                                         }
                                                                     }
-                                                                }
 
-                                                                if (
-                                                                    rowIndex <
-                                                                    rowsInSubTopic.lastIndex
-                                                                ) {
-                                                                    HorizontalDivider(
-                                                                        modifier =
-                                                                            Modifier
-                                                                                .fillMaxWidth()
-                                                                                .padding(
-                                                                                    horizontal = 10.dp
-                                                                                ),
-                                                                        thickness = 0.5.dp,
-                                                                        color =
-                                                                            summaryColors
-                                                                                .outlineVariant
-                                                                                .copy(
-                                                                                    alpha = 0.28f
-                                                                                )
-                                                                    )
+                                                                    if (
+                                                                        rowIndex <
+                                                                        rowsInSubTopic.lastIndex
+                                                                    ) {
+                                                                        HorizontalDivider(
+                                                                            modifier =
+                                                                                Modifier
+                                                                                    .fillMaxWidth()
+                                                                                    .padding(
+                                                                                        horizontal = 10.dp
+                                                                                    ),
+                                                                            thickness = 0.5.dp,
+                                                                            color =
+                                                                                summaryColors
+                                                                                    .outlineVariant
+                                                                                    .copy(
+                                                                                        alpha = 0.28f
+                                                                                    )
+                                                                        )
+                                                                    }
                                                                 }
                                                             }
                                                         }
@@ -4580,1071 +4494,1070 @@ fun SummaryScreen(
             }
         }
     }
-}
-/* ------------------------------ PDF: Summary ------------------------------ */
+    /* ------------------------------ PDF: Summary ------------------------------ */
 
-private fun createSummaryPdf(
-    dir: File,
-    belt: Belt,
-    itemsByTopic:
-    Map<String, List<SummaryExerciseRow>>,
-    masteredMap:
-    Map<Pair<String, String>, MarkState>,
-    partiallyKnownIds:
-    Set<Pair<String, String>>,
-    isEnglish: Boolean = false,
-    topic: String = "",
-    subTopicFilter: String? = null
-): File {
-    val document = PdfDocument()
+    private fun createSummaryPdf(
+        dir: File,
+        belt: Belt,
+        itemsByTopic:
+        Map<String, List<SummaryExerciseRow>>,
+        masteredMap:
+        Map<Pair<String, String>, MarkState>,
+        partiallyKnownIds:
+        Set<Pair<String, String>>,
+        isEnglish: Boolean = false,
+        topic: String = "",
+        subTopicFilter: String? = null
+    ): File {
+        val document = PdfDocument()
 
-    val pageWidth = 595
-    val pageHeight = 842
-    val margin = 24f
-    val contentRight = pageWidth - margin
-    val footerY = 804f
-    val bodyBottom = footerY - 12f
+        val pageWidth = 595
+        val pageHeight = 842
+        val margin = 24f
+        val contentRight = pageWidth - margin
+        val footerY = 804f
+        val bodyBottom = footerY - 12f
 
-    fun tr(he: String, en: String): String = if (isEnglish) en else he
+        fun tr(he: String, en: String): String = if (isEnglish) en else he
 
-    val navy = android.graphics.Color.rgb(2, 43, 74)
-    val blue = android.graphics.Color.rgb(12, 78, 130)
-    val sky = android.graphics.Color.rgb(42, 132, 190)
-    val paleBlue = android.graphics.Color.rgb(234, 246, 255)
-    val softBlue = android.graphics.Color.rgb(246, 250, 254)
-    val borderBlue = android.graphics.Color.rgb(191, 213, 232)
-    val textDark = android.graphics.Color.rgb(15, 23, 42)
-    val textMuted = android.graphics.Color.rgb(80, 100, 120)
-    val green =
-        android.graphics.Color.rgb(
-            22,
-            163,
-            74
+        val navy = android.graphics.Color.rgb(2, 43, 74)
+        val blue = android.graphics.Color.rgb(12, 78, 130)
+        val sky = android.graphics.Color.rgb(42, 132, 190)
+        val paleBlue = android.graphics.Color.rgb(234, 246, 255)
+        val softBlue = android.graphics.Color.rgb(246, 250, 254)
+        val borderBlue = android.graphics.Color.rgb(191, 213, 232)
+        val textDark = android.graphics.Color.rgb(15, 23, 42)
+        val textMuted = android.graphics.Color.rgb(80, 100, 120)
+        val green =
+            android.graphics.Color.rgb(
+                22,
+                163,
+                74
+            )
+
+        val orange =
+            android.graphics.Color.rgb(
+                242,
+                140,
+                40
+            )
+
+        val red =
+            android.graphics.Color.rgb(
+                220,
+                38,
+                38
+            )
+
+        val gray =
+            android.graphics.Color.rgb(
+                107,
+                114,
+                128
+            )
+        val white = android.graphics.Color.WHITE
+
+        val regular = android.graphics.Typeface.create(
+            android.graphics.Typeface.SANS_SERIF,
+            android.graphics.Typeface.NORMAL
+        )
+        val bold = android.graphics.Typeface.create(
+            android.graphics.Typeface.SANS_SERIF,
+            android.graphics.Typeface.BOLD
         )
 
-    val orange =
-        android.graphics.Color.rgb(
-            242,
-            140,
-            40
-        )
-
-    val red =
-        android.graphics.Color.rgb(
-            220,
-            38,
-            38
-        )
-
-    val gray =
-        android.graphics.Color.rgb(
-            107,
-            114,
-            128
-        )
-    val white = android.graphics.Color.WHITE
-
-    val regular = android.graphics.Typeface.create(
-        android.graphics.Typeface.SANS_SERIF,
-        android.graphics.Typeface.NORMAL
-    )
-    val bold = android.graphics.Typeface.create(
-        android.graphics.Typeface.SANS_SERIF,
-        android.graphics.Typeface.BOLD
-    )
-
-    fun paint(
-        size: Float,
-        color: Int = textDark,
-        typeface: android.graphics.Typeface = regular,
-        align: android.graphics.Paint.Align = android.graphics.Paint.Align.LEFT
-    ) = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
-        textSize = size
-        this.color = color
-        this.typeface = typeface
-        textAlign = align
-    }
-
-    fun drawRoundRect(
-        canvas: android.graphics.Canvas,
-        left: Float,
-        top: Float,
-        right: Float,
-        bottom: Float,
-        color: Int,
-        radius: Float = 12f,
-        stroke: Boolean = false,
-        strokeWidth: Float = 1.2f
-    ) {
-        canvas.drawRoundRect(
-            left,
-            top,
-            right,
-            bottom,
-            radius,
-            radius,
-            android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
-                this.color = color
-                style = if (stroke) {
-                    android.graphics.Paint.Style.STROKE
-                } else {
-                    android.graphics.Paint.Style.FILL
-                }
-                this.strokeWidth = strokeWidth
-            }
-        )
-    }
-
-    fun buildTextLayout(
-        text: String,
-        width: Int,
-        size: Float,
-        color: Int,
-        typeface: android.graphics.Typeface = regular,
-        maxLines: Int = 2,
-        rtl: Boolean = !isEnglish,
-        alignment: android.text.Layout.Alignment? = null
-    ): android.text.StaticLayout {
-        val textPaint = android.text.TextPaint(
-            android.graphics.Paint.ANTI_ALIAS_FLAG
-        ).apply {
+        fun paint(
+            size: Float,
+            color: Int = textDark,
+            typeface: android.graphics.Typeface = regular,
+            align: android.graphics.Paint.Align = android.graphics.Paint.Align.LEFT
+        ) = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
             textSize = size
             this.color = color
             this.typeface = typeface
+            textAlign = align
         }
 
-        return android.text.StaticLayout.Builder
-            .obtain(text, 0, text.length, textPaint, width)
-            .setAlignment(
-                alignment ?: android.text.Layout.Alignment.ALIGN_NORMAL
-            )
-            .setTextDirection(
-                if (rtl) {
-                    android.text.TextDirectionHeuristics.RTL
-                } else {
-                    android.text.TextDirectionHeuristics.LTR
+        fun drawRoundRect(
+            canvas: android.graphics.Canvas,
+            left: Float,
+            top: Float,
+            right: Float,
+            bottom: Float,
+            color: Int,
+            radius: Float = 12f,
+            stroke: Boolean = false,
+            strokeWidth: Float = 1.2f
+        ) {
+            canvas.drawRoundRect(
+                left,
+                top,
+                right,
+                bottom,
+                radius,
+                radius,
+                android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+                    this.color = color
+                    style = if (stroke) {
+                        android.graphics.Paint.Style.STROKE
+                    } else {
+                        android.graphics.Paint.Style.FILL
+                    }
+                    this.strokeWidth = strokeWidth
                 }
             )
-            .setMaxLines(maxLines)
-            .setEllipsize(android.text.TextUtils.TruncateAt.END)
-            .setIncludePad(false)
-            .setLineSpacing(0f, 1.05f)
-            .build()
-    }
-
-    fun drawLayout(
-        canvas: android.graphics.Canvas,
-        layout: android.text.StaticLayout,
-        left: Float,
-        top: Float
-    ) {
-        canvas.withTranslation(left, top) {
-            layout.draw(this)
         }
-    }
 
-    fun statusIdForPdf(
-        row: SummaryExerciseRow
-    ): String {
-        return summaryExerciseIdentityIdFor(
-            belt = belt,
-            topicKey = row.statusTopicKey,
-            topicTitle = row.sourceTopicTitle,
-            index = row.indexInStatusGroup,
-            item = row.itemRaw
-        )
-    }
+        fun buildTextLayout(
+            text: String,
+            width: Int,
+            size: Float,
+            color: Int,
+            typeface: android.graphics.Typeface = regular,
+            maxLines: Int = 2,
+            rtl: Boolean = !isEnglish,
+            alignment: android.text.Layout.Alignment? = null
+        ): android.text.StaticLayout {
+            val textPaint = android.text.TextPaint(
+                android.graphics.Paint.ANTI_ALIAS_FLAG
+            ).apply {
+                textSize = size
+                this.color = color
+                this.typeface = typeface
+            }
 
-    fun stateFor(
-        topicTitle: String,
-        row: SummaryExerciseRow
-    ): MarkState {
-        val statusId =
-            statusIdForPdf(row)
+            return android.text.StaticLayout.Builder
+                .obtain(text, 0, text.length, textPaint, width)
+                .setAlignment(
+                    alignment ?: android.text.Layout.Alignment.ALIGN_NORMAL
+                )
+                .setTextDirection(
+                    if (rtl) {
+                        android.text.TextDirectionHeuristics.RTL
+                    } else {
+                        android.text.TextDirectionHeuristics.LTR
+                    }
+                )
+                .setMaxLines(maxLines)
+                .setEllipsize(android.text.TextUtils.TruncateAt.END)
+                .setIncludePad(false)
+                .setLineSpacing(0f, 1.05f)
+                .build()
+        }
 
-        return masteredMap[
-            topicTitle to statusId
-        ] ?: MarkState.NONE
-    }
-
-    fun isPartiallyKnownFor(
-        topicTitle: String,
-        row: SummaryExerciseRow
-    ): Boolean {
-        val statusId =
-            statusIdForPdf(row)
-
-        return partiallyKnownIds.contains(
-            topicTitle to statusId
-        )
-    }
-
-    val allRows =
-        itemsByTopic.values.flatten()
-
-    val knownCount =
-        itemsByTopic.entries.sumOf { (topicTitle, rows) ->
-            rows.count { row ->
-                stateFor(
-                    topicTitle,
-                    row
-                ) == MarkState.YES
+        fun drawLayout(
+            canvas: android.graphics.Canvas,
+            layout: android.text.StaticLayout,
+            left: Float,
+            top: Float
+        ) {
+            canvas.withTranslation(left, top) {
+                layout.draw(this)
             }
         }
 
-    val partiallyKnownCount =
-        itemsByTopic.entries.sumOf { (topicTitle, rows) ->
-            rows.count { row ->
-                isPartiallyKnownFor(
-                    topicTitle,
-                    row
-                )
-            }
-        }
-
-    val notKnownCount =
-        itemsByTopic.entries.sumOf { (topicTitle, rows) ->
-            rows.count { row ->
-                stateFor(
-                    topicTitle,
-                    row
-                ) == MarkState.NO &&
-                        !isPartiallyKnownFor(
-                            topicTitle,
-                            row
-                        )
-            }
-        }
-
-    val unmarkedCount =
-        (
-                allRows.size -
-                        knownCount -
-                        partiallyKnownCount -
-                        notKnownCount
-                )
-            .coerceAtLeast(0)
-
-    val markedCount =
-        knownCount +
-                partiallyKnownCount +
-                notKnownCount
-
-    val markedPercent =
-        if (allRows.isEmpty()) {
-            0
-        } else {
-            markedCount *
-                    100 /
-                    allRows.size
-        }
-
-    val beltLabel = if (isEnglish) {
-        when (belt) {
-            Belt.WHITE -> "White Belt"
-            Belt.YELLOW -> "Yellow Belt"
-            Belt.ORANGE -> "Orange Belt"
-            Belt.GREEN -> "Green Belt"
-            Belt.BLUE -> "Blue Belt"
-            Belt.BROWN -> "Brown Belt"
-            Belt.BLACK -> "Black Belt"
-        }
-    } else {
-        val clean = belt.heb.trim()
-        if (clean.startsWith("חגורה")) clean else "חגורה $clean"
-    }
-
-    val scopeLabel = when {
-        topic.isNotBlank() && !subTopicFilter.isNullOrBlank() -> {
-            val topicName = topicDisplayName(topic, isEnglish)
-            val subName =
-                subTopicDisplayName(
-                    subTopicFilter,
-                    isEnglish
-                )
-            "$topicName · $subName"
-        }
-
-        topic.isNotBlank() -> topicDisplayName(topic, isEnglish)
-        else -> tr("כל נושאי החגורה", "All belt topics")
-    }
-
-    data class PdfRow(
-        val number: Int,
-        val topicTitle: String,
-        val subTopicTitle: String?,
-        val title: String,
-        val state: MarkState,
-        val isPartiallyKnown: Boolean,
-        val height: Float
-    )
-
-    data class PdfBlock(
-        val topicTitle: String,
-        val topicPercent: Int,
-        val rows: List<PdfRow>
-    )
-
-    val textAreaWidth = (pageWidth - margin * 2f - 92f).toInt()
-    var runningNumber = 1
-
-    val blocks = itemsByTopic.map { (topicTitle, rows) ->
-        val knownInTopic = rows.count { stateFor(topicTitle, it) == MarkState.YES }
-        val topicPercent = if (rows.isEmpty()) 0 else knownInTopic * 100 / rows.size
-
-        val pdfRows = rows.map { row ->
-            val title = exerciseDisplayNameForUi(
+        fun statusIdForPdf(
+            row: SummaryExerciseRow
+        ): String {
+            return summaryExerciseIdentityIdFor(
+                belt = belt,
+                topicKey = row.statusTopicKey,
                 topicTitle = row.sourceTopicTitle,
-                rawItem = row.itemRaw,
-                isEnglish = isEnglish
+                index = row.indexInStatusGroup,
+                item = row.itemRaw
             )
-            val layout = buildTextLayout(
-                text = title,
-                width = textAreaWidth,
-                size = 11.5f,
-                color = textDark,
-                typeface = bold,
-                maxLines = 3
+        }
+
+        fun stateFor(
+            topicTitle: String,
+            row: SummaryExerciseRow
+        ): MarkState {
+            val statusId =
+                statusIdForPdf(row)
+
+            return masteredMap[
+                topicTitle to statusId
+            ] ?: MarkState.NONE
+        }
+
+        fun isPartiallyKnownFor(
+            topicTitle: String,
+            row: SummaryExerciseRow
+        ): Boolean {
+            val statusId =
+                statusIdForPdf(row)
+
+            return partiallyKnownIds.contains(
+                topicTitle to statusId
             )
-            PdfRow(
-                number = runningNumber++,
-                topicTitle = topicTitle,
-                subTopicTitle = row.subTopicTitle,
-                title = title,
-                state =
+        }
+
+        val allRows =
+            itemsByTopic.values.flatten()
+
+        val knownCount =
+            itemsByTopic.entries.sumOf { (topicTitle, rows) ->
+                rows.count { row ->
                     stateFor(
                         topicTitle,
                         row
-                    ),
-                isPartiallyKnown =
+                    ) == MarkState.YES
+                }
+            }
+
+        val partiallyKnownCount =
+            itemsByTopic.entries.sumOf { (topicTitle, rows) ->
+                rows.count { row ->
                     isPartiallyKnownFor(
                         topicTitle,
                         row
-                    ),
-                height =
-                    maxOf(
-                        64f,
-                        layout.height + 40f
                     )
+                }
+            }
+
+        val notKnownCount =
+            itemsByTopic.entries.sumOf { (topicTitle, rows) ->
+                rows.count { row ->
+                    stateFor(
+                        topicTitle,
+                        row
+                    ) == MarkState.NO &&
+                            !isPartiallyKnownFor(
+                                topicTitle,
+                                row
+                            )
+                }
+            }
+
+        val unmarkedCount =
+            (
+                    allRows.size -
+                            knownCount -
+                            partiallyKnownCount -
+                            notKnownCount
+                    )
+                .coerceAtLeast(0)
+
+        val markedCount =
+            knownCount +
+                    partiallyKnownCount +
+                    notKnownCount
+
+        val markedPercent =
+            if (allRows.isEmpty()) {
+                0
+            } else {
+                markedCount *
+                        100 /
+                        allRows.size
+            }
+
+        val beltLabel = if (isEnglish) {
+            when (belt) {
+                Belt.WHITE -> "White Belt"
+                Belt.YELLOW -> "Yellow Belt"
+                Belt.ORANGE -> "Orange Belt"
+                Belt.GREEN -> "Green Belt"
+                Belt.BLUE -> "Blue Belt"
+                Belt.BROWN -> "Brown Belt"
+                Belt.BLACK -> "Black Belt"
+            }
+        } else {
+            val clean = belt.heb.trim()
+            if (clean.startsWith("חגורה")) clean else "חגורה $clean"
+        }
+
+        val scopeLabel = when {
+            topic.isNotBlank() && !subTopicFilter.isNullOrBlank() -> {
+                val topicName = topicDisplayName(topic, isEnglish)
+                val subName =
+                    subTopicDisplayName(
+                        subTopicFilter,
+                        isEnglish
+                    )
+                "$topicName · $subName"
+            }
+
+            topic.isNotBlank() -> topicDisplayName(topic, isEnglish)
+            else -> tr("כל נושאי החגורה", "All belt topics")
+        }
+
+        data class PdfRow(
+            val number: Int,
+            val topicTitle: String,
+            val subTopicTitle: String?,
+            val title: String,
+            val state: MarkState,
+            val isPartiallyKnown: Boolean,
+            val height: Float
+        )
+
+        data class PdfBlock(
+            val topicTitle: String,
+            val topicPercent: Int,
+            val rows: List<PdfRow>
+        )
+
+        val textAreaWidth = (pageWidth - margin * 2f - 92f).toInt()
+        var runningNumber = 1
+
+        val blocks = itemsByTopic.map { (topicTitle, rows) ->
+            val knownInTopic = rows.count { stateFor(topicTitle, it) == MarkState.YES }
+            val topicPercent = if (rows.isEmpty()) 0 else knownInTopic * 100 / rows.size
+
+            val pdfRows = rows.map { row ->
+                val title = exerciseDisplayNameForUi(
+                    topicTitle = row.sourceTopicTitle,
+                    rawItem = row.itemRaw,
+                    isEnglish = isEnglish
+                )
+                val layout = buildTextLayout(
+                    text = title,
+                    width = textAreaWidth,
+                    size = 11.5f,
+                    color = textDark,
+                    typeface = bold,
+                    maxLines = 3
+                )
+                PdfRow(
+                    number = runningNumber++,
+                    topicTitle = topicTitle,
+                    subTopicTitle = row.subTopicTitle,
+                    title = title,
+                    state =
+                        stateFor(
+                            topicTitle,
+                            row
+                        ),
+                    isPartiallyKnown =
+                        isPartiallyKnownFor(
+                            topicTitle,
+                            row
+                        ),
+                    height =
+                        maxOf(
+                            64f,
+                            layout.height + 40f
+                        )
+                )
+            }
+
+            PdfBlock(
+                topicTitle = topicTitle,
+                topicPercent = topicPercent,
+                rows = pdfRows
             )
         }
 
-        PdfBlock(
-            topicTitle = topicTitle,
-            topicPercent = topicPercent,
-            rows = pdfRows
-        )
-    }
-
-    data class PageElement(
-        val type: Int,
-        val title: String = "",
-        val percent: Int = 0,
-        val row: PdfRow? = null
-    )
-
-    val topicHeaderType = 1
-    val subTopicHeaderType = 2
-    val exerciseType = 3
-
-    val firstPageBodyTop = 278f
-    val nextPageBodyTop = 156f
-    val firstCapacity = bodyBottom - firstPageBodyTop
-    val nextCapacity = bodyBottom - nextPageBodyTop
-
-    fun elementHeight(element: PageElement): Float = when (element.type) {
-        topicHeaderType -> 44f
-        subTopicHeaderType -> 30f
-        else -> (element.row?.height ?: 64f) + 8f
-    }
-
-    val pages = mutableListOf<MutableList<PageElement>>()
-    var current = mutableListOf<PageElement>()
-    var used = 0f
-    var capacity = firstCapacity
-
-    fun pushPage() {
-        pages += current
-        current = mutableListOf()
-        used = 0f
-        capacity = nextCapacity
-    }
-
-    blocks.forEach { block ->
-        val header = PageElement(
-            type = topicHeaderType,
-            title = topicDisplayName(block.topicTitle, isEnglish),
-            percent = block.topicPercent
+        data class PageElement(
+            val type: Int,
+            val title: String = "",
+            val percent: Int = 0,
+            val row: PdfRow? = null
         )
 
-        if (used + elementHeight(header) > capacity && current.isNotEmpty()) {
-            pushPage()
+        val topicHeaderType = 1
+        val subTopicHeaderType = 2
+        val exerciseType = 3
+
+        val firstPageBodyTop = 278f
+        val nextPageBodyTop = 156f
+        val firstCapacity = bodyBottom - firstPageBodyTop
+        val nextCapacity = bodyBottom - nextPageBodyTop
+
+        fun elementHeight(element: PageElement): Float = when (element.type) {
+            topicHeaderType -> 44f
+            subTopicHeaderType -> 30f
+            else -> (element.row?.height ?: 64f) + 8f
         }
-        current += header
-        used += elementHeight(header)
 
-        var previousSubTopic: String? = null
+        val pages = mutableListOf<MutableList<PageElement>>()
+        var current = mutableListOf<PageElement>()
+        var used = 0f
+        var capacity = firstCapacity
 
-        block.rows.forEach { row ->
-            val cleanSub = row.subTopicTitle?.trim().orEmpty()
-            if (cleanSub.isNotBlank() && cleanSub != previousSubTopic) {
-                val subHeader = PageElement(
-                    type = subTopicHeaderType,
-                    title = subTopicDisplayName(
-                        subTopicTitle = cleanSub,
-                        isEnglish = isEnglish
-                    )
-                )
+        fun pushPage() {
+            pages += current
+            current = mutableListOf()
+            used = 0f
+            capacity = nextCapacity
+        }
 
-                if (used + elementHeight(subHeader) + elementHeight(
-                        PageElement(
-                            type = exerciseType,
-                            row = row
-                        )
-                    ) > capacity &&
-                    current.isNotEmpty()
-                ) {
-                    pushPage()
-                    current += header
-                    used += elementHeight(header)
-                }
+        blocks.forEach { block ->
+            val header = PageElement(
+                type = topicHeaderType,
+                title = topicDisplayName(block.topicTitle, isEnglish),
+                percent = block.topicPercent
+            )
 
-                current += subHeader
-                used += elementHeight(subHeader)
-                previousSubTopic = cleanSub
-            }
-
-            val exercise = PageElement(type = exerciseType, row = row)
-            if (used + elementHeight(exercise) > capacity && current.isNotEmpty()) {
+            if (used + elementHeight(header) > capacity && current.isNotEmpty()) {
                 pushPage()
-                current += header
-                used += elementHeight(header)
+            }
+            current += header
+            used += elementHeight(header)
 
-                if (cleanSub.isNotBlank()) {
-                    val repeatedSubHeader = PageElement(
+            var previousSubTopic: String? = null
+
+            block.rows.forEach { row ->
+                val cleanSub = row.subTopicTitle?.trim().orEmpty()
+                if (cleanSub.isNotBlank() && cleanSub != previousSubTopic) {
+                    val subHeader = PageElement(
                         type = subTopicHeaderType,
                         title = subTopicDisplayName(
                             subTopicTitle = cleanSub,
                             isEnglish = isEnglish
                         )
                     )
-                    current += repeatedSubHeader
-                    used += elementHeight(repeatedSubHeader)
-                }
-            }
 
-            current += exercise
-            used += elementHeight(exercise)
-        }
-    }
+                    if (used + elementHeight(subHeader) + elementHeight(
+                            PageElement(
+                                type = exerciseType,
+                                row = row
+                            )
+                        ) > capacity &&
+                        current.isNotEmpty()
+                    ) {
+                        pushPage()
+                        current += header
+                        used += elementHeight(header)
+                    }
 
-    if (current.isNotEmpty() || pages.isEmpty()) {
-        pages += current
-    }
-
-    fun drawKmiLogo(
-        canvas: android.graphics.Canvas,
-        cx: Float,
-        cy: Float,
-        radius: Float
-    ) {
-        canvas.drawCircle(
-            cx,
-            cy,
-            radius,
-            android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
-                color = navy
-            }
-        )
-        canvas.drawCircle(
-            cx,
-            cy,
-            radius - 4f,
-            android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
-                color = white
-            }
-        )
-        canvas.drawText(
-            "KAMI",
-            cx,
-            cy + radius * 0.22f,
-            paint(
-                size = radius * 0.62f,
-                color = navy,
-                typeface = bold,
-                align = android.graphics.Paint.Align.CENTER
-            )
-        )
-    }
-
-    fun drawHeader(canvas: android.graphics.Canvas, pageNumber: Int) {
-        canvas.drawColor(white)
-
-        canvas.drawPath(
-            android.graphics.Path().apply {
-                moveTo(pageWidth.toFloat(), 0f)
-                lineTo(pageWidth.toFloat(), 122f)
-                lineTo(178f, 122f)
-                lineTo(238f, 0f)
-                close()
-            },
-            android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
-                color = navy
-            }
-        )
-
-        canvas.drawPath(
-            android.graphics.Path().apply {
-                moveTo(208f, 122f)
-                lineTo(224f, 122f)
-                lineTo(284f, 0f)
-                lineTo(268f, 0f)
-                close()
-            },
-            android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
-                color = sky
-            }
-        )
-
-        canvas.drawPath(
-            android.graphics.Path().apply {
-                moveTo(230f, 122f)
-                lineTo(238f, 122f)
-                lineTo(298f, 0f)
-                lineTo(290f, 0f)
-                close()
-            },
-            android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
-                color = android.graphics.Color.rgb(128, 183, 220)
-            }
-        )
-
-        drawKmiLogo(canvas, 78f, 58f, 42f)
-
-        val titleLayout = buildTextLayout(
-            text = tr("דו״ח סיכום חגורה", "Belt summary report"),
-            width = 330,
-            size = 26f,
-            color = white,
-            typeface = bold,
-            maxLines = 1
-        )
-        drawLayout(canvas, titleLayout, pageWidth - 34f - 330f, 28f)
-
-        val subtitleLayout = buildTextLayout(
-            text = "$beltLabel · $scopeLabel",
-            width = 330,
-            size = 12.5f,
-            color = white,
-            maxLines = 2
-        )
-        drawLayout(canvas, subtitleLayout, pageWidth - 34f - 330f, 67f)
-
-        val generated = java.text.SimpleDateFormat(
-            "dd/MM/yyyy",
-            java.util.Locale.getDefault()
-        ).format(java.util.Date())
-
-        val infoLayout = buildTextLayout(
-            text = "${tr("תאריך הפקה", "Generated")}: $generated",
-            width = 260,
-            size = 9f,
-            color = textMuted,
-            maxLines = 1
-        )
-        drawLayout(canvas, infoLayout, pageWidth - margin - 260f, 132f)
-
-        if (pageNumber > 1) {
-            val continuation = buildTextLayout(
-                text = tr("המשך רשימת התרגילים", "Exercises list continued"),
-                width = 250,
-                size = 14f,
-                color = blue,
-                typeface = bold,
-                maxLines = 1,
-                alignment = android.text.Layout.Alignment.ALIGN_CENTER
-            )
-            drawLayout(canvas, continuation, (pageWidth - 250f) / 2f, 132f)
-        }
-    }
-
-    fun drawFooter(
-        canvas: android.graphics.Canvas,
-        pageNumber: Int,
-        totalPages: Int
-    ) {
-        canvas.drawLine(
-            0f,
-            footerY,
-            pageWidth.toFloat(),
-            footerY,
-            android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
-                color = navy
-                strokeWidth = 2f
-            }
-        )
-
-        drawKmiLogo(canvas, 38f, footerY + 22f, 13f)
-
-        canvas.drawText(
-            "Together We Protect",
-            62f,
-            footerY + 25f,
-            paint(
-                size = 9f,
-                color = textMuted,
-                align = android.graphics.Paint.Align.LEFT
-            )
-        )
-
-        canvas.drawText(
-            tr(
-                "עמוד $pageNumber מתוך $totalPages",
-                "Page $pageNumber of $totalPages"
-            ),
-            pageWidth / 2f,
-            footerY + 25f,
-            paint(
-                size = 9f,
-                color = textMuted,
-                align = android.graphics.Paint.Align.CENTER
-            )
-        )
-
-        canvas.drawText(
-            "Krav Maga Israel",
-            pageWidth - 66f,
-            footerY + 18f,
-            paint(
-                size = 9f,
-                color = textMuted,
-                align = android.graphics.Paint.Align.RIGHT
-            )
-        )
-        canvas.drawText(
-            "www.kmi.org.il",
-            pageWidth - 66f,
-            footerY + 31f,
-            paint(
-                size = 8f,
-                color = textMuted,
-                align = android.graphics.Paint.Align.RIGHT
-            )
-        )
-    }
-
-    fun drawSummaryCard(canvas: android.graphics.Canvas, top: Float) {
-        drawRoundRect(
-            canvas,
-            margin,
-            top,
-            contentRight,
-            top + 118f,
-            paleBlue,
-            14f
-        )
-        drawRoundRect(
-            canvas,
-            margin,
-            top,
-            contentRight,
-            top + 118f,
-            borderBlue,
-            14f,
-            stroke = true
-        )
-
-        val summaryTitle = buildTextLayout(
-            text = tr("סיכום תרגילים", "Exercises summary"),
-            width = (pageWidth - margin * 2f - 40f).toInt(),
-            size = 17f,
-            color = blue,
-            typeface = bold,
-            maxLines = 1
-        )
-        drawLayout(canvas, summaryTitle, margin + 20f, top + 16f)
-
-        val stats = listOf(
-            knownCount.toString() to
-                    tr("יודע", "Known"),
-
-            partiallyKnownCount.toString() to
-                    tr("חלקית", "Partial"),
-
-            notKnownCount.toString() to
-                    tr("לא יודע", "Not known"),
-
-            unmarkedCount.toString() to
-                    tr("לא סומן", "Unmarked"),
-
-            "$markedPercent%" to
-                    tr("סומנו", "Marked")
-        )
-
-        val gap = 6f
-        val innerLeft = margin + 16f
-
-        val cardWidth =
-            (
-                    pageWidth -
-                            margin * 2f -
-                            32f -
-                            gap * 4f
-                    ) / 5f
-        val cardTop = top + 48f
-
-        stats.forEachIndexed { index, (value, label) ->
-            val left = innerLeft + index * (cardWidth + gap)
-            val right = left + cardWidth
-
-            drawRoundRect(
-                canvas,
-                left,
-                cardTop,
-                right,
-                cardTop + 54f,
-                white,
-                10f
-            )
-            drawRoundRect(
-                canvas,
-                left,
-                cardTop,
-                right,
-                cardTop + 54f,
-                borderBlue,
-                10f,
-                stroke = true
-            )
-
-            val valueColor =
-                when (index) {
-                    0 -> green
-                    1 -> orange
-                    2 -> red
-                    3 -> gray
-                    else -> blue
+                    current += subHeader
+                    used += elementHeight(subHeader)
+                    previousSubTopic = cleanSub
                 }
 
+                val exercise = PageElement(type = exerciseType, row = row)
+                if (used + elementHeight(exercise) > capacity && current.isNotEmpty()) {
+                    pushPage()
+                    current += header
+                    used += elementHeight(header)
+
+                    if (cleanSub.isNotBlank()) {
+                        val repeatedSubHeader = PageElement(
+                            type = subTopicHeaderType,
+                            title = subTopicDisplayName(
+                                subTopicTitle = cleanSub,
+                                isEnglish = isEnglish
+                            )
+                        )
+                        current += repeatedSubHeader
+                        used += elementHeight(repeatedSubHeader)
+                    }
+                }
+
+                current += exercise
+                used += elementHeight(exercise)
+            }
+        }
+
+        if (current.isNotEmpty() || pages.isEmpty()) {
+            pages += current
+        }
+
+        fun drawKmiLogo(
+            canvas: android.graphics.Canvas,
+            cx: Float,
+            cy: Float,
+            radius: Float
+        ) {
+            canvas.drawCircle(
+                cx,
+                cy,
+                radius,
+                android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+                    color = navy
+                }
+            )
+            canvas.drawCircle(
+                cx,
+                cy,
+                radius - 4f,
+                android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+                    color = white
+                }
+            )
             canvas.drawText(
-                value,
-                (left + right) / 2f,
-                cardTop + 23f,
+                "KAMI",
+                cx,
+                cy + radius * 0.22f,
                 paint(
-                    size = 15f,
-                    color = valueColor,
+                    size = radius * 0.62f,
+                    color = navy,
                     typeface = bold,
                     align = android.graphics.Paint.Align.CENTER
                 )
             )
+        }
+
+        fun drawHeader(canvas: android.graphics.Canvas, pageNumber: Int) {
+            canvas.drawColor(white)
+
+            canvas.drawPath(
+                android.graphics.Path().apply {
+                    moveTo(pageWidth.toFloat(), 0f)
+                    lineTo(pageWidth.toFloat(), 122f)
+                    lineTo(178f, 122f)
+                    lineTo(238f, 0f)
+                    close()
+                },
+                android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+                    color = navy
+                }
+            )
+
+            canvas.drawPath(
+                android.graphics.Path().apply {
+                    moveTo(208f, 122f)
+                    lineTo(224f, 122f)
+                    lineTo(284f, 0f)
+                    lineTo(268f, 0f)
+                    close()
+                },
+                android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+                    color = sky
+                }
+            )
+
+            canvas.drawPath(
+                android.graphics.Path().apply {
+                    moveTo(230f, 122f)
+                    lineTo(238f, 122f)
+                    lineTo(298f, 0f)
+                    lineTo(290f, 0f)
+                    close()
+                },
+                android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+                    color = android.graphics.Color.rgb(128, 183, 220)
+                }
+            )
+
+            drawKmiLogo(canvas, 78f, 58f, 42f)
+
+            val titleLayout = buildTextLayout(
+                text = tr("דו״ח סיכום חגורה", "Belt summary report"),
+                width = 330,
+                size = 26f,
+                color = white,
+                typeface = bold,
+                maxLines = 1
+            )
+            drawLayout(canvas, titleLayout, pageWidth - 34f - 330f, 28f)
+
+            val subtitleLayout = buildTextLayout(
+                text = "$beltLabel · $scopeLabel",
+                width = 330,
+                size = 12.5f,
+                color = white,
+                maxLines = 2
+            )
+            drawLayout(canvas, subtitleLayout, pageWidth - 34f - 330f, 67f)
+
+            val generated = java.text.SimpleDateFormat(
+                "dd/MM/yyyy",
+                java.util.Locale.getDefault()
+            ).format(java.util.Date())
+
+            val infoLayout = buildTextLayout(
+                text = "${tr("תאריך הפקה", "Generated")}: $generated",
+                width = 260,
+                size = 9f,
+                color = textMuted,
+                maxLines = 1
+            )
+            drawLayout(canvas, infoLayout, pageWidth - margin - 260f, 132f)
+
+            if (pageNumber > 1) {
+                val continuation = buildTextLayout(
+                    text = tr("המשך רשימת התרגילים", "Exercises list continued"),
+                    width = 250,
+                    size = 14f,
+                    color = blue,
+                    typeface = bold,
+                    maxLines = 1,
+                    alignment = android.text.Layout.Alignment.ALIGN_CENTER
+                )
+                drawLayout(canvas, continuation, (pageWidth - 250f) / 2f, 132f)
+            }
+        }
+
+        fun drawFooter(
+            canvas: android.graphics.Canvas,
+            pageNumber: Int,
+            totalPages: Int
+        ) {
+            canvas.drawLine(
+                0f,
+                footerY,
+                pageWidth.toFloat(),
+                footerY,
+                android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+                    color = navy
+                    strokeWidth = 2f
+                }
+            )
+
+            drawKmiLogo(canvas, 38f, footerY + 22f, 13f)
+
             canvas.drawText(
-                label,
-                (left + right) / 2f,
-                cardTop + 42f,
+                "Together We Protect",
+                62f,
+                footerY + 25f,
                 paint(
-                    size = 8.5f,
+                    size = 9f,
+                    color = textMuted,
+                    align = android.graphics.Paint.Align.LEFT
+                )
+            )
+
+            canvas.drawText(
+                tr(
+                    "עמוד $pageNumber מתוך $totalPages",
+                    "Page $pageNumber of $totalPages"
+                ),
+                pageWidth / 2f,
+                footerY + 25f,
+                paint(
+                    size = 9f,
                     color = textMuted,
                     align = android.graphics.Paint.Align.CENTER
                 )
             )
-        }
-    }
 
-    fun drawTopicHeader(
-        canvas: android.graphics.Canvas,
-        top: Float,
-        title: String,
-        percent: Int
-    ): Float {
-        drawRoundRect(
-            canvas,
-            margin,
-            top,
-            contentRight,
-            top + 36f,
-            navy,
-            10f
-        )
-
-        val layout = buildTextLayout(
-            text = "$title · $percent%",
-            width = (pageWidth - margin * 2f - 28f).toInt(),
-            size = 13f,
-            color = white,
-            typeface = bold,
-            maxLines = 1
-        )
-        drawLayout(canvas, layout, margin + 14f, top + 9f)
-
-        return top + 44f
-    }
-
-    fun drawSubTopicHeader(
-        canvas: android.graphics.Canvas,
-        top: Float,
-        title: String
-    ): Float {
-        drawRoundRect(
-            canvas,
-            margin + 10f,
-            top,
-            contentRight - 10f,
-            top + 24f,
-            android.graphics.Color.rgb(225, 240, 251),
-            8f
-        )
-
-        val layout = buildTextLayout(
-            text = title,
-            width = (pageWidth - margin * 2f - 48f).toInt(),
-            size = 10.5f,
-            color = blue,
-            typeface = bold,
-            maxLines = 1
-        )
-        drawLayout(canvas, layout, margin + 24f, top + 6f)
-
-        return top + 30f
-    }
-
-    fun drawExerciseCard(
-        canvas: android.graphics.Canvas,
-        top: Float,
-        row: PdfRow
-    ): Float {
-        val bottom = top + row.height
-        val statusColor =
-            if (row.isPartiallyKnown) {
-                orange
-            } else {
-                when (row.state) {
-                    MarkState.YES ->
-                        green
-
-                    MarkState.NO ->
-                        red
-
-                    MarkState.NONE ->
-                        gray
-                }
-            }
-
-        val statusLabel =
-            if (row.isPartiallyKnown) {
-                tr(
-                    "יודע חלקית",
-                    "Partially known"
+            canvas.drawText(
+                "Krav Maga Israel",
+                pageWidth - 66f,
+                footerY + 18f,
+                paint(
+                    size = 9f,
+                    color = textMuted,
+                    align = android.graphics.Paint.Align.RIGHT
                 )
-            } else {
-                when (row.state) {
-                    MarkState.YES ->
-                        tr(
-                            "יודע",
-                            "Known"
-                        )
-
-                    MarkState.NO ->
-                        tr(
-                            "לא יודע",
-                            "Not known"
-                        )
-
-                    MarkState.NONE ->
-                        tr(
-                            "לא סומן",
-                            "Unmarked"
-                        )
-                }
-            }
-
-        drawRoundRect(
-            canvas,
-            margin,
-            top,
-            contentRight,
-            bottom,
-            softBlue,
-            12f
-        )
-        drawRoundRect(
-            canvas,
-            margin,
-            top,
-            contentRight,
-            bottom,
-            borderBlue,
-            12f,
-            stroke = true
-        )
-
-        val circleCenterX = if (isEnglish) margin + 23f else contentRight - 23f
-        canvas.drawCircle(
-            circleCenterX,
-            top + 27f,
-            14f,
-            android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
-                color = blue
-            }
-        )
-        canvas.drawText(
-            row.number.toString(),
-            circleCenterX,
-            top + 31f,
-            paint(
-                size = 10f,
-                color = white,
-                typeface = bold,
-                align = android.graphics.Paint.Align.CENTER
             )
-        )
-
-        val titleLeft = if (isEnglish) margin + 48f else margin + 22f
-        val titleLayout = buildTextLayout(
-            text = row.title,
-            width = textAreaWidth,
-            size = 11.5f,
-            color = textDark,
-            typeface = bold,
-            maxLines = 3
-        )
-        drawLayout(canvas, titleLayout, titleLeft, top + 11f)
-
-        val statusPaint = paint(
-            size = 9f,
-            color = statusColor,
-            typeface = bold,
-            align = if (isEnglish) {
-                android.graphics.Paint.Align.RIGHT
-            } else {
-                android.graphics.Paint.Align.LEFT
-            }
-        )
-
-        canvas.drawText(
-            statusLabel,
-            if (isEnglish) contentRight - 16f else margin + 16f,
-            bottom - 12f,
-            statusPaint
-        )
-
-        canvas.drawCircle(
-            if (isEnglish) contentRight - 20f else margin + 20f,
-            top + 20f,
-            4f,
-            android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
-                color = statusColor
-            }
-        )
-
-        return bottom + 8f
-    }
-
-    pages.forEachIndexed { pageIndex, elements ->
-        val pageNumber = pageIndex + 1
-        val page = document.startPage(
-            PdfDocument.PageInfo.Builder(
-                pageWidth,
-                pageHeight,
-                pageNumber
-            ).create()
-        )
-        val canvas = page.canvas
-
-        drawHeader(canvas, pageNumber)
-
-        var y = if (pageNumber == 1) {
-            drawSummaryCard(canvas, 148f)
-            firstPageBodyTop
-        } else {
-            nextPageBodyTop
+            canvas.drawText(
+                "www.kmi.org.il",
+                pageWidth - 66f,
+                footerY + 31f,
+                paint(
+                    size = 8f,
+                    color = textMuted,
+                    align = android.graphics.Paint.Align.RIGHT
+                )
+            )
         }
 
-        if (elements.isEmpty()) {
+        fun drawSummaryCard(canvas: android.graphics.Canvas, top: Float) {
             drawRoundRect(
                 canvas,
                 margin,
-                y,
+                top,
                 contentRight,
-                y + 92f,
+                top + 118f,
+                paleBlue,
+                14f
+            )
+            drawRoundRect(
+                canvas,
+                margin,
+                top,
+                contentRight,
+                top + 118f,
+                borderBlue,
+                14f,
+                stroke = true
+            )
+
+            val summaryTitle = buildTextLayout(
+                text = tr("סיכום תרגילים", "Exercises summary"),
+                width = (pageWidth - margin * 2f - 40f).toInt(),
+                size = 17f,
+                color = blue,
+                typeface = bold,
+                maxLines = 1
+            )
+            drawLayout(canvas, summaryTitle, margin + 20f, top + 16f)
+
+            val stats = listOf(
+                knownCount.toString() to
+                        tr("יודע", "Known"),
+
+                partiallyKnownCount.toString() to
+                        tr("חלקית", "Partial"),
+
+                notKnownCount.toString() to
+                        tr("לא יודע", "Not known"),
+
+                unmarkedCount.toString() to
+                        tr("לא סומן", "Unmarked"),
+
+                "$markedPercent%" to
+                        tr("סומנו", "Marked")
+            )
+
+            val gap = 6f
+            val innerLeft = margin + 16f
+
+            val cardWidth =
+                (
+                        pageWidth -
+                                margin * 2f -
+                                32f -
+                                gap * 4f
+                        ) / 5f
+            val cardTop = top + 48f
+
+            stats.forEachIndexed { index, (value, label) ->
+                val left = innerLeft + index * (cardWidth + gap)
+                val right = left + cardWidth
+
+                drawRoundRect(
+                    canvas,
+                    left,
+                    cardTop,
+                    right,
+                    cardTop + 54f,
+                    white,
+                    10f
+                )
+                drawRoundRect(
+                    canvas,
+                    left,
+                    cardTop,
+                    right,
+                    cardTop + 54f,
+                    borderBlue,
+                    10f,
+                    stroke = true
+                )
+
+                val valueColor =
+                    when (index) {
+                        0 -> green
+                        1 -> orange
+                        2 -> red
+                        3 -> gray
+                        else -> blue
+                    }
+
+                canvas.drawText(
+                    value,
+                    (left + right) / 2f,
+                    cardTop + 23f,
+                    paint(
+                        size = 15f,
+                        color = valueColor,
+                        typeface = bold,
+                        align = android.graphics.Paint.Align.CENTER
+                    )
+                )
+                canvas.drawText(
+                    label,
+                    (left + right) / 2f,
+                    cardTop + 42f,
+                    paint(
+                        size = 8.5f,
+                        color = textMuted,
+                        align = android.graphics.Paint.Align.CENTER
+                    )
+                )
+            }
+        }
+
+        fun drawTopicHeader(
+            canvas: android.graphics.Canvas,
+            top: Float,
+            title: String,
+            percent: Int
+        ): Float {
+            drawRoundRect(
+                canvas,
+                margin,
+                top,
+                contentRight,
+                top + 36f,
+                navy,
+                10f
+            )
+
+            val layout = buildTextLayout(
+                text = "$title · $percent%",
+                width = (pageWidth - margin * 2f - 28f).toInt(),
+                size = 13f,
+                color = white,
+                typeface = bold,
+                maxLines = 1
+            )
+            drawLayout(canvas, layout, margin + 14f, top + 9f)
+
+            return top + 44f
+        }
+
+        fun drawSubTopicHeader(
+            canvas: android.graphics.Canvas,
+            top: Float,
+            title: String
+        ): Float {
+            drawRoundRect(
+                canvas,
+                margin + 10f,
+                top,
+                contentRight - 10f,
+                top + 24f,
+                android.graphics.Color.rgb(225, 240, 251),
+                8f
+            )
+
+            val layout = buildTextLayout(
+                text = title,
+                width = (pageWidth - margin * 2f - 48f).toInt(),
+                size = 10.5f,
+                color = blue,
+                typeface = bold,
+                maxLines = 1
+            )
+            drawLayout(canvas, layout, margin + 24f, top + 6f)
+
+            return top + 30f
+        }
+
+        fun drawExerciseCard(
+            canvas: android.graphics.Canvas,
+            top: Float,
+            row: PdfRow
+        ): Float {
+            val bottom = top + row.height
+            val statusColor =
+                if (row.isPartiallyKnown) {
+                    orange
+                } else {
+                    when (row.state) {
+                        MarkState.YES ->
+                            green
+
+                        MarkState.NO ->
+                            red
+
+                        MarkState.NONE ->
+                            gray
+                    }
+                }
+
+            val statusLabel =
+                if (row.isPartiallyKnown) {
+                    tr(
+                        "חלקית",
+                        "Partially"
+                    )
+                } else {
+                    when (row.state) {
+                        MarkState.YES ->
+                            tr(
+                                "יודע",
+                                "Known"
+                            )
+
+                        MarkState.NO ->
+                            tr(
+                                "לא יודע",
+                                "Not known"
+                            )
+
+                        MarkState.NONE ->
+                            tr(
+                                "לא סומן",
+                                "Unmarked"
+                            )
+                    }
+                }
+
+            drawRoundRect(
+                canvas,
+                margin,
+                top,
+                contentRight,
+                bottom,
                 softBlue,
                 12f
             )
             drawRoundRect(
                 canvas,
                 margin,
-                y,
+                top,
                 contentRight,
-                y + 92f,
+                bottom,
                 borderBlue,
                 12f,
                 stroke = true
             )
 
-            val emptyLayout = buildTextLayout(
-                text = tr(
-                    "אין תרגילים להצגה",
-                    "No exercises to display"
-                ),
-                width = (pageWidth - margin * 2f - 40f).toInt(),
-                size = 16f,
-                color = blue,
-                typeface = bold,
-                maxLines = 2,
-                alignment = android.text.Layout.Alignment.ALIGN_CENTER
+            val circleCenterX = if (isEnglish) margin + 23f else contentRight - 23f
+            canvas.drawCircle(
+                circleCenterX,
+                top + 27f,
+                14f,
+                android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+                    color = blue
+                }
             )
-            drawLayout(canvas, emptyLayout, margin + 20f, y + 30f)
-        } else {
-            elements.forEach { element ->
-                y = when (element.type) {
-                    topicHeaderType -> drawTopicHeader(
-                        canvas = canvas,
-                        top = y,
-                        title = element.title,
-                        percent = element.percent
-                    )
+            canvas.drawText(
+                row.number.toString(),
+                circleCenterX,
+                top + 31f,
+                paint(
+                    size = 10f,
+                    color = white,
+                    typeface = bold,
+                    align = android.graphics.Paint.Align.CENTER
+                )
+            )
 
-                    subTopicHeaderType -> drawSubTopicHeader(
-                        canvas = canvas,
-                        top = y,
-                        title = element.title
-                    )
+            val titleLeft = if (isEnglish) margin + 48f else margin + 22f
+            val titleLayout = buildTextLayout(
+                text = row.title,
+                width = textAreaWidth,
+                size = 11.5f,
+                color = textDark,
+                typeface = bold,
+                maxLines = 3
+            )
+            drawLayout(canvas, titleLayout, titleLeft, top + 11f)
 
-                    else -> drawExerciseCard(
-                        canvas = canvas,
-                        top = y,
-                        row = requireNotNull(element.row)
-                    )
+            val statusPaint = paint(
+                size = 9f,
+                color = statusColor,
+                typeface = bold,
+                align = if (isEnglish) {
+                    android.graphics.Paint.Align.RIGHT
+                } else {
+                    android.graphics.Paint.Align.LEFT
+                }
+            )
+
+            canvas.drawText(
+                statusLabel,
+                if (isEnglish) contentRight - 16f else margin + 16f,
+                bottom - 12f,
+                statusPaint
+            )
+
+            canvas.drawCircle(
+                if (isEnglish) contentRight - 20f else margin + 20f,
+                top + 20f,
+                4f,
+                android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+                    color = statusColor
+                }
+            )
+
+            return bottom + 8f
+        }
+
+        pages.forEachIndexed { pageIndex, elements ->
+            val pageNumber = pageIndex + 1
+            val page = document.startPage(
+                PdfDocument.PageInfo.Builder(
+                    pageWidth,
+                    pageHeight,
+                    pageNumber
+                ).create()
+            )
+            val canvas = page.canvas
+
+            drawHeader(canvas, pageNumber)
+
+            var y = if (pageNumber == 1) {
+                drawSummaryCard(canvas, 148f)
+                firstPageBodyTop
+            } else {
+                nextPageBodyTop
+            }
+
+            if (elements.isEmpty()) {
+                drawRoundRect(
+                    canvas,
+                    margin,
+                    y,
+                    contentRight,
+                    y + 92f,
+                    softBlue,
+                    12f
+                )
+                drawRoundRect(
+                    canvas,
+                    margin,
+                    y,
+                    contentRight,
+                    y + 92f,
+                    borderBlue,
+                    12f,
+                    stroke = true
+                )
+
+                val emptyLayout = buildTextLayout(
+                    text = tr(
+                        "אין תרגילים להצגה",
+                        "No exercises to display"
+                    ),
+                    width = (pageWidth - margin * 2f - 40f).toInt(),
+                    size = 16f,
+                    color = blue,
+                    typeface = bold,
+                    maxLines = 2,
+                    alignment = android.text.Layout.Alignment.ALIGN_CENTER
+                )
+                drawLayout(canvas, emptyLayout, margin + 20f, y + 30f)
+            } else {
+                elements.forEach { element ->
+                    y = when (element.type) {
+                        topicHeaderType -> drawTopicHeader(
+                            canvas = canvas,
+                            top = y,
+                            title = element.title,
+                            percent = element.percent
+                        )
+
+                        subTopicHeaderType -> drawSubTopicHeader(
+                            canvas = canvas,
+                            top = y,
+                            title = element.title
+                        )
+
+                        else -> drawExerciseCard(
+                            canvas = canvas,
+                            top = y,
+                            row = requireNotNull(element.row)
+                        )
+                    }
                 }
             }
+
+            drawFooter(
+                canvas = canvas,
+                pageNumber = pageNumber,
+                totalPages = pages.size
+            )
+            document.finishPage(page)
         }
 
-        drawFooter(
-            canvas = canvas,
-            pageNumber = pageNumber,
-            totalPages = pages.size
+        val fileName =
+            if (isEnglish) {
+                "Belt Summary Report.pdf"
+            } else {
+                "דוח סיכום חגורה.pdf"
+            }
+
+        val file = File(
+            dir,
+            fileName
         )
-        document.finishPage(page)
-    }
 
-    val fileName =
-        if (isEnglish) {
-            "Belt Summary Report.pdf"
-        } else {
-            "דוח סיכום חגורה.pdf"
+        try {
+            FileOutputStream(file).use { output ->
+                document.writeTo(output)
+            }
+        } finally {
+            document.close()
         }
 
-    val file = File(
-        dir,
-        fileName
-    )
-
-    try {
-        FileOutputStream(file).use { output ->
-            document.writeTo(output)
-        }
-    } finally {
-        document.close()
+        return file
     }
-
-    return file
-}

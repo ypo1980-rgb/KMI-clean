@@ -708,7 +708,8 @@ fun UnifiedSubjectExercisesScreen(
     onOpenSection: (subjectId: String, sectionId: String?) -> Unit,
     onBack: () -> Unit,
     vm: KmiViewModel,
-    isCoach: Boolean? = null
+    isCoach: Boolean? = null,
+    onHome: (() -> Unit)? = null
 ) {
     val isEnglish = LocalizationRuntime.currentLanguage == AppLanguage.ENGLISH
     val resolverSubjectId = remember(subjectId) {
@@ -897,8 +898,8 @@ fun UnifiedSubjectExercisesScreen(
             KmiTopBar(
                 title = pdfTitle,
                 onBack = onBack,
-                onHome = null,
-                showTopHome = false,
+                onHome = onHome,
+                showTopHome = onHome != null,
                 centerTitle = true,
                 lockSearch = false,
                 showBottomActions = true,

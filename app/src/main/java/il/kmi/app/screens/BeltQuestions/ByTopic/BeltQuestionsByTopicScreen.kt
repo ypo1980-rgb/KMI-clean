@@ -960,6 +960,9 @@ fun BeltQuestionsByTopicScreen(
             onBack = {
                 returnToTopicsRoot()
             },
+            onHome = {
+                onOpenHome()
+            },
             vm = vm
         )
 
@@ -1006,7 +1009,7 @@ fun BeltQuestionsByTopicScreen(
                     onOpenHome()
                 },
                 lockHome = false,
-                showTopHome = false,
+                showTopHome = true,
                 showTopBeltIcon = false,
                 topBeltIconRes = null,
 
