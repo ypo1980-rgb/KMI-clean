@@ -2274,9 +2274,68 @@ fun SummaryScreen(
                                     }
                                     .distinct()
 
+                            val statusKeys =
+                                buildList {
+                                    val fullKey = row.statusTopicKey.trim()
+                                    val rootTopic = row.sourceTopicTitle.trim()
+
+                                    // המפתח המדויק של התרגיל
+                                    add(fullKey)
+
+                                    // כל רמות האב של תת־הנושא
+                                    var parentKey = fullKey
+
+                                    while ("__" in parentKey) {
+                                        parentKey = parentKey.substringBeforeLast("__")
+                                        add(parentKey)
+                                    }
+
+                                    // מסכי חומר ישנים ששמרו לפי נושא האב
+                                    add(rootTopic)
+
+                                    // מסכי חומר שנפתחו ישירות מתוך תת־נושא
+                                    if (rootTopic == "הגנות") {
+                                        add("הגנות__הגנות נגד מכות")
+                                        add("הגנות__הגנות נגד בעיטות")
+                                        add("הגנות__הגנות - סכין")
+                                    }
+
+                                    add("כללי")
+                                }
+                                    .map { it.trim() }
+                                    .filter { it.isNotBlank() }
+                                    .distinct()
+
+                            val savedStatus: Boolean? =
+                                statusKeys.firstNotNullOfOrNull { key ->
+
+                                    val masteredIds =
+                                        notesSp.getStringSet(
+                                            "mastered_${belt.id}_$key",
+                                            emptySet()
+                                        ).orEmpty()
+
+                                    val unknownIds =
+                                        notesSp.getStringSet(
+                                            "unknown_${belt.id}_$key",
+                                            emptySet()
+                                        ).orEmpty()
+
+                                    when {
+                                        candidateIds.any { it in masteredIds } ->
+                                            true
+
+                                        candidateIds.any { it in unknownIds } ->
+                                            false
+
+                                        else ->
+                                            null
+                                    }
+                                }
+
                             val v: Boolean? =
-                                candidateIds
-                                    .firstNotNullOfOrNull { candidateId ->
+                                savedStatus
+                                    ?: candidateIds.firstNotNullOfOrNull { candidateId ->
                                         topicSnap[candidateId]
                                     }
 
