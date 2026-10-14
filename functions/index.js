@@ -27,6 +27,205 @@ if (!admin.apps.length) {
 
 const db = admin.firestore();
 
+const {
+  generateOccurrences,
+  createMissingOccurrences,
+  auditTrainingOccurrences,
+} = require("./trainingOccurrenceScheduler");
+
+const {
+  syncOverrideToOccurrence,
+} = require("./trainingOccurrenceOverrideSync");
+
+/**
+ * Synchronize training overrides to attendance occurrences.
+ * Runs separately from the existing notification trigger.
+ */
+exports.syncTrainingOverrideOccurrence =
+  functions
+    .region("europe-west1")
+    .firestore
+    .document("trainingOverrides/{overrideId}")
+    .onWrite(async (change, context) => {
+      if (!change.after.exists) {
+        return null;
+      }
+
+      const occurrenceId =
+        String(context.params.overrideId || "").trim();
+
+      const result = await syncOverrideToOccurrence(
+        db,
+        occurrenceId
+      );
+
+      console.log("KMI_OVERRIDE_OCCURRENCE_SYNC", {
+        occurrenceId,
+        status: result.status,
+      });
+
+      return null;
+    });
+
+/**
+ * KMI — Scheduled Training Occurrences
+ *
+ * Initial deployment: DRY RUN ONLY.
+ * No Firestore writes.
+ *
+ * Runs daily at 03:00 Israel time.
+ */
+exports.syncScheduledTrainingOccurrences =
+  functions
+    .region("europe-west1")
+    .pubsub
+    .schedule("0 3 * * *")
+    .timeZone("Asia/Jerusalem")
+    .onRun(async () => {
+      const occurrences =
+        generateOccurrences(14);
+
+      const uniqueIds =
+        new Set(
+          occurrences.map(
+            (item) => item.occurrenceId
+          )
+        );
+
+      const valid =
+        occurrences.every((item) =>
+          item.branch &&
+          item.group &&
+          item.occurrenceKey &&
+          item.occurrenceId &&
+          Number.isSafeInteger(
+            item.originalStartMillis
+          ) &&
+          Number.isSafeInteger(
+            item.originalEndMillis
+          ) &&
+          item.originalEndMillis >
+            item.originalStartMillis
+        );
+
+      if (
+        !valid ||
+        uniqueIds.size !== occurrences.length
+      ) {
+        throw new Error(
+          "KMI scheduled occurrence validation failed"
+        );
+      }
+
+     console.log(
+       "KMI_SCHEDULED_OCCURRENCES_DRY_RUN",
+       {
+         generated: occurrences.length,
+         uniqueIds: uniqueIds.size,
+         firestoreWrites: 0,
+       }
+     );
+
+     const auditResult =
+       await auditTrainingOccurrences(
+         db,
+         occurrences
+       );
+
+
+    console.log(
+      "KMI_SCHEDULED_OCCURRENCES_AUDIT_COMPLETE",
+      {
+        total: auditResult.total,
+        existing: auditResult.existing,
+        missing: auditResult.missing,
+        readyToCreate: auditResult.readyToCreate,
+        missingWithActiveOverride:
+          auditResult.missingWithActiveOverride,
+        mismatched: auditResult.mismatched,
+        errors: auditResult.errors,
+        firestoreWrites: 0,
+      }
+    );
+
+    /*
+     * בחירת מועמד יחיד ליצירה.
+     * קריאה בלבד — אין כתיבה ל-Firestore.
+     */
+    if (
+      auditResult.errors !== 0 ||
+      auditResult.mismatched !== 0 ||
+      auditResult.readyToCreate < 1
+    ) {
+      console.log(
+        "KMI_OCCURRENCE_CANDIDATE_SKIPPED",
+        "Audit is not ready"
+      );
+
+      return null;
+    }
+
+    const orderedOccurrences =
+      [...occurrences].sort(
+        (a, b) =>
+          a.originalStartMillis -
+            b.originalStartMillis ||
+          a.occurrenceId.localeCompare(
+            b.occurrenceId
+          )
+      );
+
+    for (const item of orderedOccurrences) {
+      const occurrenceSnapshot = await db
+        .collection("trainingOccurrences")
+        .doc(item.occurrenceId)
+        .get();
+
+      if (occurrenceSnapshot.exists) {
+        continue;
+      }
+
+      const overrideSnapshot = await db
+        .collection("trainingOverrides")
+        .doc(item.occurrenceId)
+        .get();
+
+      if (overrideSnapshot.exists) {
+        const override =
+          overrideSnapshot.data() || {};
+
+        if (
+          override.isActive === true ||
+          override.occurrenceKey !==
+            item.occurrenceKey
+        ) {
+          continue;
+        }
+      }
+
+      console.log(
+        "KMI_OCCURRENCE_FIRST_CANDIDATE",
+        JSON.stringify({
+          occurrenceId: item.occurrenceId,
+          branch: item.branch,
+          group: item.group,
+          sessionDate: item.sessionDate,
+          originalStartMillis:
+            item.originalStartMillis,
+        })
+      );
+
+      break;
+    }
+
+    console.log(
+      "KMI_OCCURRENCE_WRITES_DISABLED"
+    );
+
+    return null;
+
+    });
+
 function normalizeDigits(value) {
   return String(value || "").replace(/\D/g, "");
 }

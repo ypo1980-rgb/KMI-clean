@@ -348,30 +348,21 @@ object TrainingOverrideRepository {
             )
 
         /*
-         * משתמשים ב-override רק אם הוא באמת
-         * שייך לאותו occurrenceKey והוא פעיל.
-         */
-        val relevantOverride =
-            activeOverride
-                ?.takeIf {
-                    it.isActive &&
-                            it.occurrenceKey ==
-                            occurrenceKey
-                }
-
-        val isCancelled =
-            relevantOverride
-                ?.isCancelled == true
+   * פונקציה זו יוצרת מופע רגיל בלבד.
+   *
+   * ביטולים ושינויי שעות מנוהלים בנפרד
+   * דרך trainingOverrides.
+   *
+   * לפני יצירת המסמך תתבצע בדיקה אטומית
+   * שאין שינוי פעיל לאותו אימון.
+   */
+        val isCancelled = false
 
         val effectiveStartMillis =
-            relevantOverride
-                ?.effectiveStartMillis
-                ?: originalStartMillis
+            originalStartMillis
 
         val effectiveEndMillis =
-            relevantOverride
-                ?.effectiveEndMillis
-                ?: originalEndMillis
+            originalEndMillis
 
         val data =
             hashMapOf<String, Any>(
@@ -430,18 +421,88 @@ object TrainingOverrideRepository {
                         FieldValue.serverTimestamp()
             )
 
+
+        val occurrenceReference =
+            firestore
+                .collection(
+                    OCCURRENCES_COLLECTION_NAME
+                )
+                .document(
+                    occurrenceId
+                )
+
+        val overrideReference =
+            firestore
+                .collection(
+                    COLLECTION_NAME
+                )
+                .document(
+                    occurrenceId
+                )
+
         firestore
-            .collection(
-                OCCURRENCES_COLLECTION_NAME
-            )
-            .document(
-                occurrenceId
-            )
-            .set(
-                data,
-                com.google.firebase.firestore.SetOptions.merge()
-            )
-            .addOnSuccessListener {
+            .runTransaction { transaction ->
+
+                /*
+                 * קודם קוראים את שני המסמכים.
+                 *
+                 * שינוי מקביל של אחד מהם יגרום
+                 * ל-Transaction להיבדק מחדש.
+                 */
+                val overrideSnapshot =
+                    transaction.get(
+                        overrideReference
+                    )
+
+                val occurrenceSnapshot =
+                    transaction.get(
+                        occurrenceReference
+                    )
+
+                /*
+                 * מופע קיים לעולם אינו נדרס
+                 * על ידי הסנכרון הרגיל.
+                 */
+                if (occurrenceSnapshot.exists()) {
+                    return@runTransaction "already_exists"
+                }
+
+                /*
+                 * שינוי פעיל מנוהל על ידי
+                 * מנגנון סנכרון השינויים הייעודי.
+                 */
+                if (overrideSnapshot.exists()) {
+                    val overrideData =
+                        overrideSnapshot.data
+                            .orEmpty()
+
+                    val overrideActive =
+                        overrideData["isActive"] == true
+
+                    if (overrideActive) {
+                        return@runTransaction "active_override"
+                    }
+                }
+
+                /*
+                 * יוצרים מסמך רגיל רק כאשר:
+                 * 1. המופע עדיין אינו קיים.
+                 * 2. אין שינוי אימון פעיל.
+                 */
+                transaction.set(
+                    occurrenceReference,
+                    data
+                )
+
+                "created"
+            }
+            .addOnSuccessListener { result ->
+
+                android.util.Log.d(
+                    "KMI_OCCURRENCE_RESULT",
+                    "result=$result | occurrenceId=$occurrenceId"
+                )
+
                 onResult(
                     true,
                     null
@@ -453,6 +514,7 @@ object TrainingOverrideRepository {
                     error
                 )
             }
+
     }
 
     /**
