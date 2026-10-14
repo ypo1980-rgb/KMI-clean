@@ -802,11 +802,10 @@ fun TrainingSummaryScreen(
                                     generalNotes =
                                         state.notes,
                                     exercises =
-                                        state.selected
-                                            .values
-                                            .sortedBy {
-                                                it.name.lowercase()
-                                            }
+                                        sortTrainingExercisesByBelt(
+                                            exercises = state.selected.values.toList(),
+                                            exerciseId = { it.exerciseId }
+                                        )
                                             .map { exercise ->
                                                 TrainingSummaryPdfExercise(
                                                     exerciseId =
@@ -1141,13 +1140,23 @@ fun TrainingSummaryScreen(
                                         )
                                     )
                                 }
-
                                 val selectedList =
                                     state.selected.values
                                         .toList()
-                                        .sortedBy {
-                                            it.name.lowercase()
+                                        .sortedBy { exercise ->
+                                            trainingExerciseBeltOrder(
+                                                exercise.exerciseId
+                                            )
                                         }
+
+                                val groupedByBelt =
+                                    selectedList
+                                        .groupBy { exercise ->
+                                            exerciseBeltFromId(
+                                                exercise.exerciseId
+                                            )
+                                        }
+                                        .toList()
 
                                 LazyColumn(
                                     modifier =
@@ -1166,32 +1175,134 @@ fun TrainingSummaryScreen(
                                 ) {
 
                                     items(
-                                        selectedList,
-                                        key = {
-                                            it.exerciseId
+                                        groupedByBelt,
+                                        key = { (groupBelt, _) ->
+                                            groupBelt?.id ?: "unknown"
                                         }
-                                    ) { ex ->
+                                    ) { (groupBelt, exercises) ->
 
-                                        SelectedExerciseEditor(
-                                            item = ex,
-                                            onRemove = {
-                                                vm.removeExercise(
-                                                    ex.exerciseId
-                                                )
-                                            },
-                                            onHighlight = {
-                                                vm.setHighlight(
-                                                    ex.exerciseId,
-                                                    it
-                                                )
-                                            },
-                                            onIncludeExplanation = {
-                                                vm.setIncludeExplanation(
-                                                    ex.exerciseId,
-                                                    it
-                                                )
+                                        val beltColor =
+                                            when (groupBelt) {
+                                                Belt.WHITE -> Color(0xFF9CA3AF)
+                                                Belt.YELLOW -> Color(0xFFFACC15)
+                                                Belt.ORANGE -> Color(0xFFF97316)
+                                                Belt.GREEN -> Color(0xFF22C55E)
+                                                Belt.BLUE -> Color(0xFF3B82F6)
+                                                Belt.BROWN -> Color(0xFF8B5A2B)
+                                                Belt.BLACK -> Color(0xFF374151)
+                                                null -> MaterialTheme.colorScheme.primary
                                             }
-                                        )
+
+                                        val beltTitle =
+                                            if (isEnglish) {
+                                                when (groupBelt) {
+                                                    Belt.WHITE -> "White belt"
+                                                    Belt.YELLOW -> "Yellow belt"
+                                                    Belt.ORANGE -> "Orange belt"
+                                                    Belt.GREEN -> "Green belt"
+                                                    Belt.BLUE -> "Blue belt"
+                                                    Belt.BROWN -> "Brown belt"
+                                                    Belt.BLACK -> "Black belt"
+                                                    null -> "Other exercises"
+                                                }
+                                            } else {
+                                                groupBelt?.heb ?: "תרגילים נוספים"
+                                            }
+
+                                        Surface(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            shape = RoundedCornerShape(22.dp),
+                                            color = MaterialTheme.colorScheme.surface,
+                                            border = BorderStroke(
+                                                width = 1.5.dp,
+                                                color = beltColor.copy(alpha = 0.70f)
+                                            ),
+                                            tonalElevation = 0.dp,
+                                            shadowElevation = 0.dp
+                                        ) {
+                                            Column(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .background(
+                                                        Brush.verticalGradient(
+                                                            listOf(
+                                                                lerp(
+                                                                    MaterialTheme.colorScheme.surface,
+                                                                    beltColor,
+                                                                    0.13f
+                                                                ),
+                                                                MaterialTheme.colorScheme.surface
+                                                            )
+                                                        )
+                                                    )
+                                                    .padding(10.dp),
+                                                verticalArrangement = Arrangement.spacedBy(10.dp)
+                                            ) {
+
+                                                Surface(
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    shape = RoundedCornerShape(14.dp),
+                                                    color = beltColor.copy(alpha = 0.16f),
+                                                    border = BorderStroke(
+                                                        1.dp,
+                                                        beltColor.copy(alpha = 0.35f)
+                                                    )
+                                                ) {
+                                                    Row(
+                                                        modifier = Modifier
+                                                            .fillMaxWidth()
+                                                            .padding(
+                                                                horizontal = 12.dp,
+                                                                vertical = 12.dp
+                                                            ),
+                                                        horizontalArrangement =
+                                                            Arrangement.SpaceBetween,
+                                                        verticalAlignment = Alignment.CenterVertically
+                                                    ) {
+                                                        Text(
+                                                            text = beltTitle,
+                                                            style = KmiTypography.cardTitle,
+                                                            fontWeight = FontWeight.ExtraBold,
+                                                            color = MaterialTheme.colorScheme.onSurface
+                                                        )
+
+                                                        Text(
+                                                            text = if (isEnglish) {
+                                                                "${exercises.size} exercises"
+                                                            } else {
+                                                                "${exercises.size} תרגילים"
+                                                            },
+                                                            style = KmiTypography.caption,
+                                                            fontWeight = FontWeight.Bold,
+                                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                        )
+                                                    }
+                                                }
+
+                                                exercises.forEach { ex ->
+                                                    androidx.compose.runtime.key(ex.exerciseId) {
+                                                        SelectedExerciseEditor(
+                                                            item = ex,
+                                                            onRemove = {
+                                                                vm.removeExercise(ex.exerciseId)
+                                                            },
+                                                            onHighlight = {
+                                                                vm.setHighlight(
+                                                                    ex.exerciseId,
+                                                                    it
+                                                                )
+                                                            },
+                                                            onIncludeExplanation = {
+                                                                vm.setIncludeExplanation(
+                                                                    ex.exerciseId,
+                                                                    it
+                                                                )
+                                                            }
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                        }
                                     }
                                 }
                             }
@@ -3097,6 +3208,30 @@ private fun exerciseBeltFromId(
         }
 }
 
+private fun trainingExerciseBeltOrder(
+    exerciseId: String
+): Int {
+    val exerciseBelt =
+        exerciseBeltFromId(exerciseId)
+            ?: return Int.MAX_VALUE
+
+    return Belt.order
+        .indexOf(exerciseBelt)
+        .takeIf { it >= 0 }
+        ?: Int.MAX_VALUE
+}
+
+private fun <T> sortTrainingExercisesByBelt(
+    exercises: List<T>,
+    exerciseId: (T) -> String
+): List<T> {
+    return exercises.sortedBy { exercise ->
+        trainingExerciseBeltOrder(
+            exerciseId(exercise)
+        )
+    }
+}
+
 @Composable
 private fun SelectedExerciseEditor(
     item: SelectedExerciseUi,
@@ -3818,10 +3953,10 @@ fun openSavedTrainingSummaryPdf(
                         generalNotes =
                             summary.notes,
                         exercises =
-                            summary.exercises
-                                .sortedBy {
-                                    it.name.lowercase()
-                                }
+                            sortTrainingExercisesByBelt(
+                                exercises = summary.exercises,
+                                exerciseId = { it.exerciseId }
+                            )
                                 .map { exercise ->
 
                                     TrainingSummaryPdfExercise(
@@ -4553,13 +4688,6 @@ private fun createTrainingSummaryPdf(
                             textColor
                     }
 
-                val beltPaint =
-                    textPaint(
-                        size = 11.5f,
-                        color = beltColor,
-                        bold = true
-                    )
-
                 val exercisePaint =
                     textPaint(
                         size = 13f,
@@ -4567,24 +4695,127 @@ private fun createTrainingSummaryPdf(
                         bold = true
                     )
 
-                drawTextLines(
-                    text = beltLabel,
-                    paint = beltPaint,
-                    bottomSpacing = 1f
-                )
+                // רקע ומסגרת בהתאם לצבע החגורה
+                fun drawExerciseBackground(
+                    top: Float,
+                    bottom: Float
+                ) {
+                    val backgroundPaint =
+                        Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                            color = beltColor
+                            alpha = 14
+                            style = Paint.Style.FILL
+                        }
 
-                drawTextLines(
-                    text =
-                        cleanText(
-                            exercise.name,
-                            tr(
-                                "תרגיל ללא שם",
-                                "Unnamed exercise"
-                            )
-                        ),
-                    paint = exercisePaint,
-                    bottomSpacing = 2f
-                )
+                    val borderPaint =
+                        Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                            color = beltColor
+                            alpha = 110
+                            strokeWidth = 1.2f
+                            style = Paint.Style.STROKE
+                        }
+
+                    val left = horizontalMargin
+                    val right = pageWidth - horizontalMargin
+
+                    canvas.drawRoundRect(
+                        left,
+                        top,
+                        right,
+                        bottom,
+                        10f,
+                        10f,
+                        backgroundPaint
+                    )
+
+                    canvas.drawRoundRect(
+                        left,
+                        top,
+                        right,
+                        bottom,
+                        10f,
+                        10f,
+                        borderPaint
+                    )
+                }
+
+                val previousBelt =
+                    data.exercises
+                        .getOrNull(index - 1)
+                        ?.belt
+
+                if (index == 0 || previousBelt != exercise.belt) {
+
+                    // שומרים מקום לכותרת ולתחילת התרגיל
+                    ensureSpace(80f)
+
+                    val headerTop = y
+                    val headerBottom = y + 38f
+
+                    val headerBackground =
+                        Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                            color = beltColor
+                            alpha = 28
+                            style = Paint.Style.FILL
+                        }
+
+                    val headerBorder =
+                        Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                            color = beltColor
+                            strokeWidth = 1.6f
+                            style = Paint.Style.STROKE
+                        }
+
+                    canvas.drawRoundRect(
+                        horizontalMargin,
+                        headerTop,
+                        pageWidth - horizontalMargin,
+                        headerBottom,
+                        12f,
+                        12f,
+                        headerBackground
+                    )
+
+                    canvas.drawRoundRect(
+                        horizontalMargin,
+                        headerTop,
+                        pageWidth - horizontalMargin,
+                        headerBottom,
+                        12f,
+                        12f,
+                        headerBorder
+                    )
+
+                    val headerText =
+                        Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                            color = beltColor
+                            textSize = 15f
+                            typeface = boldTypeface
+                            textAlign =
+                                if (isEnglish) {
+                                    Paint.Align.LEFT
+                                } else {
+                                    Paint.Align.RIGHT
+                                }
+                        }
+
+                    val headerTextX =
+                        if (isEnglish) {
+                            horizontalMargin + 14f
+                        } else {
+                            pageWidth - horizontalMargin - 14f
+                        }
+
+                    canvas.drawText(
+                        beltLabel,
+                        headerTextX,
+                        headerTop + 25f,
+                        headerText
+                    )
+
+                    y = headerBottom + 12f
+                }
+
 
                 val explanation =
                     if (
@@ -4596,54 +4827,179 @@ private fun createTrainingSummaryPdf(
                             item = exercise.name,
                             exerciseId = exercise.exerciseId
                         )
-                            ?.replace(
-                                "[[RED_BOLD]]",
-                                ""
-                            )
-                            ?.replace(
-                                "[[/RED_BOLD]]",
-                                ""
-                            )
-                            ?.replace(
-                                "[[BLUE_BOLD]]",
-                                ""
-                            )
-                            ?.replace(
-                                "[[/BLUE_BOLD]]",
-                                ""
-                            )
+                            ?.replace("[[RED_BOLD]]", "")
+                            ?.replace("[[/RED_BOLD]]", "")
+                            ?.replace("[[BLUE_BOLD]]", "")
+                            ?.replace("[[/BLUE_BOLD]]", "")
                             ?.trim()
                     } else {
                         null
                     }
 
+// כל שורה נמדדת לפני הציור.
+                val cardLines =
+                    mutableListOf<Pair<StaticLayout, Float>>()
+
+                val cardTextWidth = contentWidth - 24
+
+                fun appendCardText(
+                    value: String,
+                    paint: TextPaint,
+                    bottomSpacing: Float
+                ) {
+                    val source = value.ifBlank { " " }
+
+                    val fullLayout =
+                        StaticLayout.Builder
+                            .obtain(
+                                source,
+                                0,
+                                source.length,
+                                paint,
+                                cardTextWidth
+                            )
+                            .setAlignment(
+                                KmiPdfDirection.layoutAlignment(isEnglish)
+                            )
+                            .setTextDirection(
+                                KmiPdfDirection.textDirection(isEnglish)
+                            )
+                            .setIncludePad(false)
+                            .build()
+
+                    for (lineIndex in 0 until fullLayout.lineCount) {
+                        val start = fullLayout.getLineStart(lineIndex)
+                        val end = fullLayout.getLineEnd(lineIndex)
+
+                        val lineText =
+                            source.substring(start, end)
+                                .trimEnd('\n', '\r')
+                                .ifEmpty { " " }
+
+                        val lineLayout =
+                            StaticLayout.Builder
+                                .obtain(
+                                    lineText,
+                                    0,
+                                    lineText.length,
+                                    paint,
+                                    cardTextWidth
+                                )
+                                .setAlignment(
+                                    KmiPdfDirection.layoutAlignment(isEnglish)
+                                )
+                                .setTextDirection(
+                                    KmiPdfDirection.textDirection(isEnglish)
+                                )
+                                .setIncludePad(false)
+                                .build()
+
+                        val spacing =
+                            if (lineIndex == fullLayout.lineCount - 1) {
+                                bottomSpacing
+                            } else {
+                                2f
+                            }
+
+                        cardLines.add(lineLayout to spacing)
+                    }
+                }
+
+                appendCardText(
+                    value = cleanText(
+                        exercise.name,
+                        tr("תרגיל ללא שם", "Unnamed exercise")
+                    ),
+                    paint = exercisePaint,
+                    bottomSpacing = 7f
+                )
+
                 if (!explanation.isNullOrBlank()) {
-                    drawTextLines(
-                        text =
-                            tr(
-                                "הסבר: ",
-                                "Explanation: "
-                            ) +
+                    appendCardText(
+                        value =
+                            tr("הסבר: ", "Explanation: ") +
                                     explanation,
                         paint = bodyPaint,
-                        bottomSpacing = 4f
+                        bottomSpacing = 7f
                     )
                 }
 
                 if (exercise.highlight.isNotBlank()) {
-                    drawTextLines(
-                        text =
-                            tr(
-                                "דגשים: ",
-                                "Highlights: "
-                            ) +
+                    appendCardText(
+                        value =
+                            tr("דגשים: ", "Highlights: ") +
                                     exercise.highlight.trim(),
                         paint = mutedPaint,
-                        bottomSpacing = 8f
+                        bottomSpacing = 4f
                     )
-                } else {
-                    y += 5f
                 }
+
+// מחלקים את הכרטיס למקטעים לפי המקום בכל עמוד.
+                var lineIndex = 0
+
+                while (lineIndex < cardLines.size) {
+
+                    val paddingHeight = 16f
+
+                    val firstLineHeight =
+                        cardLines[lineIndex].first.height + 3f
+
+                    if (
+                        y + paddingHeight + firstLineHeight >
+                        contentBottom
+                    ) {
+                        startPage()
+                    }
+
+                    val segmentStart = lineIndex
+                    var segmentHeight = paddingHeight
+
+                    while (lineIndex < cardLines.size) {
+                        val (layout, spacing) = cardLines[lineIndex]
+                        val required = layout.height + 3f + spacing
+
+                        if (
+                            y + segmentHeight + required >
+                            contentBottom
+                        ) {
+                            break
+                        }
+
+                        segmentHeight += required
+                        lineIndex++
+                    }
+
+                    val segmentTop = y
+
+                    drawExerciseBackground(
+                        top = segmentTop,
+                        bottom = segmentTop + segmentHeight
+                    )
+
+                    y += 8f
+
+                    for (i in segmentStart until lineIndex) {
+                        val (layout, spacing) = cardLines[i]
+
+                        canvas.withTranslation(
+                            x = horizontalMargin + 12f,
+                            y = y
+                        ) {
+                            layout.draw(this)
+                        }
+
+                        y += layout.height + 3f + spacing
+                    }
+
+                    y += 8f
+
+                    if (lineIndex < cardLines.size) {
+                        startPage()
+                    }
+                }
+
+                y += 8f
+
             }
     }
 

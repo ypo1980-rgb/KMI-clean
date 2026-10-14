@@ -3,6 +3,7 @@ package il.kmi.app.search
 import il.kmi.app.domain.ContentRepo
 import il.kmi.shared.domain.Belt
 import il.kmi.shared.domain.Explanations
+import il.kmi.app.exercises.sync.ExerciseSyncStore
 
 /**
  * תרגיל שנפתר מתוצאת החיפוש ומוכן להצגה בדיאלוג ההסבר.
@@ -13,7 +14,9 @@ data class ResolvedExerciseSearchSelection(
     val belt: Belt,
     val beltLabel: String,
     val topicTitle: String,
-    val explanation: String
+    val explanation: String,
+    val exerciseId: String,
+    val aliases: Set<String>
 )
 
 /**
@@ -49,14 +52,23 @@ object ExerciseSearchSelectionResolver {
 
         val stableKey =
             if (resolved != null) {
-                listOf(
-                    resolved.belt.id,
-                    resolved.topicTitle,
-                    resolved.itemTitle
-                ).joinToString("::")
+                ContentRepo.makeItemKey(
+                    belt = resolved.belt,
+                    topicTitle = resolved.topicTitle,
+                    subTopicTitle = resolved.subTopicTitle,
+                    itemTitle = resolved.itemTitle
+                )
             } else {
                 rawKey.ifBlank { title }
             }
+
+        val syncIdentity =
+            ExerciseSyncStore.resolveIdentity(
+                belt = belt,
+                topic = topicTitle,
+                subTopic = resolved?.subTopicTitle,
+                rawItem = title
+            )
 
         val explanation = Explanations.get(
             belt = belt,
@@ -75,7 +87,9 @@ object ExerciseSearchSelectionResolver {
                 isEnglish = isEnglish
             ),
             topicTitle = topicTitle,
-            explanation = explanation
+            explanation = explanation,
+            exerciseId = syncIdentity.exerciseId,
+            aliases = syncIdentity.aliases
         )
     }
 

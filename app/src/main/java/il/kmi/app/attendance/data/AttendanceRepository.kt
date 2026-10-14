@@ -1945,6 +1945,52 @@ class AttendanceRepository private constructor(
                 }
                 .orEmpty()
 
+        if (occurrenceId.isNotBlank()) {
+            val occurrenceDoc =
+                firestore
+                    .collection("trainingOccurrences")
+                    .document(occurrenceId)
+                    .get()
+                    .await()
+
+            android.util.Log.d(
+                "KMI_ATTENDANCE_RULE_CHECK",
+                buildString {
+                    append("occurrenceExists=")
+                    append(occurrenceDoc.exists())
+
+                    append(" | keyMatches=")
+                    append(
+                        occurrenceDoc.getString("occurrenceKey") ==
+                                cleanOccurrenceKey
+                    )
+
+                    append(" | sessionDateMatches=")
+                    append(
+                        occurrenceDoc.getString("sessionDate") ==
+                                sessionDocId
+                    )
+
+                    append(" | isCancelled=")
+                    append(occurrenceDoc.getBoolean("isCancelled"))
+
+                    append(" | effectiveStartMillis=")
+                    append(occurrenceDoc.getLong("effectiveStartMillis"))
+
+                    append(" | occurrenceBranch=")
+                    append(occurrenceDoc.getString("branch"))
+
+                    append(" | occurrenceGroup=")
+                    append(occurrenceDoc.getString("group"))
+                }
+            )
+        } else {
+            android.util.Log.e(
+                "KMI_ATTENDANCE_RULE_CHECK",
+                "Missing occurrenceId"
+            )
+        }
+
         val data =
             mutableMapOf<String, Any>(
                 "id" to recordId,

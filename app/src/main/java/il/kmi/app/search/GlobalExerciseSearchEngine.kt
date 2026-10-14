@@ -496,13 +496,36 @@ object GlobalExerciseSearchEngine {
                             normalizeForMatch(itemTitle)
                                 .contains("knife")
                 }
-                .map { itemTitle ->
-                    Result(
-                        id =
-                            "${group.belt.id}::הגנות מסכין::$itemTitle",
-                        title = itemTitle,
-                        subtitle = "$beltText • $topicText"
-                    )
+                .flatMap { itemTitle ->
+
+                    ContentRepo.searchExercises(itemTitle)
+                        .mapNotNull { hit ->
+
+                            val itemKey =
+                                hit.id ?: return@mapNotNull null
+
+                            val resolved =
+                                ContentRepo.resolveItemKey(itemKey)
+                                    ?: return@mapNotNull null
+
+                            val isSameExercise =
+                                resolved.belt == group.belt &&
+                                        normalizeForMatch(resolved.itemTitle) ==
+                                        normalizeForMatch(itemTitle)
+
+                            if (!isSameExercise) {
+                                return@mapNotNull null
+                            }
+
+                            Result(
+                                id = itemKey,
+                                title = resolved.itemTitle,
+                                subtitle = "$beltText • $topicText"
+                            )
+                        }
+                        .distinctBy { result ->
+                            result.id
+                        }
                 }
         }
 
@@ -587,8 +610,16 @@ object GlobalExerciseSearchEngine {
                         )
 
             if (hasExplanation) {
+                val canonicalId =
+                    ContentRepo.makeItemKey(
+                        belt = Belt.GREEN,
+                        topicTitle = "הגנות",
+                        subTopicTitle = "הגנות נגד בעיטות לצד",
+                        itemTitle = title
+                    )
+
                 Result(
-                    id = "green::הגנות::$title",
+                    id = canonicalId,
                     title = title,
                     subtitle = if (isEnglish) {
                         "Green belt • Defenses"

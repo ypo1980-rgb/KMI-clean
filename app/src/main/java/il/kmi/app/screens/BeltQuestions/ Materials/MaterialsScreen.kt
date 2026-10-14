@@ -1379,7 +1379,7 @@ fun MaterialsScreen(
                 rawItem = rawItem
             )
 
-        return globalFavorites.contains(globalFavoriteId) ||
+        return FavoritesStore.isFavorite(globalFavoriteId) ||
                 favoriteAliasesFor(topicTitle, rawItem).any { id ->
                     favorites.contains(id)
                 }
@@ -1402,7 +1402,7 @@ fun MaterialsScreen(
         val nextFavorites = favorites.toMutableSet()
 
         val isCurrentlyFavorite =
-            globalFavorites.contains(globalFavoriteId) ||
+            FavoritesStore.isFavorite(globalFavoriteId) ||
                     aliases.any { id ->
                         nextFavorites.contains(id)
                     }
@@ -1418,7 +1418,7 @@ fun MaterialsScreen(
         }
 
         val isGlobalFavorite =
-            globalFavorites.contains(globalFavoriteId)
+            FavoritesStore.isFavorite(globalFavoriteId)
 
         if (isGlobalFavorite != shouldAdd) {
             FavoritesStore.toggle(globalFavoriteId)
@@ -3586,6 +3586,7 @@ fun MaterialsScreen(
                                             // כדי שכוכבית בכרטיס הגלובאלי ותפריט ה-i יהיו מסונכרנים.
                                             val isFavorite = remember(
                                                 favorites,
+                                                globalFavorites,
                                                 item,
                                                 belt.id,
                                                 materialRootTopic,

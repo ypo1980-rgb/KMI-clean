@@ -145,7 +145,18 @@ internal fun SyncHomeCoachTrainingOccurrences(
         currentUid,
         items
     ) {
+        android.util.Log.d(
+            "KMI_OCCURRENCE_SYNC",
+            "START | isCoach=$isCoach" +
+                    " | uidAvailable=${!currentUid.isNullOrBlank()}" +
+                    " | itemsCount=${items.size}"
+        )
+
         if (!isCoach) {
+            android.util.Log.d(
+                "KMI_OCCURRENCE_SYNC",
+                "SKIPPED | Not in coach mode"
+            )
             return@LaunchedEffect
         }
 
@@ -165,11 +176,19 @@ internal fun SyncHomeCoachTrainingOccurrences(
                     branch = item.branch,
                     group = item.group,
                     activeOverride = item.activeOverride,
-                    onResult = { _, _ ->
-                        /*
-                         * כשל בסנכרון occurrence
-                         * אינו מפיל את מסך הבית.
-                         */
+                    onResult = { success, error ->
+                        if (success) {
+                            android.util.Log.d(
+                                "KMI_OCCURRENCE_SYNC",
+                                "Training occurrence synced successfully"
+                            )
+                        } else {
+                            android.util.Log.e(
+                                "KMI_OCCURRENCE_SYNC",
+                                "Failed to sync training occurrence",
+                                error
+                            )
+                        }
                     }
                 )
         }

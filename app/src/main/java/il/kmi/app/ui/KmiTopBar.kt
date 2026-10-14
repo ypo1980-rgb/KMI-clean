@@ -79,6 +79,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import il.kmi.app.search.GlobalExerciseSearchDialog
 import il.kmi.app.search.GlobalExerciseSearchEngine
 import il.kmi.app.search.ExerciseSearchSelectionResolver
+import il.kmi.app.notes.ExerciseNotesStore
+import il.kmi.app.favorites.FavoritesStore
 import il.kmi.app.ui.dialogs.ExerciseExplanationDialog
 import il.kmi.app.ui.dialogs.ExerciseNoteEditorDialog
 import androidx.compose.ui.AbsoluteAlignment
@@ -759,6 +761,16 @@ fun KmiTopBar(
     var premiumExerciseBeltName by rememberSaveable { mutableStateOf("") }
     var premiumExerciseExplanation by rememberSaveable { mutableStateOf("") }
     var premiumExerciseStableKey by rememberSaveable { mutableStateOf("") }
+    var premiumExerciseGlobalId by rememberSaveable {
+        mutableStateOf("")
+    }
+    var premiumExerciseBelt by remember {
+        mutableStateOf<Belt?>(null)
+    }
+
+    var premiumExerciseAliases by remember {
+        mutableStateOf<Set<String>>(emptySet())
+    }
 
     // ✅ פעולות בדיאלוג החדש: מועדפים + הערות משתמש
     var premiumExerciseIsFavorite by rememberSaveable { mutableStateOf(false) }
@@ -885,27 +897,14 @@ fun KmiTopBar(
                 )
                 ?: emptySet()
 
-        val noteRoleKey =
-            if (userIsCoach) {
-                "coach"
-            } else {
-                "trainee"
-            }
-
-        val notePrefsKey =
-            "$keyForPrefs::$noteRoleKey"
-
         val savedUserNote =
-            ctx.getSharedPreferences(
-                "kmi_exercise_user_notes",
-                Context.MODE_PRIVATE
+            ExerciseNotesStore.loadNote(
+                context = ctx,
+                belt = selected.belt,
+                exerciseId = selected.exerciseId,
+                aliases = selected.aliases,
+                allowLegacyMigration = false
             )
-                .getString(
-                    notePrefsKey,
-                    ""
-                )
-                ?.trim()
-                .orEmpty()
 
         premiumExerciseTitle =
             selected.title
@@ -921,9 +920,18 @@ fun KmiTopBar(
         premiumExerciseStableKey =
             keyForPrefs
 
+        premiumExerciseGlobalId =
+            selected.exerciseId
+
+        premiumExerciseBelt =
+            selected.belt
+
+        premiumExerciseAliases =
+            selected.aliases
+
         premiumExerciseIsFavorite =
-            favoritesSet.contains(
-                keyForPrefs
+            FavoritesStore.isFavorite(
+                selected.exerciseId
             )
 
         premiumExerciseUserNote =
@@ -951,10 +959,6 @@ fun KmiTopBar(
          * ומשאירים אותו פתוח עד שהמשתמש סוגר אותו.
          */
         showPremiumExerciseDialog = true
-
-        onPickSearchResult?.invoke(
-            selected.stableKey
-        )
     }
 
     DisposableEffect(
@@ -1999,63 +2003,36 @@ fun KmiTopBar(
                 showPremiumEditDialog = true
             },
             onDeleteNote = {
-                val noteRoleKey =
-                    if (userIsCoach) {
-                        "coach"
-                    } else {
-                        "trainee"
-                    }
+                val selectedBelt = premiumExerciseBelt
 
-                val notePrefsKey =
-                    "$premiumExerciseStableKey::$noteRoleKey"
+                if (
+                    selectedBelt != null &&
+                    premiumExerciseGlobalId.isNotBlank()
+                ) {
+                    ExerciseNotesStore.deleteNote(
+                        context = ctx,
+                        belt = selectedBelt,
+                        exerciseId = premiumExerciseGlobalId,
+                        aliases = premiumExerciseAliases
+                    )
 
-                ctx.getSharedPreferences(
-                    "kmi_exercise_user_notes",
-                    Context.MODE_PRIVATE
-                ).edit {
-                    remove(notePrefsKey)
+                    premiumExerciseUserNote = ""
+                    premiumExerciseEditText = ""
                 }
-
-                premiumExerciseUserNote = ""
-                premiumExerciseEditText = ""
             },
             onToggleFavorite = {
-                val prefs =
-                    ctx.getSharedPreferences(
-                        "kmi_global_favorites",
-                        Context.MODE_PRIVATE
+                val exerciseId =
+                    premiumExerciseGlobalId
+
+                if (exerciseId.isNotBlank()) {
+                    FavoritesStore.toggle(
+                        exerciseId
                     )
 
-                val current =
-                    prefs.getStringSet(
-                        "favorite_exercises",
-                        emptySet()
-                    )
-                        ?.toMutableSet()
-                        ?: mutableSetOf()
-
-                premiumExerciseIsFavorite =
-                    if (
-                        current.contains(
-                            premiumExerciseStableKey
+                    premiumExerciseIsFavorite =
+                        FavoritesStore.isFavorite(
+                            exerciseId
                         )
-                    ) {
-                        current.remove(
-                            premiumExerciseStableKey
-                        )
-                        false
-                    } else {
-                        current.add(
-                            premiumExerciseStableKey
-                        )
-                        true
-                    }
-
-                prefs.edit {
-                    putStringSet(
-                        "favorite_exercises",
-                        current
-                    )
                 }
             }
         )
@@ -2078,52 +2055,46 @@ fun KmiTopBar(
                 showPremiumEditDialog = false
             },
             onSave = {
-                val noteRoleKey =
-                    if (userIsCoach) {
-                        "coach"
-                    } else {
-                        "trainee"
-                    }
+                val selectedBelt = premiumExerciseBelt
 
-                val notePrefsKey =
-                    "$premiumExerciseStableKey::$noteRoleKey"
-
-                ctx.getSharedPreferences(
-                    "kmi_exercise_user_notes",
-                    Context.MODE_PRIVATE
-                ).edit {
-                    putString(
-                        notePrefsKey,
+                if (
+                    selectedBelt != null &&
+                    premiumExerciseGlobalId.isNotBlank()
+                ) {
+                    val cleanNote =
                         premiumExerciseEditText.trim()
+
+                    ExerciseNotesStore.saveNote(
+                        context = ctx,
+                        belt = selectedBelt,
+                        exerciseId = premiumExerciseGlobalId,
+                        note = cleanNote,
+                        aliases = premiumExerciseAliases
                     )
+
+                    premiumExerciseUserNote = cleanNote
+                    premiumExerciseEditText = cleanNote
+                    showPremiumEditDialog = false
                 }
-
-                premiumExerciseUserNote =
-                    premiumExerciseEditText.trim()
-
-                showPremiumEditDialog = false
             },
             onDelete = {
-                val noteRoleKey =
-                    if (userIsCoach) {
-                        "coach"
-                    } else {
-                        "trainee"
-                    }
+                val selectedBelt = premiumExerciseBelt
 
-                val notePrefsKey =
-                    "$premiumExerciseStableKey::$noteRoleKey"
+                if (
+                    selectedBelt != null &&
+                    premiumExerciseGlobalId.isNotBlank()
+                ) {
+                    ExerciseNotesStore.deleteNote(
+                        context = ctx,
+                        belt = selectedBelt,
+                        exerciseId = premiumExerciseGlobalId,
+                        aliases = premiumExerciseAliases
+                    )
 
-                ctx.getSharedPreferences(
-                    "kmi_exercise_user_notes",
-                    Context.MODE_PRIVATE
-                ).edit {
-                    remove(notePrefsKey)
+                    premiumExerciseUserNote = ""
+                    premiumExerciseEditText = ""
+                    showPremiumEditDialog = false
                 }
-
-                premiumExerciseUserNote = ""
-                premiumExerciseEditText = ""
-                showPremiumEditDialog = false
             }
         )
     }
