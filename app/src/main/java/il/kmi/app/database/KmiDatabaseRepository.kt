@@ -18,6 +18,43 @@ object KmiDatabaseRepository {
     private const val BRANCHES_FILE_PATH = "kmi_database/branches.json"
     private const val NETWORK_COACHES_FILE_PATH = "kmi_database/network_coaches.json"
 
+    private const val BRANCHES_CACHE_FILE =
+        "kmi_branches_catalog_cache.json"
+
+    fun parseBranchesDatabase(
+        jsonText: String
+    ): KmiBranchesDatabase {
+        val root = JSONObject(jsonText)
+
+        return KmiBranchesDatabase(
+            version = root.optInt("version", 1),
+            updatedAt = root.optString("updatedAt", ""),
+            regions = root.optJSONArray("regions").toRegionList(),
+            branches = root.optJSONArray("branches").toBranchList()
+        )
+    }
+
+    fun saveBranchesDatabaseCache(
+        context: Context,
+        jsonText: String
+    ) {
+        val parsed = parseBranchesDatabase(jsonText)
+
+        val validation =
+            KmiDatabaseValidator.validateBranchesDatabase(parsed)
+
+        require(validation.errors.isEmpty()) {
+            "Invalid KMI branches catalog"
+        }
+
+        context.applicationContext.openFileOutput(
+            BRANCHES_CACHE_FILE,
+            Context.MODE_PRIVATE
+        ).bufferedWriter().use { writer ->
+            writer.write(jsonText)
+        }
+    }
+
     // ------------------------------------------------------------------------
     // Models
     // ------------------------------------------------------------------------
@@ -156,19 +193,31 @@ object KmiDatabaseRepository {
     // ------------------------------------------------------------------------
 
     fun loadBranchesDatabase(context: Context): KmiBranchesDatabase {
-        val jsonText = context.assets
+        val appContext = context.applicationContext
+
+        val cached = runCatching {
+            appContext.openFileInput(BRANCHES_CACHE_FILE)
+                .bufferedReader()
+                .use { reader ->
+                    parseBranchesDatabase(reader.readText())
+                }
+        }.getOrNull()
+
+        if (cached != null) {
+            val validation =
+                KmiDatabaseValidator.validateBranchesDatabase(cached)
+
+            if (validation.errors.isEmpty()) {
+                return cached
+            }
+        }
+
+        val bundledJson = appContext.assets
             .open(BRANCHES_FILE_PATH)
             .bufferedReader()
             .use { it.readText() }
 
-        val root = JSONObject(jsonText)
-
-        return KmiBranchesDatabase(
-            version = root.optInt("version", 1),
-            updatedAt = root.optString("updatedAt", ""),
-            regions = root.optJSONArray("regions").toRegionList(),
-            branches = root.optJSONArray("branches").toBranchList()
-        )
+        return parseBranchesDatabase(bundledJson)
     }
 
     fun loadNetworkCoachesDatabase(context: Context): KmiNetworkCoachesDatabase {

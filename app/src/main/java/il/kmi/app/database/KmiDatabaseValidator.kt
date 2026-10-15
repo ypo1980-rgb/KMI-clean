@@ -104,31 +104,149 @@ object KmiDatabaseValidator {
                 warnings += "Branch '${branch.id}' has no trainingDays"
             }
 
+            /*
+             * סניף פעיל עם אימונים חייב להכיל
+             * את שדות הזהות הנדרשים למערכת המרכזית.
+             */
+            if (branch.active && branch.trainingDays.isNotEmpty()) {
+
+                if (branch.nameHe.isBlank()) {
+                    errors +=
+                        "Active branch '${branch.id}' has empty nameHe"
+                }
+
+                if (branch.placeHe.isBlank()) {
+                    errors +=
+                        "Active branch '${branch.id}' has empty placeHe"
+                }
+
+                if (branch.addressHe.isBlank()) {
+                    errors +=
+                        "Active branch '${branch.id}' has empty addressHe"
+                }
+
+                val region =
+                    db.regions.firstOrNull {
+                        it.id == branch.regionId
+                    }
+
+                if (region != null && !region.active) {
+                    errors +=
+                        "Active branch '${branch.id}' belongs to inactive region"
+                }
+            }
+
+            val allowedDays = setOf(
+                "SUNDAY",
+                "MONDAY",
+                "TUESDAY",
+                "WEDNESDAY",
+                "THURSDAY",
+                "FRIDAY",
+                "SATURDAY"
+            )
+
+            val timePattern =
+                Regex("""(?:[01]\d|2[0-3]):[0-5]\d""")
+
+            val scheduleKeys = mutableSetOf<String>()
+
             branch.trainingDays.forEachIndexed { trainingIndex, training ->
-                val prefix = "Branch '${branch.id}' trainingDays[$trainingIndex]"
 
-                if (training.dayOfWeek.isBlank()) {
-                    errors += "$prefix has empty dayOfWeek"
+                val prefix =
+                    "Branch '${branch.id}' trainingDays[$trainingIndex]"
+
+                val day =
+                    training.dayOfWeek.trim().uppercase()
+
+                val start =
+                    training.startTime.trim()
+
+                val end =
+                    training.endTime.trim()
+
+                val group =
+                    training.groupHe.trim()
+
+                if (day !in allowedDays) {
+                    errors += "$prefix invalid dayOfWeek='$day'"
                 }
 
-                if (training.startTime.isBlank()) {
-                    errors += "$prefix has empty startTime"
+                if (!timePattern.matches(start)) {
+                    errors += "$prefix invalid startTime='$start'"
                 }
 
-                if (training.endTime.isBlank()) {
+                if (end.isBlank()) {
                     warnings += "$prefix has empty endTime"
+                } else if (!timePattern.matches(end)) {
+                    errors += "$prefix invalid endTime='$end'"
                 }
 
                 if (training.durationMinutes <= 0) {
-                    warnings += "$prefix has invalid durationMinutes=${training.durationMinutes}"
+                    errors +=
+                        "$prefix invalid durationMinutes=" +
+                                training.durationMinutes
                 }
 
-                if (training.groupHe.isBlank() && training.groupEn.isBlank()) {
+                if (
+                    training.groupHe.isBlank() &&
+                    training.groupEn.isBlank()
+                ) {
                     errors += "$prefix has no group name"
                 }
 
-                if (training.coachNameHe.isBlank() && training.coachNameEn.isBlank()) {
+                if (
+                    training.coachNameHe.isBlank() &&
+                    training.coachNameEn.isBlank()
+                ) {
                     warnings += "$prefix has no coach name"
+                }
+
+                /*
+                 * בדיקת כפילות של אימון שבועי:
+                 * יום + שעה + קבוצה.
+                 */
+                val scheduleKey = listOf(
+                    day,
+                    start,
+                    group.ifBlank {
+                        training.groupEn.trim()
+                    }
+                ).joinToString("|")
+
+                if (!scheduleKeys.add(scheduleKey)) {
+                    errors +=
+                        "$prefix duplicate weekly training: $scheduleKey"
+                }
+
+                /*
+                 * בדיקת התאמה בין משך האימון
+                 * לבין שעת הסיום המוצהרת.
+                 */
+                if (
+                    timePattern.matches(start) &&
+                    timePattern.matches(end) &&
+                    training.durationMinutes > 0
+                ) {
+                    val startMinutes =
+                        start.substringBefore(":").toInt() * 60 +
+                                start.substringAfter(":").toInt()
+
+                    val endMinutes =
+                        end.substringBefore(":").toInt() * 60 +
+                                end.substringAfter(":").toInt()
+
+                    val calculatedDuration =
+                        (endMinutes - startMinutes + 1440) % 1440
+
+                    if (
+                        calculatedDuration != training.durationMinutes
+                    ) {
+                        warnings +=
+                            "$prefix duration mismatch: " +
+                                    "expected=${training.durationMinutes} " +
+                                    "actual=$calculatedDuration"
+                    }
                 }
             }
         }

@@ -656,6 +656,12 @@ fun TrainingSummaryScreen(
     onOpenCalendar: (() -> Unit)? = null
 ) {
     val state by vm.state.collectAsState()
+
+    val catalogRevision by
+    il.kmi.app.database.KmiDatabaseProvider
+        .catalogRevision
+        .collectAsState()
+
     val scrollState = rememberLazyListState()
     var showAddExercisesSheet by rememberSaveable { mutableStateOf(false) }
 
@@ -701,7 +707,8 @@ fun TrainingSummaryScreen(
         state.dateIso,
         pickedBranch,
         pickedGroup,
-        pickedTime
+        pickedTime,
+        catalogRevision
     ) {
         val cleanIso = normalizedIsoOrNull(state.dateIso)
 

@@ -1,5 +1,6 @@
 package il.kmi.app.training
 
+import il.kmi.app.database.KmiDatabaseRepository
 import java.time.LocalDate
 import java.util.Calendar
 import java.util.Locale
@@ -336,15 +337,33 @@ object TrainingCatalog {
         slot: TrainingSlot,
         isEnglish: Boolean
     ): TrainingData {
+
+        val isExistingBranch =
+            slots.any { existing ->
+                existing.branch == slot.branch
+            }
+
         return TrainingData.nextWeekly(
             dayOfWeek = slot.dayOfWeek,
             startHour = slot.startHour,
             startMinute = slot.startMinute,
             durationMinutes = slot.durationMinutes,
-            place = placeDisplayName(slot.branch, isEnglish),
-            address = addressFor(slot.branch, isEnglish),
+            place = if (isExistingBranch) {
+                placeDisplayName(slot.branch, isEnglish)
+            } else {
+                slot.place
+            },
+            address = if (isExistingBranch) {
+                addressFor(slot.branch, isEnglish)
+            } else {
+                slot.address
+            },
             coach = slot.coach,
-            branch = branchDisplayName(slot.branch, isEnglish)
+            branch = if (isExistingBranch) {
+                branchDisplayName(slot.branch, isEnglish)
+            } else {
+                slot.branch
+            }
         )
     }
 
@@ -469,8 +488,12 @@ object TrainingCatalog {
      * Map "חי" שמחזיר את כל הסניפים.
      * נשמר אותו API כדי לא לשבור את שאר המסכים.
      */
-    val branchesByRegion: Map<String, List<String>> =
-        BRANCHES_BY_REGION_RAW
+    @Volatile
+    private var centralBranchesByRegion:
+            Map<String, List<String>>? = null
+
+    val branchesByRegion: Map<String, List<String>>
+        get() = centralBranchesByRegion ?: BRANCHES_BY_REGION_RAW
 
     /** סניפים נראים למשתמש עבור אזור */
     fun branchesFor(region: String): List<String> {
@@ -648,11 +671,15 @@ object TrainingCatalog {
         }
 
         val parts = src.split(Regex("\\s*[–-]\\s*"), limit = 2)
-        if (parts.size == 2 && parts[0].isNotBlank() && parts[1].isNotBlank()) {
-            val city = parts[0].trim()
-            val venue = parts[1].trim()
-            return "$venue, $city"
+
+        if (
+            parts.size == 2 &&
+            parts[0].isNotBlank() &&
+            parts[1].isNotBlank()
+        ) {
+            return src
         }
+
         return src
     }
 
@@ -1050,6 +1077,330 @@ object TrainingCatalog {
         )
     }
 
+    /*
+ * בדיקת התאמה בין מערכת השעות המקומית
+ * לבין הקטלוג המרכזי מ-Firestore.
+ *
+ * קריאה בלבד. אינה משנה את slots.
+ */
+    data class CatalogParityReport(
+        val localSlots: Int,
+        val remoteSlots: Int,
+        val missingInRemote: Int,
+        val additionalInRemote: Int,
+        val identical: Boolean,
+        val examples: List<String>
+    )
+
+    private fun scheduleIdentity(
+        branch: String,
+        group: String,
+        day: Int,
+        hour: Int,
+        minute: Int,
+        duration: Int,
+        place: String,
+        address: String,
+        coach: String
+    ): String {
+        return listOf(
+            cleanLabel(branch),
+            cleanLabel(group),
+            day.toString(),
+            hour.toString(),
+            minute.toString(),
+            duration.toString(),
+            cleanLabel(place),
+            cleanLabel(address),
+            cleanLabel(coach)
+        ).joinToString("|")
+    }
+
+    fun auditCentralCatalog(
+        database: KmiDatabaseRepository.KmiBranchesDatabase
+    ): CatalogParityReport {
+
+        val dayNumbers = mapOf(
+            "SUNDAY" to Calendar.SUNDAY,
+            "MONDAY" to Calendar.MONDAY,
+            "TUESDAY" to Calendar.TUESDAY,
+            "WEDNESDAY" to Calendar.WEDNESDAY,
+            "THURSDAY" to Calendar.THURSDAY,
+            "FRIDAY" to Calendar.FRIDAY,
+            "SATURDAY" to Calendar.SATURDAY
+        )
+
+        val localKeys = slots.flatMap { slot ->
+            slot.groups.map { group ->
+                scheduleIdentity(
+                    branch = slot.branch,
+                    group = group,
+                    day = slot.dayOfWeek,
+                    hour = slot.startHour,
+                    minute = slot.startMinute,
+                    duration = slot.durationMinutes,
+                    place = slot.place,
+                    address = slot.address,
+                    coach = slot.coach
+                )
+            }
+        }
+
+        val remoteKeys = database.branches.flatMap { branch ->
+            branch.trainingDays.map { training ->
+
+                val timeParts = training.startTime.split(":")
+                val hour = timeParts.getOrNull(0)?.toIntOrNull() ?: -1
+                val minute = timeParts.getOrNull(1)?.toIntOrNull() ?: -1
+
+                scheduleIdentity(
+                    branch = branch.nameHe,
+                    group = training.groupHe,
+                    day = dayNumbers[training.dayOfWeek.uppercase()] ?: -1,
+                    hour = hour,
+                    minute = minute,
+                    duration = training.durationMinutes,
+                    place = branch.placeHe,
+                    address = branch.addressHe,
+                    coach = training.coachNameHe
+                )
+            }
+        }
+
+        val localCounts = localKeys.groupingBy { it }.eachCount()
+        val remoteCounts = remoteKeys.groupingBy { it }.eachCount()
+
+        val missing = localCounts.flatMap { (key, count) ->
+            List((count - (remoteCounts[key] ?: 0)).coerceAtLeast(0)) {
+                key
+            }
+        }
+
+        val additional = remoteCounts.flatMap { (key, count) ->
+            List((count - (localCounts[key] ?: 0)).coerceAtLeast(0)) {
+                key
+            }
+        }
+
+        return CatalogParityReport(
+            localSlots = localKeys.size,
+            remoteSlots = remoteKeys.size,
+            missingInRemote = missing.size,
+            additionalInRemote = additional.size,
+            identical = missing.isEmpty() && additional.isEmpty(),
+            examples = (
+                    missing.take(20).map { "LOCAL_ONLY: $it" } +
+                            additional.take(20).map { "REMOTE_ONLY: $it" }
+                    )
+        )
+    }
+
+    /*
+ * כל האימונים השבועיים לצורך ביקורת מזהים.
+ *
+ * משתמשים ב-slots המקוריים כדי לשמר
+ * את שם הסניף והקבוצה המדויקים.
+ */
+    data class OccurrenceAuditCandidate(
+        val training: TrainingData,
+        val branch: String,
+        val group: String
+    )
+
+    fun occurrenceAuditCandidates(): List<OccurrenceAuditCandidate> {
+        return slots.flatMap { slot ->
+            slot.groups.map { group ->
+                OccurrenceAuditCandidate(
+                    training = localizedTrainingData(
+                        slot = slot,
+                        isEnglish = false
+                    ),
+                    branch = slot.branch,
+                    group = group
+                )
+            }
+        }
+    }
+
+    /*
+ * מקור האימונים הפעיל.
+ *
+ * בהתחלה משתמשים במערכת המקומית.
+ * לאחר אימות Firestore מחליפים רשימה שלמה באופן אטומי.
+ */
+    @Volatile
+    private var activeSlots: List<TrainingSlot> = slots
+
+    fun installCentralSchedule(
+        database: il.kmi.app.database.KmiDatabaseRepository.KmiBranchesDatabase
+    ): Boolean {
+
+        // הגנה על זהות האימונים הקיימים.
+        val report = auditCentralCatalog(database)
+
+        if (report.missingInRemote != 0) {
+            activeSlots = slots
+            return false
+        }
+
+        val weekdays = mapOf(
+            "SUNDAY" to Calendar.SUNDAY,
+            "MONDAY" to Calendar.MONDAY,
+            "TUESDAY" to Calendar.TUESDAY,
+            "WEDNESDAY" to Calendar.WEDNESDAY,
+            "THURSDAY" to Calendar.THURSDAY,
+            "FRIDAY" to Calendar.FRIDAY,
+            "SATURDAY" to Calendar.SATURDAY
+        )
+
+        val remoteSlots = database.branches
+            .filter { it.active }
+            .flatMap { branch ->
+
+                branch.trainingDays.map { day ->
+
+                    val timeParts = day.startTime.split(":")
+
+                    val hour = timeParts[0].toInt()
+                    val minute = timeParts[1].toInt()
+
+                    TrainingSlot(
+                        branch = branch.nameHe,
+                        groups = listOf(day.groupHe),
+                        dayOfWeek = weekdays.getValue(
+                            day.dayOfWeek.uppercase()
+                        ),
+                        startHour = hour,
+                        startMinute = minute,
+                        durationMinutes = day.durationMinutes,
+                        place = branch.placeHe,
+                        address = branch.addressHe,
+                        coach = day.coachNameHe
+                    )
+                }
+            }
+
+        if (remoteSlots.size < slots.sumOf { it.groups.size }) {
+            activeSlots = slots
+            return false
+        }
+
+        /*
+  * הגנה על מזהי הנוכחות.
+  *
+  * משווים את מפתח האימון המלא ולא רק את
+  * השדות לאחר נרמול כללי.
+  */
+        val referenceNow = Calendar.getInstance(
+            java.util.TimeZone.getTimeZone("Asia/Jerusalem")
+        )
+
+        fun identityKeys(
+            source: List<TrainingSlot>,
+            useLegacyPresentation: Boolean
+        ): Map<String, Int> {
+
+            val keys = source.flatMap { slot ->
+                slot.groups.map { group ->
+
+                    val training = TrainingData.nextWeekly(
+                        dayOfWeek = slot.dayOfWeek,
+                        startHour = slot.startHour,
+                        startMinute = slot.startMinute,
+                        durationMinutes = slot.durationMinutes,
+                        place = if (useLegacyPresentation) {
+                            placeDisplayName(slot.branch, false)
+                        } else {
+                            slot.place
+                        },
+                        address = if (useLegacyPresentation) {
+                            addressFor(slot.branch, false)
+                        } else {
+                            slot.address
+                        },
+                        coach = slot.coach,
+                        branch = slot.branch,
+                        now = referenceNow
+                    )
+
+                    TrainingOverrideRepository.buildOccurrenceKey(
+                        training = training,
+                        branch = slot.branch,
+                        group = group
+                    )
+                }
+            }
+
+            return keys.groupingBy { it }.eachCount()
+        }
+
+        val localIdentities = identityKeys(
+            source = slots,
+            useLegacyPresentation = true
+        )
+
+        val centralIdentities = identityKeys(
+            source = remoteSlots,
+            useLegacyPresentation = false
+        )
+
+        val allExistingIdentitiesPreserved =
+            localIdentities.all { (key, count) ->
+                (centralIdentities[key] ?: 0) >= count
+            }
+
+        if (!allExistingIdentitiesPreserved) {
+            android.util.Log.w(
+                "KMI_CENTRAL_IDENTITY",
+                "identity_mismatch | " +
+                        "local=${localIdentities.values.sum()} | " +
+                        "central=${centralIdentities.values.sum()}"
+            )
+
+            activeSlots = slots
+            return false
+        }
+
+        val regionNames = database.regions.associate {
+            it.id to it.nameHe
+        }
+
+        val remoteBranchesByRegion =
+            database.branches
+                .filter { it.active }
+                .groupBy { branch ->
+                    regionNames[branch.regionId].orEmpty()
+                }
+                .filterKeys { it.isNotBlank() }
+                .mapValues { (_, branches) ->
+                    branches.map { it.nameHe }.distinct()
+                }
+
+        val mergedBranchesByRegion =
+            (BRANCHES_BY_REGION_RAW.keys +
+                    remoteBranchesByRegion.keys)
+                .distinct()
+                .associateWith { region ->
+                    (
+                            BRANCHES_BY_REGION_RAW[region].orEmpty() +
+                                    remoteBranchesByRegion[region].orEmpty()
+                            ).distinct()
+                }
+
+        activeSlots = remoteSlots
+        centralBranchesByRegion = mergedBranchesByRegion
+
+        android.util.Log.i(
+            "KMI_CENTRAL_IDENTITY",
+            "identity_matched | " +
+                    "existing=${localIdentities.values.sum()} | " +
+                    "total=${centralIdentities.values.sum()} | " +
+                    "regions=${mergedBranchesByRegion.size}"
+        )
+
+        return true
+    }
+
     // ─────────────────────────────────────────────────────────────
     // API ציבורי
     // ─────────────────────────────────────────────────────────────
@@ -1114,7 +1465,7 @@ object TrainingCatalog {
         val branchKey =
             branchCanonicalKey(branch)
 
-        return slots
+        return activeSlots
             .asSequence()
             .filter { slot ->
                 slot.branch == branchKey
@@ -1206,7 +1557,7 @@ object TrainingCatalog {
         val wantedNorm = normalizeGroupName(group)
         val wantedClean = cleanLabel(wantedNorm)
 
-        val relevant = slots.filter { slot ->
+        val relevant = activeSlots.filter { slot ->
             slot.branch == branchKey &&
                     (group == null || group.isBlank() || slot.groups.any { sg ->
                         val normSlot = normalizeGroupName(sg)

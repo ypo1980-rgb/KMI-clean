@@ -19,6 +19,7 @@ import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.lifecycle.lifecycleScope
 import il.kmi.shared.localization.AppLanguageManager
 import il.kmi.app.subscription.BillingRepository
+import il.kmi.app.database.KmiDatabaseProvider
 import il.kmi.app.screens.BeltQuestions.ByTopic.HardSubjectResolverMemoryCache
 import il.kmi.app.screens.BeltQuestions.ByTopic.SubjectTopicsEngine
 import kotlinx.coroutines.Dispatchers
@@ -224,6 +225,37 @@ class MainActivity : androidx.fragment.app.FragmentActivity() {
 
         setupFcmTokenSync()
         trackAppOpenForCurrentUser()
+
+        /*
+         * K.M.I Central Catalog
+         *
+         * רענון אסינכרוני של קטלוג הסניפים מ-Firestore.
+         * אינו חוסם את פתיחת האפליקציה.
+         *
+         * במקרה של כשל נשמר הקטלוג המקומי.
+         */
+        KmiDatabaseProvider.refreshBranchesDatabase(
+            context = applicationContext
+        ) { success, status ->
+
+            if (success) {
+                Log.i(
+                    "KMI_CATALOG_SYNC",
+                    "status=$status | source=firestore | success=true"
+                )
+
+                Log.i(
+                    "KMI_CENTRAL_SCHEDULE",
+                    "installed=true | source=firestore"
+                )
+
+            } else {
+                Log.w(
+                    "KMI_CATALOG_SYNC",
+                    "status=$status | fallback=local | success=false"
+                )
+            }
+        }
 
         if (isDebugBuild) {
 
@@ -726,12 +758,29 @@ class MainActivity : androidx.fragment.app.FragmentActivity() {
 
         syncForCurrentProfile()
 
-        auth.addAuthStateListener {
+        auth.addAuthStateListener { firebaseAuth ->
+
             syncForCurrentProfile()
 
-            // אחרי Login / שינוי משתמש,
-            // מנסים שוב לעדכן usage כי עכשיו ה-UID והפרופיל זמינים.
             trackAppOpenForCurrentUser()
+
+            val signedInUser =
+                firebaseAuth.currentUser
+
+            if (
+                signedInUser != null &&
+                !signedInUser.isAnonymous
+            ) {
+                KmiDatabaseProvider.refreshBranchesDatabase(
+                    context = applicationContext
+                ) { success, status ->
+
+                    Log.i(
+                        "KMI_CATALOG_AUTH_REFRESH",
+                        "success=$success | status=$status"
+                    )
+                }
+            }
         }
     }
 
@@ -872,6 +921,17 @@ private fun AndroidAppRoot(
 ) {
     // ✅ חדש: Gate SP (הודעת מאמן לפני כניסה)
     val ctx = androidx.compose.ui.platform.LocalContext.current
+    val catalogRevision by
+    KmiDatabaseProvider.catalogRevision.collectAsState()
+
+    LaunchedEffect(catalogRevision) {
+        if (catalogRevision > 0L) {
+            Log.i(
+                "KMI_CATALOG_UI_REFRESH",
+                "revision=$catalogRevision"
+            )
+        }
+    }
     val gateSp = remember { ctx.getSharedPreferences(CoachGate.SP_NAME, Context.MODE_PRIVATE) }
 
     val forumPushSp = remember {

@@ -1,6 +1,13 @@
 package il.kmi.app.database
 
 import android.content.Context
+import org.json.JSONObject
+import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.Source
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import il.kmi.app.training.TrainingCatalog
+
 
 /**
  * KmiDatabaseProvider
@@ -12,7 +19,52 @@ import android.content.Context
  */
 object KmiDatabaseProvider {
 
-    private var cachedBranchesDatabase: KmiDatabaseRepository.KmiBranchesDatabase? = null
+    @Volatile
+    private var cachedBranchesDatabase:
+            KmiDatabaseRepository.KmiBranchesDatabase? = null
+
+    private val refreshLock = Any()
+    private val _catalogRevision =
+        MutableStateFlow(0L)
+
+    val catalogRevision =
+        _catalogRevision.asStateFlow()
+
+    private fun publishCatalogUpdated() {
+        _catalogRevision.value =
+            _catalogRevision.value + 1L
+    }
+
+    private var refreshInProgress = false
+
+    private val refreshCallbacks =
+        mutableListOf<(Boolean, String) -> Unit>()
+
+    private fun finishBranchesRefresh(
+        success: Boolean,
+        status: String
+    ) {
+        val callbacks = synchronized(refreshLock) {
+            refreshInProgress = false
+
+            refreshCallbacks.toList().also {
+                refreshCallbacks.clear()
+            }
+        }
+
+        callbacks.forEach { callback ->
+            runCatching {
+                callback(success, status)
+            }.onFailure { error ->
+                android.util.Log.e(
+                    "KMI_CATALOG_CALLBACK",
+                    "Catalog refresh callback failed",
+                    error
+                )
+            }
+        }
+    }
+
     private var cachedNetworkCoachesDatabase: KmiDatabaseRepository.KmiNetworkCoachesDatabase? = null
 
     // ------------------------------------------------------------------------
@@ -33,6 +85,156 @@ object KmiDatabaseProvider {
 
         cachedBranchesDatabase = loaded
         return loaded
+    }
+
+    fun refreshBranchesDatabase(
+        context: Context,
+        onResult: (Boolean, String) -> Unit
+    ) {
+        val appContext = context.applicationContext
+
+        synchronized(refreshLock) {
+            refreshCallbacks.add(onResult)
+
+            if (refreshInProgress) {
+                return
+            }
+
+            refreshInProgress = true
+        }
+
+        FirebaseFirestore.getInstance()
+            .collection("kmiCatalog")
+            .document("current")
+            .get(Source.SERVER)
+            .addOnSuccessListener { snapshot ->
+
+                val result = runCatching {
+
+                    if (!snapshot.exists()) {
+                        return@runCatching Pair(
+                            false,
+                            "catalog_missing"
+                        )
+                    }
+
+                    val data = snapshot.data
+                        ?: return@runCatching Pair(
+                            false,
+                            "catalog_empty"
+                        )
+
+                    val jsonText =
+                        JSONObject(data).toString()
+
+                    val updatedDatabase =
+                        KmiDatabaseRepository
+                            .parseBranchesDatabase(jsonText)
+
+                    val validation =
+                        KmiDatabaseValidator
+                            .validateBranchesDatabase(
+                                updatedDatabase
+                            )
+
+                    if (validation.errors.isNotEmpty()) {
+                        return@runCatching Pair(
+                            false,
+                            "catalog_validation_failed"
+                        )
+                    }
+
+                    /*
+                     * אין שומרים קטלוג חדש לפני
+                     * בדיקת זהות האימונים.
+                     */
+                    val installed =
+                        TrainingCatalog.installCentralSchedule(
+                            updatedDatabase
+                        )
+
+                    if (!installed) {
+                        return@runCatching Pair(
+                            false,
+                            "catalog_identity_rejected"
+                        )
+                    }
+
+                    /*
+                     * הקטלוג עבר את שתי הבדיקות:
+                     * מבנה הנתונים וזהות האימונים.
+                     */
+                    /*
+  * התקנת הקטלוג בזיכרון כבר הצליחה.
+  * כשל בכתיבה לדיסק לא מבטל אותה.
+  */
+                    cachedBranchesDatabase =
+                        updatedDatabase
+
+                    val cacheSaved = runCatching {
+                        KmiDatabaseRepository
+                            .saveBranchesDatabaseCache(
+                                appContext,
+                                jsonText
+                            )
+                    }.onFailure { error ->
+                        android.util.Log.e(
+                            "KMI_CATALOG_CACHE",
+                            "Catalog installed, disk cache failed",
+                            error
+                        )
+                    }.isSuccess
+
+                    publishCatalogUpdated()
+
+                    Pair(
+                        true,
+                        if (cacheSaved) {
+                            "catalog_updated"
+                        } else {
+                            "catalog_updated_cache_failed"
+                        }
+                    )
+                }.getOrElse { error ->
+
+                    android.util.Log.e(
+                        "KMI_CATALOG_SYNC_ERROR",
+                        "Catalog processing failed",
+                        error
+                    )
+
+                    Pair(
+                        false,
+                        "catalog_processing_failed"
+                    )
+                }
+
+                finishBranchesRefresh(
+                    result.first,
+                    result.second
+                )
+            }
+            .addOnFailureListener { error ->
+
+                val firestoreCode =
+                    (
+                            error as?
+                                    com.google.firebase.firestore
+                                    .FirebaseFirestoreException
+                            )?.code?.name ?: "UNKNOWN"
+
+                android.util.Log.e(
+                    "KMI_CATALOG_SYNC_ERROR",
+                    "Firestore read failed | " +
+                            "code=$firestoreCode",
+                    error
+                )
+
+                finishBranchesRefresh(
+                    false,
+                    "catalog_read_failed_$firestoreCode"
+                )
+            }
     }
 
     fun regions(

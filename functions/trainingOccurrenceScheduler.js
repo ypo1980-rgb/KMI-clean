@@ -1,4 +1,3 @@
-
 "use strict";
 
 const fs = require("fs");
@@ -128,8 +127,107 @@ function readSchedule() {
   return content;
 }
 
-function generateOccurrences(daysAhead = 14) {
-  const schedule = readSchedule();
+
+/**
+ * Fail-closed guard for the first Firestore rollout.
+ *
+ * Existing branches and their attendance identity fields stay frozen until
+ * Android/iOS use the same live catalog and a stable slot-ID migration exists.
+ * Entirely new branches may be added with valid weekly schedules.
+ * No Firestore writes occur here.
+ */
+function validateCentralCatalog(catalog) {
+  if (
+    !catalog ||
+    typeof catalog !== "object" ||
+    !Number.isSafeInteger(catalog.version) ||
+    !Array.isArray(catalog.regions) ||
+    !Array.isArray(catalog.branches) ||
+    catalog.regions.length === 0 ||
+    catalog.branches.length === 0
+  ) {
+    throw new Error("KMI central catalog invalid structure");
+  }
+
+  const baseline = readSchedule();
+  const baselineById = new Map(baseline.branches.map(b => [b.id, b]));
+  const seenIds = new Set();
+  const regionIds = new Set(catalog.regions.map(r => r.id));
+  let weeklySlots = 0;
+
+  if (regionIds.size !== catalog.regions.length ||
+      catalog.regions.some(r => !r.id || !r.nameHe)) {
+    throw new Error("KMI central catalog invalid regions");
+  }
+
+  for (const branch of catalog.branches) {
+    if (!branch || typeof branch.id !== "string" || !branch.id.trim() ||
+        seenIds.has(branch.id) || !regionIds.has(branch.regionId) ||
+        typeof branch.active !== "boolean" ||
+        !branch.nameHe || !branch.placeHe || !branch.addressHe ||
+        !Array.isArray(branch.trainingDays)) {
+      throw new Error("KMI central catalog invalid branch");
+    }
+    seenIds.add(branch.id);
+
+    const seenSlots = new Set();
+    for (const slot of branch.trainingDays) {
+      if (!slot || !Object.hasOwn(WEEKDAYS, slot.dayOfWeek) ||
+          !slot.groupHe || !slot.coachNameHe ||
+          !/^([01]\d|2[0-3]):[0-5]\d$/.test(slot.startTime) ||
+          !/^([01]\d|2[0-3]):[0-5]\d$/.test(slot.endTime) ||
+          slot.startTime === slot.endTime) {
+        throw new Error("KMI central catalog invalid training slot");
+      }
+      const key = JSON.stringify([
+        slot.dayOfWeek, slot.groupHe, slot.startTime, slot.endTime
+      ]);
+      if (seenSlots.has(key)) {
+        throw new Error("KMI central catalog duplicate training slot");
+      }
+      seenSlots.add(key);
+      weeklySlots++;
+    }
+
+    const previous = baselineById.get(branch.id);
+    if (previous) {
+      // Preserve current Android/iOS occurrence keys on existing branches.
+      const identity = x => JSON.stringify([
+        x.active, x.nameHe, x.placeHe, x.addressHe,
+        x.trainingDays.map(s => [
+          s.dayOfWeek, s.groupHe, s.startTime, s.endTime, s.coachNameHe
+        ]).sort((x,y) => JSON.stringify(x).localeCompare(JSON.stringify(y)))
+      ]);
+      if (identity(branch) !== identity(previous)) {
+        throw new Error(
+          `KMI existing branch schedule changed; migration required: ${branch.id}`
+        );
+      }
+    }
+  }
+
+  for (const baselineBranch of baseline.branches) {
+    if (!seenIds.has(baselineBranch.id)) {
+      throw new Error(
+        `KMI existing branch removed; migration required: ${baselineBranch.id}`
+      );
+    }
+  }
+
+  return {
+    version: catalog.version,
+    regions: catalog.regions.length,
+    branches: catalog.branches.length,
+    weeklySlots,
+    newBranches: catalog.branches.length - baseline.branches.length
+  };
+}
+
+function generateOccurrences(
+  daysAhead = 14,
+  schedule = readSchedule()
+) {
+
   const today = dateParts(dateFormatter, Date.now());
 
   const todayUtc = Date.UTC(
@@ -360,8 +458,9 @@ async function createMissingOccurrences(db, occurrences) {
    total: occurrences.length,
    created: 0,
    alreadyExists: 0,
-   skippedOverrides: 0,
-   failed: 0,
+ skippedOverrides: 0,
+ skippedPast: 0,
+ failed: 0,
  };
 
   for (const item of occurrences) {
@@ -414,12 +513,20 @@ try {
       const occurrenceSnapshot =
         await transaction.get(occurrenceRef);
 
-      if (occurrenceSnapshot.exists) {
-        return "alreadyExists";
-      }
+    if (occurrenceSnapshot.exists) {
+      return "alreadyExists";
+    }
 
-      let effectiveStartMillis =
-        item.originalStartMillis;
+    /*
+     * מניעת יצירת מופע שכבר התחיל.
+     * מופע קיים אינו מושפע מבדיקה זו.
+     */
+    if (item.originalStartMillis <= Date.now()) {
+      return "skippedPast";
+    }
+
+    let effectiveStartMillis =
+      item.originalStartMillis;
 
       let effectiveEndMillis =
         item.originalEndMillis;
@@ -490,9 +597,11 @@ try {
 
   if (result === "created") {
     stats.created++;
-  } else if (result === "alreadyExists") {
-    stats.alreadyExists++;
-  } else if (result === "skippedOverride") {
+} else if (result === "alreadyExists") {
+  stats.alreadyExists++;
+} else if (result === "skippedPast") {
+  stats.skippedPast++;
+} else if (result === "skippedOverride") {
     stats.skippedOverrides++;
 
     console.log(
@@ -671,10 +780,9 @@ async function auditTrainingOccurrences(db, occurrences) {
 
 module.exports = {
   generateOccurrences,
+  validateCentralCatalog,
   occurrenceKeyFor,
   occurrenceIdFor,
   createMissingOccurrences,
   auditTrainingOccurrences,
 };
-
-

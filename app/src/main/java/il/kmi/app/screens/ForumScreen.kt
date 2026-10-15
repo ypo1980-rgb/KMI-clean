@@ -90,6 +90,8 @@ import il.kmi.app.ui.loading.KmiLoadingRings
 import il.kmi.app.ui.scaledIconSize
 import il.kmi.app.privacy.TraineeDisplayNameMapper
 import il.kmi.app.screens.registration.CoachBranchAssignmentsCodec
+import il.kmi.app.database.KmiDatabaseProvider
+import androidx.compose.runtime.collectAsState
 import il.yuval.ui.theme.kmiScreenBackgroundBrush
 import il.yuval.ui.theme.kmiSectionHeaderBackground
 import il.yuval.ui.theme.kmiSectionHeaderContentColor
@@ -806,6 +808,14 @@ fun ForumScreen(
     val isEnglish = rememberIsEnglish()
     val screenTextAlign = forumTextAlign(isEnglish)
 
+    /*
+     * מאזינים לעדכוני קטלוג הסניפים המרכזי.
+     * שינוי ב-Firestore יגרום לחישוב מחדש
+     * של אפשרויות הפורום המשויכות למשתמש.
+     */
+    val catalogRevision by
+    KmiDatabaseProvider.catalogRevision.collectAsState()
+
     // 🔵 דיאלוג AI פתוח/סגור
     var showAiDialog by rememberSaveable {
         mutableStateOf(false)
@@ -935,7 +945,8 @@ fun ForumScreen(
             userSp,
             sp,
             legacySp,
-            settingsSp
+            settingsSp,
+            catalogRevision
         ) {
             listOf(
                 userSp,
@@ -965,7 +976,8 @@ fun ForumScreen(
             userSp,
             sp,
             legacySp,
-            settingsSp
+            settingsSp,
+            catalogRevision
         ) {
             if (forumBranchAssignments.isNotEmpty()) {
                 CoachBranchAssignmentsCodec
@@ -1073,7 +1085,8 @@ fun ForumScreen(
         remember(
             forumBranchAssignments,
             selectedForumBranch,
-            legacyForumGroups
+            legacyForumGroups,
+            catalogRevision
         ) {
             if (forumBranchAssignments.isNotEmpty()) {
                 forumBranchAssignments

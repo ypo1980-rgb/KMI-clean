@@ -81,6 +81,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import il.kmi.app.attendance.data.GroupMember
 import il.kmi.app.training.TrainingCatalog
+import il.kmi.app.database.KmiDatabaseProvider
 import il.kmi.app.privacy.TraineeDisplayNameMapper
 import il.kmi.shared.localization.AppLanguage
 import il.kmi.shared.localization.AppLanguageManager
@@ -107,6 +108,16 @@ fun AttendanceScreen(
     }
 
     val state by vm.uiState.collectAsState()
+
+    val catalogRevision by
+    KmiDatabaseProvider.catalogRevision.collectAsState()
+
+    LaunchedEffect(catalogRevision) {
+        if (catalogRevision > 0L) {
+            vm.onCentralCatalogUpdated()
+        }
+    }
+
     val scope = rememberCoroutineScope()
     val context = LocalContext.current   // לשיתוף דו"ח
     val snackbarHostState = remember { SnackbarHostState() }
@@ -413,7 +424,8 @@ fun AttendanceScreen(
     val hasBranchTrainingOnSelectedDate =
         remember(
             state.date,
-            effectiveBranchRaw
+            effectiveBranchRaw,
+            catalogRevision
         ) {
             TrainingCatalog.hasTrainingOn(
                 date = state.date,

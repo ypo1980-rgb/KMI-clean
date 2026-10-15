@@ -2224,12 +2224,30 @@ match /screen_views/{screenId} {
   allow delete: if isAdmin();
 }
 
-    // =========================
-    // ברירת מחדל – הכל חסום
-    // =========================
-    match /{document=**} {
-      allow read, write: if false;
-    		}
+  // =========================
+  // K.M.I Central Catalog
+  // kmiCatalog/current
+  // =========================
+  match /kmiCatalog/{documentId} {
+
+    // קריאת הקטלוג המרכזי למשתמש מחובר בלבד.
+    // הגישה מוגבלת למסמך current.
+    allow get: if documentId == "current"
+      && isSignedIn();
+
+    // אין אפשרות לשלוף רשימת מסמכים.
+    allow list: if false;
+
+    // כתיבה מתבצעת רק בצד השרת דרך Admin SDK.
+    allow create, update, delete: if false;
+  }
+
+  // =========================
+  // ברירת מחדל – הכל חסום
+  // =========================
+  match /{document=**} {
+    allow read, write: if false;
+  }
 
   }
 }

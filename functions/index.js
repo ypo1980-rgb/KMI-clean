@@ -29,6 +29,7 @@ const db = admin.firestore();
 
 const {
   generateOccurrences,
+  validateCentralCatalog,
   createMissingOccurrences,
   auditTrainingOccurrences,
 } = require("./trainingOccurrenceScheduler");
@@ -68,12 +69,9 @@ exports.syncTrainingOverrideOccurrence =
     });
 
 /**
- * KMI — Scheduled Training Occurrences
- *
- * Initial deployment: DRY RUN ONLY.
- * No Firestore writes.
- *
- * Runs daily at 03:00 Israel time.
+ * KMI — Automatic Scheduled Training Occurrences
+ * Creates up to 10 missing occurrences per run.
+ * Preserves existing occurrences and active overrides.
  */
 exports.syncScheduledTrainingOccurrences =
   functions
@@ -82,149 +80,166 @@ exports.syncScheduledTrainingOccurrences =
     .schedule("0 3 * * *")
     .timeZone("Asia/Jerusalem")
     .onRun(async () => {
-      const occurrences =
-        generateOccurrences(14);
+      const MAX_CREATES_PER_RUN = 10;
+      const MIN_LEAD_MILLIS = 5 * 60 * 1000;
 
-      const uniqueIds =
-        new Set(
-          occurrences.map(
-            (item) => item.occurrenceId
-          )
-        );
+      // Firestore is the schedule source. Fail closed on missing/unsafe data.
+      const catalogSnapshot = await db
+        .collection("kmiCatalog")
+        .doc("current")
+        .get();
 
-      const valid =
-        occurrences.every((item) =>
+      if (!catalogSnapshot.exists) {
+        throw new Error("KMI central catalog missing");
+      }
+
+      const catalog = catalogSnapshot.data();
+      const validation = validateCentralCatalog(catalog);
+
+      console.log(
+        "KMI_CENTRAL_CATALOG_VALIDATED",
+        JSON.stringify(validation)
+      );
+
+      const occurrences = generateOccurrences(14, catalog);
+
+      const uniqueIds = new Set(
+        occurrences.map((item) => item.occurrenceId)
+      );
+
+      const valid = occurrences.every(
+        (item) =>
           item.branch &&
           item.group &&
           item.occurrenceKey &&
           item.occurrenceId &&
-          Number.isSafeInteger(
-            item.originalStartMillis
-          ) &&
-          Number.isSafeInteger(
-            item.originalEndMillis
-          ) &&
-          item.originalEndMillis >
-            item.originalStartMillis
-        );
+          Number.isSafeInteger(item.originalStartMillis) &&
+          Number.isSafeInteger(item.originalEndMillis) &&
+          item.originalEndMillis > item.originalStartMillis
+      );
 
-      if (
-        !valid ||
-        uniqueIds.size !== occurrences.length
-      ) {
+      if (!valid || uniqueIds.size !== occurrences.length) {
+        throw new Error("KMI occurrence validation failed");
+      }
+
+      const audit = await auditTrainingOccurrences(
+        db,
+        occurrences
+      );
+
+      console.log(
+        "KMI_AUTOMATIC_OCCURRENCE_AUDIT",
+        JSON.stringify(audit)
+      );
+
+      if (audit.errors !== 0 || audit.mismatched !== 0) {
         throw new Error(
-          "KMI scheduled occurrence validation failed"
+          "KMI occurrence audit failed; writes blocked"
         );
       }
 
-     console.log(
-       "KMI_SCHEDULED_OCCURRENCES_DRY_RUN",
-       {
-         generated: occurrences.length,
-         uniqueIds: uniqueIds.size,
-         firestoreWrites: 0,
-       }
-     );
+      const now = Date.now();
 
-     const auditResult =
-       await auditTrainingOccurrences(
-         db,
-         occurrences
-       );
+      const future = occurrences
+        .filter(
+          (item) =>
+            item.originalStartMillis >
+            now + MIN_LEAD_MILLIS
+        )
+        .sort(
+          (a, b) =>
+            a.originalStartMillis - b.originalStartMillis ||
+            a.occurrenceId.localeCompare(b.occurrenceId)
+        );
 
-
-    console.log(
-      "KMI_SCHEDULED_OCCURRENCES_AUDIT_COMPLETE",
-      {
-        total: auditResult.total,
-        existing: auditResult.existing,
-        missing: auditResult.missing,
-        readyToCreate: auditResult.readyToCreate,
-        missingWithActiveOverride:
-          auditResult.missingWithActiveOverride,
-        mismatched: auditResult.mismatched,
-        errors: auditResult.errors,
-        firestoreWrites: 0,
-      }
-    );
-
-    /*
-     * בחירת מועמד יחיד ליצירה.
-     * קריאה בלבד — אין כתיבה ל-Firestore.
-     */
-    if (
-      auditResult.errors !== 0 ||
-      auditResult.mismatched !== 0 ||
-      auditResult.readyToCreate < 1
-    ) {
-      console.log(
-        "KMI_OCCURRENCE_CANDIDATE_SKIPPED",
-        "Audit is not ready"
+      // Read existing documents before selecting candidates.
+      const snapshots = await db.getAll(
+        ...future.map((item) =>
+          db.collection("trainingOccurrences")
+            .doc(item.occurrenceId)
+        )
       );
 
-      return null;
-    }
-
-    const orderedOccurrences =
-      [...occurrences].sort(
-        (a, b) =>
-          a.originalStartMillis -
-            b.originalStartMillis ||
-          a.occurrenceId.localeCompare(
-            b.occurrenceId
-          )
+      const missing = future.filter(
+        (_, index) => !snapshots[index].exists
       );
 
-    for (const item of orderedOccurrences) {
-      const occurrenceSnapshot = await db
-        .collection("trainingOccurrences")
-        .doc(item.occurrenceId)
-        .get();
+      // Exclude active or inconsistent overrides.
+      const eligibleChecks = await Promise.all(
+        missing.map(async (item) => {
+          const overrideSnapshot = await db
+            .collection("trainingOverrides")
+            .doc(item.occurrenceId)
+            .get();
 
-      if (occurrenceSnapshot.exists) {
-        continue;
-      }
+          if (!overrideSnapshot.exists) {
+            return item;
+          }
 
-      const overrideSnapshot = await db
-        .collection("trainingOverrides")
-        .doc(item.occurrenceId)
-        .get();
+          const override = overrideSnapshot.data() || {};
 
-      if (overrideSnapshot.exists) {
-        const override =
-          overrideSnapshot.data() || {};
+          if (
+            override.isActive === true ||
+            override.occurrenceKey !== item.occurrenceKey
+          ) {
+            return null;
+          }
 
-        if (
-          override.isActive === true ||
-          override.occurrenceKey !==
-            item.occurrenceKey
-        ) {
-          continue;
-        }
-      }
-
-      console.log(
-        "KMI_OCCURRENCE_FIRST_CANDIDATE",
-        JSON.stringify({
-          occurrenceId: item.occurrenceId,
-          branch: item.branch,
-          group: item.group,
-          sessionDate: item.sessionDate,
-          originalStartMillis:
-            item.originalStartMillis,
+          return item;
         })
       );
 
-      break;
-    }
+      const eligible = eligibleChecks.filter(Boolean);
 
-    console.log(
-      "KMI_OCCURRENCE_WRITES_DISABLED"
-    );
+      const selected = eligible.slice(
+        0,
+        MAX_CREATES_PER_RUN
+      );
 
-    return null;
+      if (selected.length === 0) {
+        console.log(
+          "KMI_AUTOMATIC_OCCURRENCES_COMPLETE",
+          JSON.stringify({
+            generated: occurrences.length,
+            eligibleMissing: 0,
+            created: 0,
+          })
+        );
 
+        return null;
+      }
+
+      // Existing transaction enforces identity,
+      // existing-document and override protections.
+      const result = await createMissingOccurrences(
+        db,
+        selected
+      );
+
+      console.log(
+        "KMI_AUTOMATIC_OCCURRENCES_RESULT",
+        JSON.stringify({
+          generated: occurrences.length,
+          eligibleMissing: eligible.length,
+          selected: selected.length,
+          created: result.created,
+          alreadyExists: result.alreadyExists,
+          skippedOverrides: result.skippedOverrides,
+          skippedPast: result.skippedPast,
+          failed: result.failed,
+        })
+      );
+
+      if (result.failed > 0) {
+        throw new Error(
+          "KMI automatic occurrence creation had failures"
+        );
+      }
+
+      return null;
     });
+
+
 
 function normalizeDigits(value) {
   return String(value || "").replace(/\D/g, "");

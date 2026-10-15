@@ -625,6 +625,86 @@ class AttendanceViewModel(app: Application) : AndroidViewModel(app) {
         _sessionId.value = null
     }
 
+    fun onCentralCatalogUpdated() {
+
+        val currentDate = _date.value
+        val currentBranch = _branch.value
+        val currentGroup = _groupKey.value
+
+        if (currentBranch.isBlank()) {
+            return
+        }
+
+        /*
+         * מחשבים מחדש את הסניפים המשויכים
+         * למאמן שבהם מתקיים אימון בתאריך הנבחר.
+         */
+        val activeBranches =
+            _allAvailableBranches.value
+                .asSequence()
+                .map { it.normAttendanceOption() }
+                .filter { it.isNotBlank() }
+                .filter { branch ->
+                    TrainingCatalog.hasTrainingOn(
+                        date = currentDate,
+                        branch = branch,
+                        group = null
+                    )
+                }
+                .distinct()
+                .toList()
+
+        /*
+         * מחשבים מחדש את הקבוצות של הסניף הנבחר.
+         * לא בוחרים סניף או קבוצה אחרים אוטומטית.
+         */
+        val activeGroups =
+            if (currentBranch in activeBranches) {
+                TrainingCatalog.groupsForBranch(
+                    branch = currentBranch,
+                    isEnglish = false
+                )
+                    .asSequence()
+                    .map { it.normAttendanceOption() }
+                    .filter { it.isNotBlank() }
+                    .filter { group ->
+                        TrainingCatalog.hasTrainingOn(
+                            date = currentDate,
+                            branch = currentBranch,
+                            group = group
+                        )
+                    }
+                    .distinct()
+                    .toList()
+            } else {
+                emptyList()
+            }
+
+        _availableBranches.value = activeBranches
+        _availableGroups.value = activeGroups
+
+        /*
+         * אם האימון שנבחר כבר אינו קיים בקטלוג,
+         * לא משאירים Session פעיל לשמירה נוספת.
+         */
+        val currentTrainingStillValid =
+            TrainingCatalog.hasTrainingOn(
+                date = currentDate,
+                branch = currentBranch,
+                group = currentGroup
+            )
+
+        if (!currentTrainingStillValid) {
+            _sessionId.value = null
+        }
+
+        /*
+         * רענון זרמי הנתונים הקיימים.
+         * לא מבצעים שינוי בחירה או כתיבת נוכחות.
+         */
+        _refreshTick.update { it + 1 }
+    }
+
     fun selectAttendanceDate(date: LocalDate) {
         val today =
             LocalDate.now()

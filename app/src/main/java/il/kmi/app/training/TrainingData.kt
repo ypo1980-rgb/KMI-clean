@@ -3,6 +3,7 @@ package il.kmi.app.training
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
+import java.util.TimeZone
 
 data class TrainingData(
     val cal: Calendar,
@@ -140,10 +141,8 @@ data class TrainingData(
 
     companion object {
         private val heLocale = Locale("he", "IL")
-        @Suppress("SimpleDateFormat")
-        private val timeFmt = SimpleDateFormat("HH:mm", heLocale)
-        @Suppress("SimpleDateFormat")
-        private val dateFmt = SimpleDateFormat("dd/MM/yyyy", heLocale)
+        private val israelTimeZone =
+            TimeZone.getTimeZone("Asia/Jerusalem")
 
         /**
          * ✅ יוצר אימון “שבועי הבא” לפי יום בשבוע + שעה/דקה + משך.
@@ -168,13 +167,18 @@ data class TrainingData(
             now: Calendar = Calendar.getInstance(),
             group: String = ""
         ): TrainingData {
-            val startCal = (now.clone() as Calendar).apply {
-                set(Calendar.SECOND, 0)
-                set(Calendar.MILLISECOND, 0)
+
+            val startCal = Calendar.getInstance(
+                TimeZone.getTimeZone("Asia/Jerusalem"),
+                heLocale
+            ).apply {
+                timeInMillis = now.timeInMillis
 
                 set(Calendar.DAY_OF_WEEK, dayOfWeek)
                 set(Calendar.HOUR_OF_DAY, startHour)
                 set(Calendar.MINUTE, startMinute)
+                set(Calendar.SECOND, 0)
+                set(Calendar.MILLISECOND, 0)
             }
 
             val endCal = (startCal.clone() as Calendar).apply {
@@ -194,8 +198,25 @@ data class TrainingData(
                 endCal.add(Calendar.WEEK_OF_YEAR, 1)
             }
 
-            val startStr = "${dateFmt.format(startCal.time)} ${timeFmt.format(startCal.time)}"
-            val endStr   = timeFmt.format(endCal.time)
+            val dateFmt = SimpleDateFormat(
+                "dd/MM/yyyy",
+                heLocale
+            ).apply {
+                timeZone = israelTimeZone
+            }
+
+            val timeFmt = SimpleDateFormat(
+                "HH:mm",
+                heLocale
+            ).apply {
+                timeZone = israelTimeZone
+            }
+
+            val startStr =
+                "${dateFmt.format(startCal.time)} ${timeFmt.format(startCal.time)}"
+
+            val endStr =
+                timeFmt.format(endCal.time)
 
             return TrainingData(
                 cal = startCal,

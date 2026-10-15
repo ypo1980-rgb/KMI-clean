@@ -408,6 +408,9 @@ fun HomeScreen(
     val haptic = rememberHapticsGlobal()
     val clickSound = rememberClickSound()
 
+    val catalogRevision by
+    KmiDatabaseProvider.catalogRevision.collectAsState()
+
     val messageCenterViewModel:
             MessageCenterViewModel =
         viewModel()
@@ -1391,7 +1394,12 @@ fun HomeScreen(
                     }
 
                     data class HomeTrainingCandidate(
+                        // מקור אמת למזהי נוכחות, ביטולים וסנכרון
                         val training: TrainingData,
+
+                        // נתוני תצוגה בהתאם לשפת האפליקציה
+                        val displayTraining: TrainingData,
+
                         val branch: String,
                         val group: String,
                         val displayGroup: String
@@ -1417,73 +1425,80 @@ fun HomeScreen(
                         if (matchingDays.isEmpty()) return emptyList()
 
                         return matchingDays.map { day ->
+
                             val durationMinutes =
-                                day.durationMinutes.takeIf { it > 0 }
-                                    ?: 90
+                                day.durationMinutes.takeIf { it > 0 } ?: 90
 
-                            /*
-                             * מזיזים את זמן הייחוס לאחור לפי משך האימון.
-                             * כך אימון שכבר התחיל אך טרם הסתיים נשאר
-                             * המופע של השבוע הנוכחי ולא קופץ לשבוע הבא.
-                             */
                             val occurrenceReference =
-                                Calendar.getInstance().apply {
-                                    timeInMillis =
-                                        trainingStatusNowMillis
-
-                                    add(
-                                        Calendar.MINUTE,
-                                        -durationMinutes
-                                    )
+                                Calendar.getInstance(
+                                    TimeZone.getTimeZone("Asia/Jerusalem")
+                                ).apply {
+                                    timeInMillis = trainingStatusNowMillis
+                                    add(Calendar.MINUTE, -durationMinutes)
                                 }
 
-                            HomeTrainingCandidate(
-                                training = TrainingData.nextWeekly(
+                            fun createTraining(
+                                displayLanguage: Boolean
+                            ): TrainingData {
+
+                                return TrainingData.nextWeekly(
                                     dayOfWeek =
-                                        calendarDayFromDatabase(
-                                            day.dayOfWeek
-                                        ),
+                                        calendarDayFromDatabase(day.dayOfWeek),
+
                                     startHour =
-                                        hourFromTimeText(
-                                            day.startTime,
-                                            19
-                                        ),
+                                        hourFromTimeText(day.startTime, 19),
+
                                     startMinute =
-                                        minuteFromTimeText(
-                                            day.startTime,
-                                            0
-                                        ),
-                                    durationMinutes =
-                                        durationMinutes,
+                                        minuteFromTimeText(day.startTime, 0),
+
+                                    durationMinutes = durationMinutes,
+
                                     place =
-                                        dbBranch.displayPlace(
-                                            isEnglish
-                                        ),
-                                    address =
-                                        dbBranch.displayAddress(
-                                            isEnglish
-                                        ),
-                                    coach =
-                                        day.displayCoachName(
-                                            isEnglish
-                                        ).ifBlank {
-                                            coachFallback
+                                        if (displayLanguage) {
+                                            dbBranch.displayPlace(isEnglish)
+                                        } else {
+                                            dbBranch.placeHe
                                         },
-                                    now = occurrenceReference
+
+                                    address =
+                                        if (displayLanguage) {
+                                            dbBranch.displayAddress(isEnglish)
+                                        } else {
+                                            dbBranch.addressHe
+                                        },
+
+                                    coach =
+                                        if (displayLanguage) {
+                                            day.displayCoachName(isEnglish)
+                                                .ifBlank { coachFallback }
+                                        } else {
+                                            day.coachNameHe
+                                        },
+
+                                    now =
+                                        occurrenceReference.clone() as Calendar
+                                )
+                            }
+
+                            HomeTrainingCandidate(
+                                training = createTraining(
+                                    displayLanguage = false
                                 ),
-                                branch = branchName.trim(),
-                                group = groupName.trim(),
+
+                                displayTraining = createTraining(
+                                    displayLanguage = true
+                                ),
+
+                                branch = dbBranch.nameHe.trim(),
+
+                                group = day.groupHe.trim(),
+
                                 displayGroup =
                                     if (isEnglish) {
                                         day.groupEn.trim()
-                                            .ifBlank {
-                                                day.groupHe.trim()
-                                            }
+                                            .ifBlank { day.groupHe.trim() }
                                     } else {
                                         day.groupHe.trim()
-                                            .ifBlank {
-                                                groupName.trim()
-                                            }
                                     }
                             )
                         }
@@ -1495,7 +1510,8 @@ fun HomeScreen(
                             branchGroupPairsEffective,
                             coachFromPrefs,
                             isEnglish,
-                            trainingStatusNowMillis
+                            trainingStatusNowMillis,
+                            catalogRevision
                         ) {
                             val all =
                                 mutableListOf<HomeTrainingCandidate>()
@@ -1548,7 +1564,7 @@ fun HomeScreen(
                                                 TrainingCatalog.trainingsFor(
                                                     branch = branchCandidate,
                                                     group = groupCandidate,
-                                                    isEnglish = isEnglish
+                                                    isEnglish = false
                                                 )
 
                                             found
@@ -1562,19 +1578,43 @@ fun HomeScreen(
                                 val fallbackItems: List<HomeTrainingCandidate> =
                                     sched
                                         ?.map { training ->
+
+                                            val fallbackBranch =
+                                                matchedBranch
+                                                    .ifBlank { branchName }
+                                                    .trim()
+
                                             val fallbackGroup =
                                                 matchedGroup
                                                     .ifBlank { grp }
                                                     .trim()
 
+                                            val translatedTraining =
+                                                if (isEnglish) {
+                                                    TrainingCatalog.trainingsFor(
+                                                        branch = fallbackBranch,
+                                                        group = fallbackGroup,
+                                                        isEnglish = true
+                                                    ).firstOrNull { translated ->
+                                                        translated.startMillis ==
+                                                                training.startMillis &&
+                                                                translated.endMillis ==
+                                                                training.endMillis
+                                                    } ?: training
+                                                } else {
+                                                    training
+                                                }
+
                                             HomeTrainingCandidate(
                                                 training = training,
-                                                branch =
-                                                    matchedBranch
-                                                        .ifBlank { branchName }
-                                                        .trim(),
+                                                displayTraining = translatedTraining,
+                                                branch = fallbackBranch,
                                                 group = fallbackGroup,
-                                                displayGroup = fallbackGroup
+                                                displayGroup =
+                                                    TrainingCatalog.groupDisplayName(
+                                                        fallbackGroup,
+                                                        isEnglish
+                                                    )
                                             )
                                         }
                                         .orEmpty()
@@ -1708,15 +1748,16 @@ fun HomeScreen(
                         )
                     }
 
-                    data class HomeTrainingUi(
-                        val training: TrainingData,
-                        val branch: String,
-                        val group: String,
-                        val displayGroup: String,
-                        val status: TrainingStatusEngine.Status,
-                        val occurrenceKey: String,
-                        val activeOverride: TrainingOverride?
-                    ) {
+                        data class HomeTrainingUi(
+                            val training: TrainingData,
+                            val displayTraining: TrainingData,
+                            val branch: String,
+                            val group: String,
+                            val displayGroup: String,
+                            val status: TrainingStatusEngine.Status,
+                            val occurrenceKey: String,
+                            val activeOverride: TrainingOverride?
+                        ) {
                         val isCancelledByHoliday: Boolean
                             get() =
                                 status.state ==
@@ -1984,6 +2025,8 @@ fun HomeScreen(
                                     HomeTrainingUi(
                                         training =
                                             candidate.training,
+                                        displayTraining =
+                                            candidate.displayTraining,
                                         branch =
                                             candidate.branch,
                                         group =
@@ -2045,7 +2088,7 @@ fun HomeScreen(
                         val timeFmt = SimpleDateFormat("HH:mm", locale)
 
                         homePdfTrainings = upcoming.map { item ->
-                            val training = item.training
+                            val training = item.displayTraining
 
                             HomePdfTraining(
                                 place = training.place,
@@ -2126,7 +2169,7 @@ fun HomeScreen(
                                 }
                             ) { item ->
                                 TrainingCardCompact(
-                                    training = item.training,
+                                    training = item.displayTraining,
                                     group = item.displayGroup,
                                     branch = item.branch,
                                     attendanceGroup = item.group,

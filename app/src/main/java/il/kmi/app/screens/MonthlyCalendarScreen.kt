@@ -117,6 +117,10 @@ fun MonthlyCalendarScreen(
     ) -> Unit = {}
 ) {
     val ctx = LocalContext.current
+
+    val catalogRevision by
+    KmiDatabaseProvider.catalogRevision.collectAsState()
+
     val langManager = remember(ctx) { AppLanguageManager(ctx) }
     val isEnglish = langManager.getCurrentLanguage() == AppLanguage.ENGLISH
     val screenLayoutDirection = if (isEnglish) LayoutDirection.Ltr else LayoutDirection.Rtl
@@ -252,7 +256,13 @@ fun MonthlyCalendarScreen(
         }
 
         // נרמול סניפים – קודם מתוך branches.json, ואם אין התאמה אז fallback ל־TrainingCatalog הישן
-        val normBranchKeys: List<String> = remember(ctx, region, branchListRaw) {
+        val normBranchKeys: List<String> =
+            remember(
+                ctx,
+                region,
+                branchListRaw,
+                catalogRevision
+            ) {
             val dbBranches = KmiDatabaseProvider.branches(ctx)
             val dbRegionBranches = dbBranches.filter { branch ->
                 branch.regionHe == region ||
@@ -408,7 +418,8 @@ fun MonthlyCalendarScreen(
             region,
             normBranchKeys,
             normGroupKeys,
-            cancelledTrainingDates
+            cancelledTrainingDates,
+            catalogRevision
         ) {
             if (region.isBlank() || normBranchKeys.isEmpty() || normGroupKeys.isEmpty()) {
                 emptyMap()
@@ -443,7 +454,8 @@ fun MonthlyCalendarScreen(
             region,
             normBranchKeys,
             normGroupKeys,
-            cancelledTrainingDates
+            cancelledTrainingDates,
+            catalogRevision
         ) {
             if (region.isBlank() || normBranchKeys.isEmpty() || normGroupKeys.isEmpty()) {
                 emptyMap()
@@ -475,7 +487,8 @@ fun MonthlyCalendarScreen(
         val primaryBranch = normBranchKeys.firstOrNull().orEmpty()
         val primaryGroup = normGroupKeys.firstOrNull().orEmpty()
 
-        val databaseRegionActive = remember(ctx, region) {
+        val databaseRegionActive =
+            remember(ctx, region, catalogRevision) {
             KmiDatabaseProvider.regions(ctx).any { dbRegion ->
                 dbRegion.nameHe == region ||
                         dbRegion.nameEn.equals(region, ignoreCase = true) ||
@@ -483,7 +496,8 @@ fun MonthlyCalendarScreen(
             }
         }
 
-        val databaseBranchExists = remember(ctx, primaryBranch) {
+        val databaseBranchExists =
+            remember(ctx, primaryBranch, catalogRevision) {
             KmiDatabaseProvider.branchByName(ctx, primaryBranch) != null
         }
 
