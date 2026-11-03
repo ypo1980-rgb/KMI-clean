@@ -97,6 +97,13 @@ class AttendanceViewModel(app: Application) : AndroidViewModel(app) {
 
     private val repo: AttendanceRepository = AttendanceRepository.get(app)
 
+    /*
+     * בדיקת קבוצות עם מתאמנים.
+     * מבטלים בדיקה קודמת בכל החלפת תאריך,
+     * סניף או בחירה ידנית.
+     */
+    private var groupSelectionJob: Job? = null
+
     // ✅ NEW: bootstrap state
     private var bootstrapJob: Job? = null
     private var lastBootstrapKey: String? = null
@@ -531,6 +538,94 @@ class AttendanceViewModel(app: Application) : AndroidViewModel(app) {
             .distinct()
     }
 
+    /*
+     * בוחר כברירת מחדל קבוצה שיש בה מתאמנים.
+     *
+     * סדר עדיפות:
+     * 1. הקבוצה המועדפת, אם יש בה מתאמנים.
+     * 2. קבוצה אחרת שיש בה מתאמנים.
+     * 3. ללא בחירה אם כל הקבוצות ריקות.
+     *
+     * שגיאת Firestore אינה נחשבת לקבוצה ריקה.
+     */
+    private fun selectDefaultGroupWithMembers(
+        date: LocalDate,
+        branch: String,
+        groups: List<String>,
+        preferredGroup: String
+    ) {
+        groupSelectionJob?.cancel()
+
+        if (branch.isBlank() || groups.isEmpty()) {
+            return
+        }
+
+        val cleanPreferredGroup =
+            preferredGroup.normAttendanceOption()
+
+        val preferred =
+            groups.firstOrNull { group ->
+                group == cleanPreferredGroup
+            }
+
+        val candidates =
+            (listOfNotNull(preferred) + groups)
+                .distinct()
+
+        groupSelectionJob = viewModelScope.launch {
+
+            var hadReadError = false
+            var selectedGroup: String? = null
+
+            for (candidate in candidates) {
+
+                val hasMembers =
+                    try {
+                        repo.hasAssignedMembers(
+                            branch = branch,
+                            groupKey = candidate
+                        )
+                    } catch (e: Exception) {
+                        hadReadError = true
+                        continue
+                    }
+
+                if (hasMembers) {
+                    selectedGroup = candidate
+                    break
+                }
+            }
+
+            /*
+             * לא מחילים תוצאה ישנה אחרי מעבר
+             * לתאריך, לסניף או לקבוצה אחרת.
+             */
+            if (
+                _date.value != date ||
+                _branch.value != branch ||
+                _groupKey.value.isNotBlank()
+            ) {
+                return@launch
+            }
+
+            /*
+             * כשיש שגיאת קריאה ולא נמצאו מתאמנים,
+             * לא מסיקים שכל הקבוצות ריקות.
+             */
+            if (selectedGroup == null && hadReadError) {
+                return@launch
+            }
+
+            if (selectedGroup != null) {
+                _groupKey.value = selectedGroup
+                _sessionId.value = null
+
+                ensureSession()
+                _refreshTick.update { it + 1 }
+            }
+        }
+    }
+
     /**
      * מסנן את הסניפים והקבוצות לפי התאריך.
      *
@@ -600,29 +695,26 @@ class AttendanceViewModel(app: Application) : AndroidViewModel(app) {
                     .toList()
             }
 
-        val cleanPreferredGroup =
-            preferredGroup.normAttendanceOption()
-
-        val preferredGroupNormalized =
-            TrainingCatalog.normalizeGroupName(
-                cleanPreferredGroup
-            )
-
-        val selectedGroup =
-            activeGroups.firstOrNull { group ->
-                group == cleanPreferredGroup ||
-                        TrainingCatalog.normalizeGroupName(group) ==
-                        preferredGroupNormalized
-            }
-                ?: activeGroups.firstOrNull()
-                    .orEmpty()
+        groupSelectionJob?.cancel()
 
         _date.value = date
         _availableBranches.value = activeBranches
         _branch.value = selectedBranch
         _availableGroups.value = activeGroups
-        _groupKey.value = selectedGroup
+
+        /*
+         * לא בוחרים את הקבוצה הראשונה אוטומטית.
+         * הבחירה תתבצע לאחר בדיקת המתאמנים.
+         */
+        _groupKey.value = ""
         _sessionId.value = null
+
+        selectDefaultGroupWithMembers(
+            date = date,
+            branch = selectedBranch,
+            groups = activeGroups,
+            preferredGroup = preferredGroup
+        )
     }
 
     fun onCentralCatalogUpdated() {
@@ -631,76 +723,39 @@ class AttendanceViewModel(app: Application) : AndroidViewModel(app) {
         val currentBranch = _branch.value
         val currentGroup = _groupKey.value
 
-        if (currentBranch.isBlank()) {
-            return
+        /*
+         * רענון מרכזי לפי לוח האימונים.
+         *
+         * אם הבחירה הנוכחית עדיין פעילה,
+         * היא נשמרת.
+         *
+         * אם הסניף או הקבוצה אינם פעילים
+         * בתאריך הנבחר, נבחר אימון פעיל
+         * מתוך האפשרויות המשויכות למאמן.
+         *
+         * הטיפול מתבצע גם כשהקטלוג נטען
+         * לראשונה והבחירה עדיין ריקה.
+         */
+        refreshScheduleOptionsForDate(
+            date = currentDate,
+            preferredBranch = currentBranch,
+            preferredGroup = currentGroup
+        )
+
+        /*
+         * פותחים Session רק אם הבחירה
+         * השתנתה בעקבות עדכון הקטלוג.
+         */
+        if (
+            _branch.value != currentBranch ||
+            _groupKey.value != currentGroup
+        ) {
+            ensureSession()
         }
 
         /*
-         * מחשבים מחדש את הסניפים המשויכים
-         * למאמן שבהם מתקיים אימון בתאריך הנבחר.
-         */
-        val activeBranches =
-            _allAvailableBranches.value
-                .asSequence()
-                .map { it.normAttendanceOption() }
-                .filter { it.isNotBlank() }
-                .filter { branch ->
-                    TrainingCatalog.hasTrainingOn(
-                        date = currentDate,
-                        branch = branch,
-                        group = null
-                    )
-                }
-                .distinct()
-                .toList()
-
-        /*
-         * מחשבים מחדש את הקבוצות של הסניף הנבחר.
-         * לא בוחרים סניף או קבוצה אחרים אוטומטית.
-         */
-        val activeGroups =
-            if (currentBranch in activeBranches) {
-                TrainingCatalog.groupsForBranch(
-                    branch = currentBranch,
-                    isEnglish = false
-                )
-                    .asSequence()
-                    .map { it.normAttendanceOption() }
-                    .filter { it.isNotBlank() }
-                    .filter { group ->
-                        TrainingCatalog.hasTrainingOn(
-                            date = currentDate,
-                            branch = currentBranch,
-                            group = group
-                        )
-                    }
-                    .distinct()
-                    .toList()
-            } else {
-                emptyList()
-            }
-
-        _availableBranches.value = activeBranches
-        _availableGroups.value = activeGroups
-
-        /*
-         * אם האימון שנבחר כבר אינו קיים בקטלוג,
-         * לא משאירים Session פעיל לשמירה נוספת.
-         */
-        val currentTrainingStillValid =
-            TrainingCatalog.hasTrainingOn(
-                date = currentDate,
-                branch = currentBranch,
-                group = currentGroup
-            )
-
-        if (!currentTrainingStillValid) {
-            _sessionId.value = null
-        }
-
-        /*
-         * רענון זרמי הנתונים הקיימים.
-         * לא מבצעים שינוי בחירה או כתיבת נוכחות.
+         * רענון הנתונים עבור הבחירה המעודכנת.
+         * ללא שינוי בנתוני הנוכחות השמורים.
          */
         _refreshTick.update { it + 1 }
     }
@@ -763,24 +818,21 @@ class AttendanceViewModel(app: Application) : AndroidViewModel(app) {
                 .distinct()
                 .toList()
 
-        val currentGroupNormalized =
-            TrainingCatalog.normalizeGroupName(
-                _groupKey.value
-            )
+        val previousGroup = _groupKey.value
 
-        val selectedGroup =
-            activeGroups.firstOrNull { group ->
-                group == _groupKey.value ||
-                        TrainingCatalog.normalizeGroupName(group) ==
-                        currentGroupNormalized
-            }
-                ?: activeGroups.firstOrNull()
-                    .orEmpty()
+        groupSelectionJob?.cancel()
 
         _branch.value = selectedBranch
         _availableGroups.value = activeGroups
-        _groupKey.value = selectedGroup
+        _groupKey.value = ""
         _sessionId.value = null
+
+        selectDefaultGroupWithMembers(
+            date = _date.value,
+            branch = selectedBranch,
+            groups = activeGroups,
+            preferredGroup = previousGroup
+        )
 
         getApplication<Application>()
             .getSharedPreferences(
@@ -791,10 +843,6 @@ class AttendanceViewModel(app: Application) : AndroidViewModel(app) {
             .putString(
                 "active_branch",
                 selectedBranch
-            )
-            .putString(
-                "active_group",
-                selectedGroup
             )
             .apply()
 
@@ -808,11 +856,15 @@ class AttendanceViewModel(app: Application) : AndroidViewModel(app) {
 
         val relevantGroup =
             _availableGroups.value.firstOrNull { group ->
-                group == clean ||
-                        TrainingCatalog.normalizeGroupName(group) ==
-                        TrainingCatalog.normalizeGroupName(clean)
+                group == clean
             }
                 ?: return
+
+        /*
+         * הבחירה הידנית גוברת על בחירה אוטומטית
+         * שעדיין ממתינה לתוצאת Firestore.
+         */
+        groupSelectionJob?.cancel()
 
         if (_groupKey.value == relevantGroup) {
             return

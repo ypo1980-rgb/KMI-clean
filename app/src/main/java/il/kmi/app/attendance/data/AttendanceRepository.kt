@@ -160,6 +160,44 @@ class AttendanceRepository private constructor(
     private fun membersRef(branch: String, groupKey: String) =
         groupRef(branch, groupKey).collection("members")
 
+    /**
+     * בדיקה לקריאה בלבד:
+     * האם קיימים מתאמנים משויכים לקבוצה.
+     *
+     * אין יצירת קבוצה, שינוי נתונים או כתיבה ל-Firestore.
+     *
+     * שגיאת רשת אינה מתורגמת לקבוצה ריקה.
+     */
+    suspend fun hasAssignedMembers(
+        branch: String,
+        groupKey: String
+    ): Boolean {
+
+        val cleanBranch = branch.trim()
+        val cleanGroup = groupKey.trim()
+
+        if (
+            cleanBranch.isBlank() ||
+            cleanGroup.isBlank()
+        ) {
+            return false
+        }
+
+        val snapshot =
+            membersRef(
+                cleanBranch,
+                cleanGroup
+            )
+                .get()
+                .await()
+
+        return snapshot.documents.any { document ->
+            document.getString("displayName")
+                ?.trim()
+                ?.isNotBlank() == true
+        }
+    }
+
     private fun sessionsRef(branch: String, groupKey: String) =
         groupRef(branch, groupKey).collection("sessions")
 

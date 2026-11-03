@@ -1555,16 +1555,29 @@ object TrainingCatalog {
     ): List<TrainingData> {
         val branchKey = branchCanonicalKey(branch)
         val wantedNorm = normalizeGroupName(group)
-        val wantedClean = cleanLabel(wantedNorm)
 
         val relevant = activeSlots.filter { slot ->
             slot.branch == branchKey &&
                     (group == null || group.isBlank() || slot.groups.any { sg ->
                         val normSlot = normalizeGroupName(sg)
 
-                        if (normSlot == wantedNorm) return@any true
-                        if (cleanLabel(sg) == wantedClean) return@any true
-                        if (sg == group) return@any true
+                        /*
+                         * קבוצות ילדים חייבות התאמה לשם הקבוצה
+                         * המדויק, לאחר ניקוי הבדלי כתיב בלבד.
+                         *
+                         * אין להשוות את כל קבוצות הילדים
+                         * באמצעות הקטגוריה הכללית "ילדים".
+                         */
+                        if (cleanLabel(sg) == cleanLabel(group)) {
+                            return@any true
+                        }
+
+                        if (
+                            normSlot == wantedNorm &&
+                            wantedNorm != "ילדים"
+                        ) {
+                            return@any true
+                        }
 
                         if (wantedNorm == "נוער" && normSlot == "נוער + בוגרים") {
                             return@any true
