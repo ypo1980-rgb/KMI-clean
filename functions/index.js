@@ -2654,7 +2654,7 @@ let resolvedBranch = "";
           traineeBranches.find(
             (branch) =>
               authorizedBranchKeys.has(
-                branch
+                normalizeTrainingTargetText(branch)
               )
           ) || "";
       }

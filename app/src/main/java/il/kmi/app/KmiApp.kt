@@ -2,6 +2,7 @@ package il.kmi.app
 
 import android.app.Activity
 import android.app.Application
+import android.content.pm.ApplicationInfo
 import android.os.Bundle
 import androidx.fragment.app.FragmentActivity
 import androidx.lifecycle.DefaultLifecycleObserver
@@ -60,14 +61,17 @@ class KmiApp : Application() {
             il.kmi.app.catalog.CatalogBootstrapper.bootstrapFromContentRepo()
         }
 
-        // ✅ Demo fallback ONLY אם ה-bootstrap לא מילא כלום
+        // נתוני גיבוי מותרים ב-Debug בלבד, לא ב-Release
         runCatching {
+            val isDebuggable =
+                (applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0
+
             val hasBelts =
                 il.kmi.shared.catalog.KmiCatalogFacade
                     .listBelts()
                     .isNotEmpty()
 
-            if (!hasBelts) {
+            if (isDebuggable && !hasBelts) {
                 il.kmi.shared.catalog.InMemoryCatalog.setBelts(
                     listOf(
                         il.kmi.shared.catalog.BeltDto(

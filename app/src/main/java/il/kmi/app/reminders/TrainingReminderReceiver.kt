@@ -68,21 +68,21 @@ class TrainingReminderReceiver : BroadcastReceiver() {
                 value > startMillis
             }
 
-        val trainingStatus =
-            TrainingStatusEngine.evaluate(
-                context = context,
-                trainingStartMillis =
-                    startMillis,
-                trainingEndMillis =
-                    endMillis
-            )
-
         /*
-         * האזעקה היא חד־פעמית. לכן לאחר הפעלתה חייבים
-         * לתזמן מחדש את המופע השבועי הבא, גם כאשר
-         * ההתראה הנוכחית חסומה על ידי המנוע.
+         * האזעקה היא חד־פעמית.
+         * תזמון מחדש חייב להתבצע גם כאשר
+         * בדיקת מצב האימון נכשלת.
          */
         try {
+            val trainingStatus =
+                TrainingStatusEngine.evaluate(
+                    context = context,
+                    trainingStartMillis =
+                        startMillis,
+                    trainingEndMillis =
+                        endMillis
+                )
+
             val reminderIdentity =
                 buildReminderIdentity(
                     branch = branch,
@@ -90,8 +90,24 @@ class TrainingReminderReceiver : BroadcastReceiver() {
                     startMillis = startMillis
                 )
 
+            val remindersEnabled =
+                context.getSharedPreferences(
+                    "kmi_settings",
+                    Context.MODE_PRIVATE
+                ).getBoolean(
+                    "training_reminders_enabled",
+                    false
+                )
+
+            val notificationsAllowed =
+                NotificationManagerCompat
+                    .from(context)
+                    .areNotificationsEnabled()
+
             val maySendReminder =
-                trainingStatus.shouldNotify &&
+                remindersEnabled &&
+                        notificationsAllowed &&
+                        trainingStatus.shouldNotify &&
                         claimReminderDelivery(
                             context = context,
                             reminderIdentity =
@@ -117,19 +133,73 @@ class TrainingReminderReceiver : BroadcastReceiver() {
                         reminderIdentity
                 )
             }
+        } catch (error: Exception) {
+            android.util.Log.e(
+                "KMI_TRAINING_REMINDER",
+                "Failed to process training reminder",
+                error
+            )
         } finally {
             /*
-             * המתזמן מבטל את תמונת האזעקות הישנה ובונה
-             * תמונה חדשה. הוא גם מדלג על חגים באמצעות
-             * TrainingStatusEngine.
+             * תזמון מחדש מחוץ ל-Main Thread.
+             * goAsync מאפשר ל-Receiver לסיים
+             * לאחר השלמת העבודה האסינכרונית.
              */
-            TrainingReminderScheduler
-                .scheduleWeeklyTrainingAlarms(
-                    context =
-                        context.applicationContext,
-                    leadMinutes =
-                        leadMinutes
+            val appContext = context.applicationContext
+            val pendingResult = goAsync()
+
+            try {
+                Thread(
+                    {
+                        try {
+                            /*
+                             * מונעים משני Receivers באותו תהליך
+                         * לבטל ולבנות תזמונים במקביל.
+                         */
+                        synchronized(TrainingReminderScheduler::class.java) {
+                            val remindersEnabledNow =
+                                appContext.getSharedPreferences(
+                                    "kmi_settings",
+                                    Context.MODE_PRIVATE
+                                ).getBoolean(
+                                    "training_reminders_enabled",
+                                    false
+                                )
+
+                            if (remindersEnabledNow) {
+                                TrainingReminderScheduler
+                                    .scheduleWeeklyTrainingAlarms(
+                                        context = appContext,
+                                        leadMinutes = leadMinutes
+                                    )
+                            } else {
+                                TrainingReminderScheduler
+                                    .cancelWeeklyTrainingAlarms(
+                                        appContext
+                                    )
+                            }
+                        }
+                        } catch (error: Exception) {
+                            android.util.Log.e(
+                                "KMI_TRAINING_REMINDER",
+                                "Failed to reschedule training reminders",
+                                error
+                            )
+                        } finally {
+                            pendingResult.finish()
+                        }
+                    },
+                    "KmiTrainingReminderReschedule"
+                ).start()
+            } catch (error: Exception) {
+                pendingResult.finish()
+
+                android.util.Log.e(
+                    "KMI_TRAINING_REMINDER",
+                    "Failed to start reminder rescheduling thread",
+                    error
                 )
+            }
         }
     }
 
@@ -150,7 +220,7 @@ class TrainingReminderReceiver : BroadcastReceiver() {
             if (isEnglish) {
                 Locale.US
             } else {
-                Locale("he", "IL")
+                Locale.forLanguageTag("he-IL")
             }
 
         val timeFormatter =
@@ -379,8 +449,6 @@ class TrainingReminderReceiver : BroadcastReceiver() {
                 .commit()
         }
     }
-
-
 
     private fun createChannelIfNeeded(context: Context) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {

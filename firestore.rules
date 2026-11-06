@@ -857,12 +857,37 @@ match /trainingOccurrences/{occurrenceId} {
   allow read: if isSelf(uid)
           || isAdmin();
 
-      // יצירה: המשתמש עצמו (או אדמין)
+      // יצירה: המשתמש עצמו כמתאמן, או אדמין
      allow create: if isAdmin()
               || (
                 isSelf(uid)
                 && request.resource.data.uid == uid
+
+                // רישום עצמי אינו מעניק תפקיד מאמן.
                 && request.resource.data.role == "trainee"
+
+                && request.resource.data.get(
+                     "user_role", "trainee"
+                   ) == "trainee"
+
+                && request.resource.data.get(
+                     "isCoach", false
+                   ) == false
+
+                && request.resource.data.get(
+                     "coachAuthorized", false
+                   ) == false
+
+                && request.resource.data.get(
+                     "coach_authorized", false
+                   ) == false
+
+                // שיוכי מאמן מנוהלים במקור האמת המאובטח.
+                && !request.resource.data.keys().hasAny([
+                     "coachBranchAssignments",
+                     "roleLockedBy",
+                     "role_locked_by"
+                   ])
               );
 
          // עדכון:
@@ -894,7 +919,18 @@ match /trainingOccurrences/{occurrenceId} {
              "activeBranch",
              "active_branch",
              "branches",
-             "coachBranchAssignments"
+             "coachBranchAssignments",
+             "isActive",
+             "archived",
+
+             // הרשאות מאמן מנוהלות רק במקור המאובטח
+             "canManagePayments",
+             "canViewPaymentReports",
+             "canManageAttendance",
+             "canManageTrainees",
+             "canViewTrainees",
+             "canManageInternalExams",
+             "canManageExams"
            ])
      )
 
@@ -985,9 +1021,6 @@ match /trainingOccurrences/{occurrenceId} {
             "registrationCompletedBy",
 
             "subscribeSms",
-
-            "isActive",
-            "archived",
 
             "createdAt",
             "updatedAt"
@@ -1508,13 +1541,25 @@ function isValidTraineeAttendanceData() {
      * המופע חייב להשתייך לאותו תאריך
      * של sessions/{sessionId}.
      */
-    && get(
-      /databases/$(database)/documents/trainingOccurrences/$(request.resource.data.occurrenceId)
-    ).data.sessionDate ==
-       sessionId
+        && get(
+          /databases/$(database)/documents/trainingOccurrences/$(request.resource.data.occurrenceId)
+        ).data.sessionDate ==
+           sessionId
 
-          /*
-           * זהות המתאמן נבדקת מול מסמך ה-member.
+        && attendanceGroupExists()
+
+        && get(
+          /databases/$(database)/documents/trainingOccurrences/$(request.resource.data.occurrenceId)
+        ).data.branch ==
+           attendanceGroupBranch()
+
+        && get(
+          /databases/$(database)/documents/trainingOccurrences/$(request.resource.data.occurrenceId)
+        ).data.group ==
+           attendanceGroupKey()
+
+             /*
+               * זהות המתאמן נבדקת מול מסמך ה-member.
            * מסמכי member ישנים אינם מחויבים להכיל
            * branch ו-groupKey ולכן לא משווים אליהם.
            */
@@ -1567,25 +1612,39 @@ function isValidTraineeAttendanceData() {
     * מותר ליצור רק רשומה אישית, עבור מופע אימון
     * מאומת שעדיין לא התחיל ושייך לאותה קבוצה.
     */
-   allow create: if
-     (
-       isSignedIn()
-       && canManageAttendanceSession(
-            groupId,
-            sessionId
-          )
-     )
-     ||
-     (
-       isOwnAttendanceRecord()
+    allow create: if
+      (
+         isSignedIn()
+         && canManageAttendanceSession(
+              groupId,
+              sessionId
+           )
+      )
+      ||
+      (
+         isSignedIn()
 
-       && request.resource.data.memberId ==
-          get(
-            /databases/$(database)/documents/attendanceGroups/$(groupId)/members/$(recordId)
-          ).data.id
+         && exists(
+           /databases/$(database)/documents/attendanceGroups/$(groupId)/members/$(recordId)
+         )
 
-       && request.resource.data.traineeUid ==
-          request.auth.uid
+         && get(
+           /databases/$(database)/documents/attendanceGroups/$(groupId)/members/$(recordId)
+         ).data.authUid == request.auth.uid
+
+         && request.resource.data.memberId ==
+           get(
+              /databases/$(database)/documents/attendanceGroups/$(groupId)/members/$(recordId)
+            ).data.id
+
+         // התאמת מזהה הרשומה למסמך הנוכחי
+         && request.resource.data.id == recordId
+
+         // התאמת השיעור לנתיב הרשומה
+         && request.resource.data.sessionId == sessionId
+
+         && request.resource.data.traineeUid ==
+            request.auth.uid
 
        && request.resource.data.markedBy ==
           "trainee"
@@ -1603,28 +1662,46 @@ function isValidTraineeAttendanceData() {
        && request.resource.data.occurrenceId is string
        && request.resource.data.occurrenceKey is string
 
-       && exists(
-         /databases/$(database)/documents/trainingOccurrences/$(request.resource.data.occurrenceId)
-       )
+            && exists(
+              /databases/$(database)/documents/trainingOccurrences/$(request.resource.data.occurrenceId)
+            )
 
-       && get(
-         /databases/$(database)/documents/trainingOccurrences/$(request.resource.data.occurrenceId)
-       ).data.occurrenceKey ==
-          request.resource.data.occurrenceKey
+            && get(
+              /databases/$(database)/documents/trainingOccurrences/$(request.resource.data.occurrenceId)
+            ).data.occurrenceKey ==
+               request.resource.data.occurrenceKey
 
-       && get(
-         /databases/$(database)/documents/trainingOccurrences/$(request.resource.data.occurrenceId)
-       ).data.sessionDate ==
-          sessionId
+            && get(
+              /databases/$(database)/documents/trainingOccurrences/$(request.resource.data.occurrenceId)
+            ).data.sessionDate ==
+               sessionId
 
-       /*
-        * תאימות למסמכי member ישנים שאינם כוללים
-        * את השדות branch ו-groupKey.
-        */
+                 /*
+                   * מופע האימון חייב להשתייך לסניף ולקבוצה
+              * של רשומת הנוכחות הנוכחית.
+              *
+              * אין להסתמך על התאריך בלבד.
+              */
+             && attendanceGroupExists()
 
-       && get(
-         /databases/$(database)/documents/trainingOccurrences/$(request.resource.data.occurrenceId)
-       ).data.isCancelled == false
+             && get(
+               /databases/$(database)/documents/trainingOccurrences/$(request.resource.data.occurrenceId)
+             ).data.branch ==
+                attendanceGroupBranch()
+
+             && get(
+               /databases/$(database)/documents/trainingOccurrences/$(request.resource.data.occurrenceId)
+             ).data.group ==
+                attendanceGroupKey()
+
+             /*
+              * תאימות למסמכי member ישנים שאינם כוללים
+              * את השדות branch ו-groupKey.
+              */
+
+             && get(
+               /databases/$(database)/documents/trainingOccurrences/$(request.resource.data.occurrenceId)
+             ).data.isCancelled == false
 
        && request.time.toMillis() <
           get(
@@ -1944,78 +2021,25 @@ match /internalExamRecentTrainees/{coachUid} {
     // membershipPayments/{paymentId}
     // membershipPayments/{paymentId}/history/{historyId}
     // =========================
-    match /membershipPayments/{paymentId} {
+      // =========================
+      // Membership Payments
+      // membershipPayments/{paymentId}
+      // membershipPayments/{paymentId}/history/{historyId}
+      //
+      // All access is managed by secure Cloud Functions.
+      // Firebase Admin SDK bypasses Firestore Security Rules.
+      // =========================
+      match /membershipPayments/{paymentId} {
 
-      // קריאה:
-      // אדמין / מאמן / מנהל יכולים לקרוא את דוח התשלומים.
-      // משתמש רגיל יכול לקרוא רק מסמך תשלום ששייך אליו.
-   allow read: if isSignedIn()
-     && (
-       isAdmin()
+        // No direct client access to payment documents.
+        allow read, create, update, delete: if false;
 
-       || paymentId == request.auth.uid
+        match /history/{historyId} {
 
-       || resource.data.traineeId == request.auth.uid
-
-       || resource.data.userDocId == request.auth.uid
-
-       || resource.data.uid == request.auth.uid
-
-       || resource.data.authUid == request.auth.uid
-     );
-
-      // יצירה / עדכון:
-      // בשלב הנוכחי מסך דוח התשלומים מאפשר למנהל/מאמן לעדכן תשלום ידני.
-      // משתמש רגיל לא כותב ישירות לכאן.
-     allow create, update: if isSignedIn()
-  && (
-    isAdmin()
-    || (
-      isAuthorizedCoach()
-      && get(
-        /databases/$(database)/documents/authorizedCoaches/$(request.auth.uid)
-      ).data.canManagePayments == true
-    )
-  );
-
-      // מחיקה רק לאדמין
-      allow delete: if isAdmin();
-
-      match /history/{historyId} {
-
-        // קריאת היסטוריה למנהלים/מאמנים/אדמין
-    allow read: if isSignedIn()
-  && (
-    isAdmin()
-    || (
-      isAuthorizedCoach()
-      && (
-        get(
-          /databases/$(database)/documents/authorizedCoaches/$(request.auth.uid)
-        ).data.canViewPaymentReports == true
-        ||
-        get(
-          /databases/$(database)/documents/authorizedCoaches/$(request.auth.uid)
-        ).data.canManagePayments == true
-      )
-    )
-  );
-
-        // כתיבת היסטוריה כשמעדכנים תשלום ידני
-     allow create, update: if isSignedIn()
-  && (
-    isAdmin()
-    || (
-      isAuthorizedCoach()
-      && get(
-        /databases/$(database)/documents/authorizedCoaches/$(request.auth.uid)
-      ).data.canManagePayments == true
-    )
-  );
-
-        allow delete: if isAdmin();
+          // No direct client access to payment history.
+          allow read, create, update, delete: if false;
+        }
       }
-    }
 
    // =========================
 // User Progress – סיכום התקדמות אישי לפי משתמש + חגורה
@@ -2176,11 +2200,23 @@ match /google_auth_diagnostics/{docId} {
       "source"
     ])
     && request.resource.data.createdAt != null
+
     && request.resource.data.stage is string
+    && request.resource.data.stage.size() > 0
+    && request.resource.data.stage.size() <= 100
+
     && request.resource.data.message is string
+    && request.resource.data.message.size() <= 1000
+
     && request.resource.data.applicationId is string
+    && request.resource.data.applicationId == "il.kmi.training"
+
     && request.resource.data.versionName is string
+    && request.resource.data.versionName.size() <= 50
+
     && request.resource.data.versionCode is int
+    && request.resource.data.versionCode > 0
+
     && request.resource.data.source == "android_google_auth";
 
   allow read: if isAdmin();

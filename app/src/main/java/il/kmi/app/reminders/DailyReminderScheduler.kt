@@ -87,11 +87,26 @@ object DailyReminderScheduler {
     }
 
     fun cancel(context: Context) {
-        val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
-        val pendingIntent = reminderPendingIntent(context)
+        val alarmManager =
+            context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
 
-        alarmManager.cancel(pendingIntent)
-        pendingIntent.cancel()
+        val intent = Intent(
+            context,
+            DailyReminderReceiver::class.java
+        )
+
+        val pendingIntent = PendingIntent.getBroadcast(
+            context,
+            REQUEST_CODE_DAILY_REMINDER,
+            intent,
+            PendingIntent.FLAG_NO_CREATE or
+                    PendingIntent.FLAG_IMMUTABLE
+        )
+
+        if (pendingIntent != null) {
+            alarmManager.cancel(pendingIntent)
+            pendingIntent.cancel()
+        }
     }
 
     fun rescheduleNextDay(context: Context) {
@@ -126,15 +141,21 @@ object DailyReminderScheduler {
         triggerAtMillis: Long,
         pendingIntent: PendingIntent
     ) {
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) {
-            val canExact = alarmManager.canScheduleExactAlarms()
-
-            if (canExact) {
-                alarmManager.setExactAndAllowWhileIdle(
-                    AlarmManager.RTC_WAKEUP,
-                    triggerAtMillis,
-                    pendingIntent
-                )
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            if (alarmManager.canScheduleExactAlarms()) {
+                try {
+                    alarmManager.setExactAndAllowWhileIdle(
+                        AlarmManager.RTC_WAKEUP,
+                        triggerAtMillis,
+                        pendingIntent
+                    )
+                } catch (_: SecurityException) {
+                    alarmManager.setAndAllowWhileIdle(
+                        AlarmManager.RTC_WAKEUP,
+                        triggerAtMillis,
+                        pendingIntent
+                    )
+                }
             } else {
                 alarmManager.setAndAllowWhileIdle(
                     AlarmManager.RTC_WAKEUP,

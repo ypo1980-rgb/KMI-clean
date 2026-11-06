@@ -1,9 +1,13 @@
 package il.kmi.app.training
 
+import android.content.Context
 import il.kmi.app.database.KmiDatabaseRepository
+import java.text.SimpleDateFormat
 import java.time.LocalDate
 import java.util.Calendar
+import java.util.Date
 import java.util.Locale
+import java.util.TimeZone
 
 /**
  * מקור אמת יחיד ללוגיקת אימונים:
@@ -239,6 +243,7 @@ object TrainingCatalog {
         }
     }
 
+    @Suppress("unused")
     fun regionDisplayName(region: String, isEnglish: Boolean): String {
 
         val regionEn = when (region) {
@@ -329,6 +334,7 @@ object TrainingCatalog {
         }
     }
 
+    @Suppress("unused")
     fun groupsDisplayNames(groups: List<String>, isEnglish: Boolean): List<String> {
         return groups.map { groupDisplayName(it, isEnglish) }
     }
@@ -365,42 +371,6 @@ object TrainingCatalog {
                 slot.branch
             }
         )
-    }
-
-    // קריאת משך אימון מ-TrainingData בצורה עמידה לאי-תאמויות
-    private fun readDurationMinutes(td: TrainingData): Int {
-        val cls = td::class.java
-
-        // 1) נסה שדות אינט מגוונים
-        val intNames = arrayOf("durationMinutes", "duration", "dur", "length")
-        for (n in intNames) {
-            val v = runCatching {
-                val f = cls.getDeclaredField(n).apply { isAccessible = true }
-                (f.get(td) as? Number)?.toInt()
-            }.getOrNull()
-            if (v != null && v > 0) return v
-        }
-
-        // 2) נסה לגזור לפי end (אם קיים) מול td.cal
-        val endAny = runCatching {
-            val f = cls.getDeclaredField("end").apply { isAccessible = true }
-            f.get(td)
-        }.getOrNull()
-
-        val endMillis: Long? = when (endAny) {
-            is java.util.Calendar -> endAny.timeInMillis
-            is java.util.Date     -> endAny.time
-            is Number             -> endAny.toLong()
-            else                  -> null
-        }
-
-        if (endMillis != null) {
-            val diffMin = ((endMillis - td.cal.timeInMillis) / 60_000L).toInt()
-            if (diffMin > 0) return diffMin
-        }
-
-        // 3) ברירת מחדל בטוחה
-        return 90
     }
 
     /** נרמול שם קבוצה ... */
@@ -466,13 +436,11 @@ object TrainingCatalog {
     const val REGION_HOLD_MESSAGE: String = "אין סניפים זמינים באזור זה"
     private const val REGION_HOLD_MESSAGE_EN: String = "No branches are available in this region"
 
-    // כרגע אין סניפים על HOLD — מציגים את כל הסניפים.
-    private val INACTIVE_BRANCHES: Set<String> = emptySet()
-
     /** האם האזור פעיל (כלומר *לא* על HOLD) */
     fun isRegionActive(region: String): Boolean = !INACTIVE_REGIONS.contains(region)
 
     /** הודעת סטטוס לאזור על HOLD; אחרת null — תאימות ישנה בעברית */
+    @Suppress("unused")
     fun regionStatusMessage(region: String): String? =
         regionStatusMessage(region, isEnglish = false)
 
@@ -503,6 +471,7 @@ object TrainingCatalog {
     }
 
     /** כל האזורים כפי שמוגדרים בקטלוג */
+    @Suppress("unused")
     fun allRegions(): List<String> =
         branchesByRegion.keys.toList()
 
@@ -515,10 +484,12 @@ object TrainingCatalog {
         branchesByRegion.values.flatten()
 
     /** כל הסניפים לפי אזור, בפורמט נוח ל-UI */
+    @Suppress("unused")
     fun visibleBranchesByRegion(): Map<String, List<String>> =
         branchesByRegion
 
     /** בדיקה האם סניף גלוי למשתמש */
+    @Suppress("unused")
     fun isVisibleBranch(branch: String): Boolean =
         allVisibleBranches().contains(branch)
 
@@ -630,6 +601,7 @@ object TrainingCatalog {
         }
     }
 
+    @Suppress("unused")
     fun hasMapForBranch(branch: String): Boolean {
         return mapAddressForBranch(branch).isNotBlank()
     }
@@ -1207,6 +1179,7 @@ object TrainingCatalog {
         val group: String
     )
 
+    @Suppress("unused")
     fun occurrenceAuditCandidates(): List<OccurrenceAuditCandidate> {
         return slots.flatMap { slot ->
             slot.groups.map { group ->
@@ -1232,7 +1205,7 @@ object TrainingCatalog {
     private var activeSlots: List<TrainingSlot> = slots
 
     fun installCentralSchedule(
-        database: il.kmi.app.database.KmiDatabaseRepository.KmiBranchesDatabase
+        database: KmiDatabaseRepository.KmiBranchesDatabase
     ): Boolean {
 
         // הגנה על זהות האימונים הקיימים.
@@ -1292,7 +1265,7 @@ object TrainingCatalog {
   * השדות לאחר נרמול כללי.
   */
         val referenceNow = Calendar.getInstance(
-            java.util.TimeZone.getTimeZone("Asia/Jerusalem")
+            TimeZone.getTimeZone("Asia/Jerusalem")
         )
 
         fun identityKeys(
@@ -1414,7 +1387,7 @@ object TrainingCatalog {
             .replace("`", "'")
             .replace("–", "-")
             .replace("—", "-")
-            .lowercase(Locale("he", "IL"))
+            .lowercase(Locale.forLanguageTag("he-IL"))
         return buildString(t.length) {
             t.forEach { ch ->
                 if (ch.isLetterOrDigit() || ch == '_' ) append(ch)
@@ -1426,7 +1399,7 @@ object TrainingCatalog {
     /** נרמול שם קבוצה לקטגוריות-על עקביות + ניקוי גרשיים/רווחים */
     fun normalizeGroupName(name: String?): String {
         val raw = name?.trim().orEmpty()
-        val lower = raw.lowercase(Locale("he", "IL"))
+        val lower = raw.lowercase(Locale.forLanguageTag("he-IL"))
         val hasAdult = lower.contains("בוגר")
         val hasYouth = lower.contains("נוער")
         val isKids = lower.contains("ילד") || lower.contains("כיתה") || lower.contains("גן") || lower.contains("טרום")
@@ -1558,7 +1531,7 @@ object TrainingCatalog {
 
         val relevant = activeSlots.filter { slot ->
             slot.branch == branchKey &&
-                    (group == null || group.isBlank() || slot.groups.any { sg ->
+                    (group.isNullOrBlank() || slot.groups.any { sg ->
                         val normSlot = normalizeGroupName(sg)
 
                         /*
@@ -1692,8 +1665,8 @@ object TrainingDirectory {
         val slots: List<TrainingSlot>
     )
     data class UpcomingTraining(
-        val start: java.util.Calendar,
-        val end: java.util.Calendar,
+        val start: Calendar,
+        val end: Calendar,
         val coachName: String,
         val placeName: String,
         val fullAddress: String
@@ -1720,10 +1693,10 @@ object TrainingDirectory {
         }.getOrNull()
 
         val endMillis: Long? = when (endAny) {
-            is java.util.Calendar -> endAny.timeInMillis
-            is java.util.Date     -> endAny.time
-            is Number             -> endAny.toLong()
-            else                  -> null
+            is Calendar -> endAny.timeInMillis
+            is Date -> endAny.time
+            is Number -> endAny.toLong()
+            else -> null
         }
 
         if (endMillis != null) {
@@ -1736,6 +1709,7 @@ object TrainingDirectory {
     }
 
     /** שליפה לפי סניף+קבוצה בפורמט הקטלוג ("בוגרים (18+)" וכו׳) */
+    @Suppress("unused")
     fun getSchedule(branch: String?, group: String?): GroupSchedule? {
         if (branch.isNullOrBlank() || group.isNullOrBlank()) return null
         val list = TrainingCatalog.trainingsFor(branch, group)
@@ -1744,9 +1718,9 @@ object TrainingDirectory {
         val coach = list.first().coach
         val slots = list.map { td ->
             TrainingSlot(
-                dayOfWeek       = td.cal.get(java.util.Calendar.DAY_OF_WEEK),
-                startHour       = td.cal.get(java.util.Calendar.HOUR_OF_DAY),
-                startMinute     = td.cal.get(java.util.Calendar.MINUTE),
+                dayOfWeek       = td.cal.get(Calendar.DAY_OF_WEEK),
+                startHour       = td.cal.get(Calendar.HOUR_OF_DAY),
+                startMinute     = td.cal.get(Calendar.MINUTE),
                 durationMinutes = readDurationMinutes(td)
             )
         }
@@ -1754,8 +1728,9 @@ object TrainingDirectory {
     }
 
     /** אימונים עתידיים לפי בחירת המשתמש ב-SP — תאימות ישנה בעברית */
+    @Suppress("unused")
     fun getUserUpcomingTrainings(
-        context: android.content.Context,
+        context: Context,
         limit: Int = 3
     ): List<UpcomingTraining> {
         return getUserUpcomingTrainings(
@@ -1767,11 +1742,11 @@ object TrainingDirectory {
 
     /** אימונים עתידיים לפי בחירת המשתמש ב-SP — דו־לשוני */
     fun getUserUpcomingTrainings(
-        context: android.content.Context,
+        context: Context,
         limit: Int = 3,
         isEnglish: Boolean
     ): List<UpcomingTraining> {
-        val sp = context.getSharedPreferences("kmi_user", android.content.Context.MODE_PRIVATE)
+        val sp = context.getSharedPreferences("kmi_user", Context.MODE_PRIVATE)
         val branch = sp.getString("branch", "") ?: return emptyList()
         val groupRaw  = sp.getString("group", "") ?: return emptyList()
         val group = TrainingCatalog.normalizeGroupLabel(groupRaw)
@@ -1837,13 +1812,13 @@ object TrainingDirectory {
     /** עזר פורמט דו־לשוני */
     fun formatUpcoming(t: UpcomingTraining, isEnglish: Boolean): String {
         val locale = if (isEnglish) {
-            java.util.Locale.ENGLISH
+            Locale.ENGLISH
         } else {
-            java.util.Locale("he", "IL")
+            Locale.forLanguageTag("he-IL")
         }
 
-        val dateFmt = java.text.SimpleDateFormat("EEEE, d/M/yyyy", locale)
-        val timeFmt = java.text.SimpleDateFormat("HH:mm", locale)
+        val dateFmt = SimpleDateFormat("EEEE, d/M/yyyy", locale)
+        val timeFmt = SimpleDateFormat("HH:mm", locale)
 
         return buildString {
             append(dateFmt.format(t.start.time))

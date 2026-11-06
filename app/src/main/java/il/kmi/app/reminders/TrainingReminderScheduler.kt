@@ -5,11 +5,11 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.os.Build
+import il.kmi.app.screens.registration.CoachBranchAssignmentsCodec
 import il.kmi.app.training.TrainingCatalog
 import il.kmi.app.training.TrainingStatusEngine
 import org.json.JSONArray
 import java.util.Calendar
-import kotlin.math.abs
 
 object TrainingReminderScheduler {
 
@@ -17,18 +17,61 @@ object TrainingReminderScheduler {
     private const val KEY_REQUEST_CODES = "training_reminder_request_codes"
     private const val ACTION_TRAINING_REMINDER = "il.kmi.app.ACTION_TRAINING_REMINDER"
 
+    @Synchronized
     fun scheduleWeeklyTrainingAlarms(
         context: Context,
         leadMinutes: Int
     ) {
         val appContext = context.applicationContext
 
-        cancelWeeklyTrainingAlarms(appContext)
+        /*
+         * שומרים את המזהים הקיימים.
+         * לא מבטלים אותם לפני בניית התזמון החדש.
+         */
+        val previousRequestCodes =
+            loadRequestCodes(appContext).toSet()
 
-        val branches = resolveUserBranches(appContext)
-        val groups = resolveUserGroups(appContext)
+        val userPreferences = appContext.getSharedPreferences(
+            "kmi_user",
+            Context.MODE_PRIVATE
+        )
 
-        if (branches.isEmpty()) {
+        val coachAssignments =
+            CoachBranchAssignmentsCodec.decode(
+                userPreferences.getString(
+                    "coach_branch_assignments_json",
+                    null
+                )
+            )
+
+        /*
+         * כאשר קיימים שיוכי מאמן, כל סניף מקבל
+         * רק את הקבוצות המשויכות אליו.
+         *
+         * בהיעדר שיוכים שומרים על מסלול התאימות
+         * הקיים למתאמנים ולפרופילים ישנים.
+         */
+        val branchGroups: Map<String, List<String>> =
+            if (coachAssignments.isNotEmpty()) {
+                coachAssignments
+                    .map { it.sanitized() }
+                    .filter { it.branch.isNotBlank() }
+                    .groupBy(
+                        keySelector = { it.branch },
+                        valueTransform = { it.groups }
+                    )
+                    .mapValues { (_, groupLists) ->
+                        groupLists.flatten().distinct()
+                    }
+            } else {
+                val branches = resolveUserBranches(appContext)
+                val groups = resolveUserGroups(appContext)
+
+                branches.associateWith { groups }
+            }
+
+        if (branchGroups.values.none { it.isNotEmpty() }) {
+            cancelWeeklyTrainingAlarms(appContext)
             return
         }
 
@@ -39,15 +82,14 @@ object TrainingReminderScheduler {
         val scheduledRequestCodes = linkedSetOf<Int>()
         val scheduledTrainingKeys = linkedSetOf<String>()
 
-        branches.forEach { branch ->
-            val groupsForBranch = groups.ifEmpty { listOf("") }
-
-            groupsForBranch.forEach { group ->
-                val trainings = TrainingCatalog.trainingsFor(
-                    branch = branch,
-                    group = group.ifBlank { null },
-                    isEnglish = false
-                )
+        try {
+            branchGroups.forEach { (branch, groupsForBranch) ->
+                groupsForBranch.forEach { group ->
+                    val trainings = TrainingCatalog.trainingsFor(
+                        branch = branch,
+                        group = group,
+                        isEnglish = false
+                    )
 
                 trainings.forEach { training ->
                     val nowMillis =
@@ -88,7 +130,11 @@ object TrainingReminderScheduler {
                     var resolvedStartMillis: Long? = null
                     var resolvedEndMillis: Long? = null
 
-                    for (attempt in 0 until 104) {
+                    var remainingAttempts = 104
+
+                    while (remainingAttempts > 0) {
+                        remainingAttempts--
+
                         while (
                             triggerCal.timeInMillis <=
                             nowMillis + 60_000L
@@ -206,6 +252,13 @@ object TrainingReminderScheduler {
                                 trainingStartMinute
                         )
 
+                    /*
+                     * שומרים את המזהה לפני ניסיון התזמון,
+                     * כדי שניתן יהיה לנקות אותו גם אם
+                     * הפעולה תיכשל באמצע.
+                     */
+                    scheduledRequestCodes += requestCode
+
                     scheduleOneTrainingAlarm(
                         context = appContext,
                         requestCode = requestCode,
@@ -222,42 +275,91 @@ object TrainingReminderScheduler {
                         leadMinutes =
                             safeLeadMinutes
                     )
-
-                    scheduledRequestCodes +=
-                        requestCode
+                }
                 }
             }
-        }
-
-        saveRequestCodes(appContext, scheduledRequestCodes)
-    }
-
-    fun cancelWeeklyTrainingAlarms(context: Context) {
-        val appContext = context.applicationContext
-        val alarmManager = appContext.getSystemService(Context.ALARM_SERVICE) as AlarmManager
-        val requestCodes = loadRequestCodes(appContext)
-
-        requestCodes.forEach { requestCode ->
-            val pendingIntent = reminderPendingIntent(
+        } catch (error: Exception) {
+            /*
+             * אם חלק מההתראות כבר נוצרו,
+             * שומרים גם את המזהים החדשים וגם
+             * את הקודמים, כדי שנוכל לבטל אותם
+             * בפעולת התזמון הבאה.
+             */
+            saveRequestCodes(
                 context = appContext,
-                requestCode = requestCode,
-                branch = "",
-                group = "",
-                place = "",
-                coach = "",
-                startMillis = 0L,
-                endMillis = null,
-                leadMinutes = 0
+                requestCodes =
+                    previousRequestCodes + scheduledRequestCodes
             )
 
-            alarmManager.cancel(pendingIntent)
-            pendingIntent.cancel()
+            throw error
         }
 
-        appContext.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        /*
+         * רק לאחר יצירת התזמונים החדשים
+         * מבטלים מזהים שלא קיימים עוד.
+         */
+        val obsoleteRequestCodes =
+            previousRequestCodes - scheduledRequestCodes
+
+        cancelRequestCodes(
+            context = appContext,
+            requestCodes = obsoleteRequestCodes
+        )
+
+        saveRequestCodes(
+            context = appContext,
+            requestCodes = scheduledRequestCodes
+        )
+    }
+
+    @Synchronized
+    fun cancelWeeklyTrainingAlarms(context: Context) {
+        val appContext = context.applicationContext
+
+        cancelRequestCodes(
+            context = appContext,
+            requestCodes = loadRequestCodes(appContext)
+        )
+
+        appContext.getSharedPreferences(
+            PREFS_NAME,
+            Context.MODE_PRIVATE
+        )
             .edit()
             .remove(KEY_REQUEST_CODES)
             .apply()
+    }
+
+    private fun cancelRequestCodes(
+        context: Context,
+        requestCodes: Collection<Int>
+    ) {
+        if (requestCodes.isEmpty()) return
+
+        val alarmManager =
+            context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+
+        requestCodes.forEach { requestCode ->
+            val intent = Intent(
+                context,
+                TrainingReminderReceiver::class.java
+            ).apply {
+                action = ACTION_TRAINING_REMINDER
+            }
+
+            val pendingIntent = PendingIntent.getBroadcast(
+                context,
+                requestCode,
+                intent,
+                PendingIntent.FLAG_NO_CREATE or
+                        PendingIntent.FLAG_IMMUTABLE
+            )
+
+            if (pendingIntent != null) {
+                alarmManager.cancel(pendingIntent)
+                pendingIntent.cancel()
+            }
+        }
     }
 
     private fun scheduleOneTrainingAlarm(
@@ -287,12 +389,24 @@ object TrainingReminderScheduler {
         )
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            if (alarmManager.canScheduleExactAlarms()) {
-                alarmManager.setExactAndAllowWhileIdle(
-                    AlarmManager.RTC_WAKEUP,
-                    triggerAtMillis,
-                    pendingIntent
-                )
+            val canScheduleExact =
+                alarmManager.canScheduleExactAlarms()
+
+            if (canScheduleExact) {
+                try {
+                    alarmManager.setExactAndAllowWhileIdle(
+                        AlarmManager.RTC_WAKEUP,
+                        triggerAtMillis,
+                        pendingIntent
+                    )
+                } catch (_: SecurityException) {
+                    // ההרשאה עשויה להשתנות לאחר הבדיקה.
+                    alarmManager.setAndAllowWhileIdle(
+                        AlarmManager.RTC_WAKEUP,
+                        triggerAtMillis,
+                        pendingIntent
+                    )
+                }
             } else {
                 alarmManager.setAndAllowWhileIdle(
                     AlarmManager.RTC_WAKEUP,
@@ -510,25 +624,30 @@ object TrainingReminderScheduler {
         /*
          * הקבוצה אינה חלק מהמזהה, משום שאותו אימון
          * עשוי להתאים לכמה קבוצות של אותו משתמש.
+         *
+         * שומרים על טווח Hash מלא כדי לצמצם
+         * התנגשויות בין אימונים שונים.
          */
         val raw =
             "$startMinute|$place"
 
-        return 42000 +
-                abs(raw.hashCode() % 50_000)
+        return raw.hashCode() and Int.MAX_VALUE
     }
 
     private fun saveRequestCodes(
         context: Context,
         requestCodes: Set<Int>
     ) {
-        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        context.getSharedPreferences(
+            PREFS_NAME,
+            Context.MODE_PRIVATE
+        )
             .edit()
             .putString(
                 KEY_REQUEST_CODES,
                 requestCodes.joinToString(",")
             )
-            .apply()
+            .commit()
     }
 
     private fun loadRequestCodes(context: Context): List<Int> {
