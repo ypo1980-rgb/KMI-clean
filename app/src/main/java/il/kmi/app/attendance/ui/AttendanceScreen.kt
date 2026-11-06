@@ -211,17 +211,16 @@ fun AttendanceScreen(
                 ).trim()
     }
 
+    /*
+     * מקור האמת לקבוצה הנבחרת הוא ה-ViewModel בלבד.
+     *
+     * לא חוזרים לקבוצה שהגיעה מהניווט כאשר
+     * הבחירה האוטומטית עדיין בודקת מתאמנים.
+     */
     val effectiveGroupRaw = remember(
-        state.groupKey,
-        groupKey
+        state.groupKey
     ) {
-        (
-                state.groupKey
-                    .takeIf {
-                        it.isNotBlank()
-                    }
-                    ?: groupKey
-                ).trim()
+        state.groupKey.trim()
     }
 
     fun String.nameKey(): String = this

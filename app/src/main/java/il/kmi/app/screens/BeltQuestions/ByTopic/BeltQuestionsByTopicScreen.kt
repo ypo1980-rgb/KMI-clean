@@ -1555,6 +1555,41 @@ private fun InlineSubTopicsExpansionCard(
                 "Stick/Rifle Strikes" ->
                     counts["מכות במקל/רובה"] ?: 0
 
+                // הגנות — התאמה לשמות הגלובליים בעברית
+                "Knife Defenses" ->
+                    counts["הגנות נגד סכין"] ?: 0
+
+                "Internal Defenses" ->
+                    counts["הגנות פנימיות"] ?: 0
+
+                "External Defenses" ->
+                    counts["הגנות חיצוניות"] ?: 0
+
+                "Defenses Against Kicks" ->
+                    counts["הגנות נגד בעיטות"] ?: 0
+
+                "Rifle Defenses Against Knife Stabs" ->
+                    counts["הגנות עם רובה נגד דקירות סכין"] ?: 0
+
+                "Gun Threat Defenses" ->
+                    counts["הגנות מאיום אקדח"] ?: 0
+
+                "Submachine Gun Threat Defenses" ->
+                    counts["הגנות נגד איום תת-מקלע"] ?: 0
+
+                "Defenses Against Multiple Attackers" ->
+                    counts["הגנות נגד מספר תוקפים"] ?: 0
+
+                "Stick Defenses" ->
+                    counts["הגנות נגד מקל"] ?: 0
+
+                // תתי נושאים של הגנות נגד סכין
+                "Knife Threat Defense" ->
+                    counts["הגנה מאיום סכין"] ?: 0
+
+                "Stab / Slash Defense" ->
+                    counts["הגנה נגד דקירה / שיסוף"] ?: 0
+
                 else -> 0
             }
     }
@@ -2381,17 +2416,37 @@ internal fun TopicsBySubjectCard(
 
     val subjects = TopicsBySubjectRegistry.allSubjects()
 
-// ✅ DEFENSE counts – source of truth מ-ExerciseCountsRegistry
+    // ספירת ההגנות לפי הקטלוג הגלובלי בלבד.
     val defenseDialogCountsMap = remember {
-        ExerciseCountsRegistry.defenseDialogCounts()
+        with(HardSectionsCatalog) {
+            fun count(subjectId: String): Int =
+                sectionsForSubject(subjectId)
+                    .orEmpty()
+                    .sumOf { section ->
+                        section.totalItemsCount()
+                    }
+
+            linkedMapOf(
+                "הגנות נגד סכין" to count("knife_defense"),
+                "הגנות פנימיות" to count("def_internal"),
+                "הגנות חיצוניות" to count("def_external"),
+                "הגנות נגד בעיטות" to count("kicks_hard"),
+                "הגנות עם רובה נגד דקירות סכין" to count("knife_rifle_defense"),
+                "הגנות מאיום אקדח" to count("gun_threat_defense"),
+                "הגנות נגד איום תת-מקלע" to count("submachine_gun_defense"),
+                "הגנות נגד מספר תוקפים" to count("multiple_attackers_defense"),
+                "הגנות נגד מקל" to count("stick_defense")
+            )
+        }
     }
 
+    // נשמר עבור דיאלוג בחירת סוג ההגנה הישן.
     val defensePickCountsMap = remember {
         ExerciseCountsRegistry.defensePickCounts()
     }
 
-    val totalDefense = remember {
-        ExerciseCountsRegistry.totalDefenseCount()
+    val totalDefense = remember(defenseDialogCountsMap) {
+        defenseDialogCountsMap.values.sum()
     }
 
     val knifeDefenseSubCounts = remember {
@@ -2427,16 +2482,8 @@ internal fun TopicsBySubjectCard(
         )
     }
 
-    val defenseDisplayCountsMap = remember(
-        defenseDialogCountsMap,
-        knifeDefenseSubCounts
-    ) {
-        defenseDialogCountsMap +
-                (
-                        "הגנות נגד סכין" to
-                                knifeDefenseSubCounts.values.sum()
-                        )
-    }
+    // כל ההגנות משתמשות במפת הספירה הגלובלית האחידה.
+    val defenseDisplayCountsMap = defenseDialogCountsMap
 
     val handsBase: SubjectTopic? = remember(subjects) {
         subjects.firstOrNull { it.id == "hands_all" }
@@ -2571,10 +2618,13 @@ internal fun TopicsBySubjectCard(
         val uniqueCount = when (card.id.trim().lowercase()) {
             "rolls_breakfalls",
             "topic_breakfalls_rolls" -> {
-                uniqueExerciseCountForTopics(
-                    "בלימות וגלגולים",
-                    "גלגולים ובלימות"
-                )
+                with(HardSectionsCatalog) {
+                    sectionsForSubject("topic_breakfalls_rolls")
+                        .orEmpty()
+                        .sumOf { section ->
+                            section.totalItemsCount()
+                        }
+                }
             }
 
             "topic_ready_stance" -> {
@@ -2584,9 +2634,13 @@ internal fun TopicsBySubjectCard(
             }
 
             "topic_ground_prep" -> {
-                uniqueExerciseCountForTopics(
-                    "עבודת קרקע"
-                )
+                with(HardSectionsCatalog) {
+                    sectionsForSubject("topic_ground_prep")
+                        .orEmpty()
+                        .sumOf { section ->
+                            section.totalItemsCount()
+                        }
+                }
             }
 
             "topic_kavaler",
