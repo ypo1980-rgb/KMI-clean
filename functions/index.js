@@ -679,14 +679,13 @@ async function allowPublicAction(
           updatedAtMillis:
             nowMillis,
 
-          updatedAt:
-            admin.firestore
-              .FieldValue
-              .serverTimestamp(),
+         updatedAt:
+           require("firebase-admin/firestore")
+             .FieldValue.serverTimestamp(),
 
-          expiresAtMillis:
-            nowMillis +
-            windowMs * 2,
+         expiresAtMillis:
+           nowMillis +
+           windowMs * 2,
         },
         {
           merge:
@@ -1158,9 +1157,10 @@ exports.submitKamiContactRequest =
         notifyTargetPhone: "",
         notifyCreatedAtMillis: nowMillis,
 
-        createdAt:
-          admin.firestore.FieldValue.serverTimestamp(),
-        createdAtMillis: nowMillis,
+       createdAt:
+         require("firebase-admin/firestore")
+           .FieldValue.serverTimestamp(),
+       createdAtMillis: nowMillis,
       });
 
       batch.create(notificationRef, {
@@ -1199,7 +1199,8 @@ exports.submitKamiContactRequest =
         userEmail: authEmail,
 
         createdAt:
-          admin.firestore.FieldValue.serverTimestamp(),
+          require("firebase-admin/firestore")
+            .FieldValue.serverTimestamp(),
         createdAtMillis: nowMillis,
       });
 
@@ -1359,8 +1360,9 @@ exports.onKamiContactRequestCreated =
           contactRequestId: snapshot.id,
           type: "contact_request_admin",
 
-          createdAt:
-            admin.firestore.FieldValue.serverTimestamp(),
+         createdAt:
+           require("firebase-admin/firestore")
+             .FieldValue.serverTimestamp(),
         }
       );
 
@@ -1385,7 +1387,8 @@ exports.onKamiContactRequestCreated =
             type: "contact_request_ack",
 
             createdAt:
-              admin.firestore.FieldValue.serverTimestamp(),
+              require("firebase-admin/firestore")
+                .FieldValue.serverTimestamp(),
           }
         );
       }
