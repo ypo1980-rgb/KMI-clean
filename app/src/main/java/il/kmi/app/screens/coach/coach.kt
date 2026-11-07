@@ -7,7 +7,6 @@ import android.app.Application
 import android.content.Context
 import android.content.Intent
 import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
@@ -16,23 +15,36 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Assessment
 import androidx.compose.material.icons.filled.Cancel
 import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
-import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.MenuAnchorType
-import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -40,8 +52,17 @@ import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.runtime.*
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -52,10 +73,10 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
-import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
 import com.google.firebase.auth.FirebaseAuth
@@ -74,17 +95,15 @@ import il.kmi.app.ui.KmiIconSize
 import il.kmi.app.ui.KmiPremiumDropdown
 import il.kmi.app.ui.KmiTopBar
 import il.kmi.app.ui.KmiTypography
-import il.yuval.ui.theme.kmiScreenBackgroundBrush
 import il.kmi.shared.localization.AppLanguage
 import il.kmi.shared.localization.AppLanguageManager
+import il.yuval.ui.theme.kmiScreenBackgroundBrush
 import il.yuval.ui.theme.kmiSectionHeaderBackground
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
-import java.time.Instant
 import java.time.LocalDate
-import java.time.ZoneId
 import java.util.Locale
 
 
@@ -919,7 +938,7 @@ fun CoachTraineesScreen(
                 .replace('–', '-')
                 .replace('—', '-')
                 .replace(Regex("\\s+"), " ")
-                .lowercase(Locale("he", "IL"))
+                .lowercase(Locale.forLanguageTag("he-IL"))
 
         fun String.normalizedBranchValue(): String =
             trim()
@@ -927,7 +946,7 @@ fun CoachTraineesScreen(
                 .replace('–', '-')
                 .replace('—', '-')
                 .replace(Regex("\\s+"), " ")
-                .lowercase(Locale("he", "IL"))
+                .lowercase(Locale.forLanguageTag("he-IL"))
 
         /*
          * אם קיים המבנה החדש, אין צורך להסיק
@@ -1150,94 +1169,21 @@ fun CoachTraineesScreen(
             return@LaunchedEffect
         }
 
-        // --- סנכרון מאובטח מהשרת לטבלת group_members ---
-        var serverHasPotentialMembers = false
-
-        try {
-            val existingMembers =
-                repo.members(
-                    branchDbKey,
-                    groupName
-                )
-                    .firstOrNull()
-                    .orEmpty()
-
-            val existingNames =
-                existingMembers
-                    .map {
-                        it.displayName.trim()
-                    }
-                    .filter {
-                        it.isNotBlank()
-                    }
-                    .toSet()
-
-            val result =
-                FirebaseFunctions
-                    .getInstance()
-                    .getHttpsCallable(
-                        "loadSecureCoachTrainees"
-                    )
-                    .call(
-                        mapOf(
-                            "branch" to
-                                    branchDbKey,
-                            "group" to
-                                    groupName
-                        )
-                    )
-                    .await()
-
-            val payload =
-                result.data as? Map<*, *>
-
-            val rawItems =
-                payload
-                    ?.get("items")
-                        as? List<*>
-                    ?: emptyList<Any>()
-
-            serverHasPotentialMembers =
-                rawItems.isNotEmpty()
-
-            rawItems.forEach { rawItem ->
-
-                val item =
-                    rawItem as? Map<*, *>
-                        ?: return@forEach
-
-                val fullName =
-                    item["fullName"]
-                        ?.toString()
-                        ?.trim()
-                        .orEmpty()
-
-                if (fullName.isBlank()) {
-                    return@forEach
-                }
-
-                if (fullName in existingNames) {
-                    return@forEach
-                }
-
-                repo.addMember(
-                    branch = branchDbKey,
-                    groupKey = groupName,
-                    displayName = fullName
-                )
-            }
-
-        } catch (_: Exception) {
-            // במקרה של תקלה נשארים עם members שכבר קיימים מקומית.
-
-        } finally {
-            isInitialServerSyncRunning = false
-        }
+        /*
+         * רשומות הנוכחות הקיימות נשארות מקור האמת.
+         *
+         * אין ליצור members מתוך רשימת פרופילים
+         * לפי שם בלבד או לפי userDocId שאינו מאומת.
+         *
+         * קישור משתמש חדש לרשומת נוכחות
+         * יתבצע בהמשך במסלול זהות מאומת בצד השרת.
+         */
+        isInitialServerSyncRunning = false
 
         // --- מאזינים ל-DB המקומי ובונים TraineeProfile "עשיר" (כולל Firestore) ---
         repo.members(branchDbKey, groupName).collectLatest { members: List<GroupMember> ->
             if (members.isEmpty()) {
-                if (serverHasPotentialMembers || isInitialServerSyncRunning) {
+                if (isInitialServerSyncRunning) {
                     isProfilesLoading = true
                     didFinishInitialProfilesLoad = false
                     return@collectLatest
@@ -1293,51 +1239,8 @@ fun CoachTraineesScreen(
                         " "
                     )
                     .lowercase(
-                        Locale(
-                            "he",
-                            "IL"
-                        )
+                        Locale.forLanguageTag("he-IL")
                     )
-
-            fun normalizeEmailForMerge(
-                value: String
-            ): String =
-                value
-                    .trim()
-                    .lowercase(
-                        Locale.US
-                    )
-
-            fun normalizePhoneForMerge(
-                value: String
-            ): String {
-
-                val digits =
-                    value.filter {
-                        it.isDigit()
-                    }
-
-                return when {
-
-                    digits.startsWith("00972") &&
-                            digits.length >= 13 ->
-                        "0" + digits.drop(5)
-
-                    digits.startsWith("972") &&
-                            digits.length >= 11 ->
-                        "0" + digits.drop(3)
-
-                    digits.startsWith("05") ->
-                        digits
-
-                    digits.length == 9 &&
-                            digits.startsWith("5") ->
-                        "0$digits"
-
-                    else ->
-                        digits
-                }
-            }
 
             fun beltForCoachUi(
                 rawValue: String
@@ -1563,6 +1466,13 @@ fun CoachTraineesScreen(
                         FireUserInfo
                         >()
 
+            /*
+             * שמות שמופיעים אצל יותר ממשתמש אחד
+             * אינם מזהה ייחודי ואסור לשייך לפיהם פרטים.
+             */
+            val ambiguousUserNames =
+                mutableSetOf<String>()
+
             val secureTraineesResult =
                 runCatching {
 
@@ -1708,11 +1618,37 @@ fun CoachTraineesScreen(
                             certificationDates
                     )
 
-                userInfoByName[
+                val nameKey =
                     fullName.normKey()
-                ] =
-                    fireUserInfo
+
+                if (
+                    nameKey in ambiguousUserNames
+                ) {
+                    return@forEach
+                }
+
+                if (
+                    userInfoByName.containsKey(nameKey)
+                ) {
+                    userInfoByName.remove(nameKey)
+                    ambiguousUserNames.add(nameKey)
+                } else {
+                    userInfoByName[nameKey] =
+                        fireUserInfo
+                }
             }
+
+            /*
+             * שם אינו מזהה ייחודי.
+             * אם כמה members חולקים אותו שם,
+             * לא משייכים להם פרופיל לפי שם.
+             */
+            val memberNameCounts =
+                members
+                    .groupingBy {
+                        it.displayName.normKey()
+                    }
+                    .eachCount()
 
             val builtProfiles = members.map { m ->
                 val stat = statsMap[m.id]
@@ -1721,7 +1657,14 @@ fun CoachTraineesScreen(
                 } else 0
 
                 val key = m.displayName.normKey()
-                val info = userInfoByName[key]
+
+                val info =
+                    if (memberNameCounts[key] == 1) {
+                        userInfoByName[key]
+                    } else {
+                        null
+                    }
+
                 val userDocId = info?.userDocId.orEmpty()
                 val email = info?.email.orEmpty()
                 val phone = info?.phone.orEmpty()
@@ -1756,32 +1699,18 @@ fun CoachTraineesScreen(
                 )
             }
 
-            val mergedProfiles = builtProfiles
-                .groupBy { profile ->
-                    val emailKey = normalizeEmailForMerge(profile.email)
-                    val phoneKey = normalizePhoneForMerge(profile.phone)
-                    val nameKey = profile.fullName.normKey()
-
-                    when {
-                        emailKey.isNotBlank() -> "email:$emailKey"
-                        phoneKey.isNotBlank() -> "phone:$phoneKey"
-                        else -> "name:$nameKey"
+            /*
+             * כל member נשמר כמתאמן נפרד.
+             *
+             * אין לאחד מתאמנים לפי שם, טלפון או אימייל.
+             * המזהה של כל מתאמן נשמר לצורך נתוני הנוכחות.
+             */
+            traineeProfiles =
+                builtProfiles
+                    .sortedBy {
+                        it.fullName.trim()
                     }
-                }
-                .map { (_, duplicates) ->
-                    duplicates.maxWithOrNull(
-                        compareBy<TraineeProfile> {
-                            if (it.userDocId.isNotBlank()) 1 else 0
-                        }.thenBy {
-                            it.attendancePct
-                        }.thenBy {
-                            it.belt.length
-                        }
-                    ) ?: duplicates.first()
-                }
-                .sortedBy { it.fullName.trim() }
 
-            traineeProfiles = mergedProfiles
             isProfilesLoading = false
             isInitialServerSyncRunning = false
             didFinishInitialProfilesLoad = true
@@ -1799,7 +1728,7 @@ fun CoachTraineesScreen(
             .replace('–', '-')
             .replace('—', '-')
             .replace(Regex("\\s+"), " ")
-            .lowercase(Locale("he", "IL"))
+            .lowercase(Locale.forLanguageTag("he-IL"))
 
     /*
      * הקריאה מתבצעת מתוך Composition ולכן שינוי המתג
@@ -1861,77 +1790,26 @@ fun CoachTraineesScreen(
                     traineeSearchQuery
                 )
 
-            val mergedProfiles =
+            /*
+             * כל מתאמן נשאר רשומה נפרדת לפי memberId.
+             *
+             * אין לאחד לפי שם, טלפון או אימייל,
+             * משום שהפרטים עשויים להיות משותפים
+             * למספר מתאמנים שונים.
+             *
+             * DemoPrivacy משפיע רק על התצוגה.
+             */
+            val sortedProfiles =
                 traineeProfiles
-                    .groupBy { profile ->
-                        val emailKey =
-                            profile.email
-                                .trim()
-                                .lowercase(Locale.US)
-
-                        val phoneKey =
-                            profile.phone
-                                .filter { it.isDigit() }
-                                .let { digits ->
-                                    when {
-                                        digits.startsWith("972") &&
-                                                digits.length >= 11 ->
-                                            "0" + digits.drop(3)
-
-                                        digits.startsWith("05") ->
-                                            digits
-
-                                        digits.length == 9 &&
-                                                digits.startsWith("5") ->
-                                            "0$digits"
-
-                                        else ->
-                                            digits
-                                    }
-                                }
-
-                        val nameKey =
-                            normalizeCoachSearchText(
-                                profile.fullName
-                            )
-
-                        when {
-                            emailKey.isNotBlank() ->
-                                "email:$emailKey"
-
-                            phoneKey.isNotBlank() ->
-                                "phone:$phoneKey"
-
-                            else ->
-                                "name:$nameKey"
-                        }
-                    }
-                    .map { (_, duplicates) ->
-                        duplicates.maxWithOrNull(
-                            compareBy<TraineeProfile> {
-                                if (
-                                    it.userDocId.isNotBlank()
-                                ) {
-                                    1
-                                } else {
-                                    0
-                                }
-                            }.thenBy {
-                                it.attendancePct
-                            }.thenBy {
-                                it.belt.length
-                            }
-                        ) ?: duplicates.first()
-                    }
                     .sortedBy { profile ->
                         demoSafeName(profile)
                             .trim()
                     }
 
             if (query.isBlank()) {
-                mergedProfiles
+                sortedProfiles
             } else {
-                mergedProfiles.filter { trainee ->
+                sortedProfiles.filter { trainee ->
                     /*
                      * במצב הדגמה מחפשים לפי שם הדמה בלבד.
                      * השם האמיתי אינו משתתף בחיפוש ואינו

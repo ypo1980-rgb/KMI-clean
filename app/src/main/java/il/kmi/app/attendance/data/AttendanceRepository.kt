@@ -7,20 +7,20 @@ import com.google.firebase.firestore.ListenerRegistration
 import com.google.firebase.firestore.Query
 import com.google.firebase.firestore.SetOptions
 import com.google.firebase.firestore.ktx.firestore
-import com.google.firebase.functions.FirebaseFunctions
 import com.google.firebase.ktx.Firebase
+import il.kmi.app.training.TrainingOverrideRepository
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
-import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.launch
-import il.kmi.app.training.TrainingOverrideRepository
+import kotlinx.coroutines.tasks.await
 import java.security.MessageDigest
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
+import java.util.UUID
 
 /**
  * אימון שהתקיים בפועל ונכלל בחישוב האישי.
@@ -55,6 +55,7 @@ data class TrainingAttendanceForecast(
 )
 
 class AttendanceRepository private constructor(
+    @Suppress("unused")
     private val app: Application
 ) {
     private val firestore = Firebase.firestore
@@ -121,9 +122,22 @@ class AttendanceRepository private constructor(
             "updatedAt" to FieldValue.serverTimestamp()
         )
 
-        groupRef(cleanBranch, cleanGroup)
-            .set(data, SetOptions.merge())
-            .await()
+        val groupDocument =
+            groupRef(cleanBranch, cleanGroup)
+
+        firestore.runTransaction { transaction ->
+            val existingGroup =
+                transaction.get(groupDocument)
+
+            if (!existingGroup.exists()) {
+                transaction.set(
+                    groupDocument,
+                    data
+                )
+            }
+
+            true
+        }.await()
     }
 
     private fun sessionDocId(date: LocalDate): String {
@@ -192,9 +206,10 @@ class AttendanceRepository private constructor(
                 .await()
 
         return snapshot.documents.any { document ->
-            document.getString("displayName")
-                ?.trim()
-                ?.isNotBlank() == true
+            document.getBoolean("isActive") != false &&
+                    document.getString("displayName")
+                        ?.trim()
+                        ?.isNotBlank() == true
         }
     }
 
@@ -214,8 +229,6 @@ class AttendanceRepository private constructor(
             return@callbackFlow
         }
 
-        val groupId = groupDocId(branch, groupKey)
-
         val registration: ListenerRegistration = membersRef(branch, groupKey)
             .orderBy("displayName")
             .addSnapshotListener { snap, error ->
@@ -226,6 +239,10 @@ class AttendanceRepository private constructor(
 
                 val list = snap?.documents
                     ?.mapNotNull { doc ->
+                        if (doc.getBoolean("isActive") == false) {
+                            return@mapNotNull null
+                        }
+
                         val name = doc.getString("displayName").orEmpty().trim()
                         if (name.isBlank()) return@mapNotNull null
 
@@ -314,36 +331,31 @@ class AttendanceRepository private constructor(
             }
 
         /*
-         * תאימות למשתמשים קיימים:
-         * אם עדיין אין authUid במסמך ה-member,
-         * ממשיכים לחפש לפי displayNameKey.
+         * מתאמן קיים מזוהה רק באמצעות Firebase UID.
+         *
+         * אין לקשר או למזג רשומה לפי שם בלבד:
+         * ייתכנו שני מתאמנים בעלי אותו שם.
+         *
+         * רשומות ישנות ללא UID נשארות ללא שינוי,
+         * עד לביצוע קישור זהות מאומת.
          */
-        val existingByName =
-            existingByUid
-                ?: membersRef(
-                    branch,
-                    groupKey
-                )
-                    .whereEqualTo(
-                        "displayNameKey",
-                        key
-                    )
-                    .limit(1)
-                    .get()
-                    .await()
-                    .documents
-                    .firstOrNull()
-
-        if (existingByName != null) {
+        if (existingByUid != null) {
             val existingMemberId =
-                existingByName.getLong("id")
+                existingByUid.getLong("id")
+                    ?: existingByUid.id.toLongOrNull()
                     ?: stablePositiveLong(
-                        existingByName.id
+                        existingByUid.id
                     )
 
             /*
-             * משדרגים מסמך ישן ומחברים אותו
-             * ל-Firebase UID בלי ליצור member נוסף.
+             * מעדכנים רק רשומה שכבר מקושרת
+             * לאותו Firebase UID.
+             *
+             * לא משנים את isActive:
+             * מתאמן שהוסר נשאר לא פעיל עד
+             * להחזרה מפורשת על ידי מאמן מורשה.
+             *
+             * ה-memberId והיסטוריית הנוכחות נשמרים.
              */
             val identityUpdate =
                 mutableMapOf<String, Any>(
@@ -353,17 +365,12 @@ class AttendanceRepository private constructor(
                             FieldValue.serverTimestamp()
                 )
 
-            if (cleanAuthUid.isNotBlank()) {
-                identityUpdate["authUid"] =
-                    cleanAuthUid
-            }
-
             if (cleanPhone.isNotBlank()) {
                 identityUpdate["phone"] =
                     cleanPhone
             }
 
-            existingByName.reference
+            existingByUid.reference
                 .set(
                     identityUpdate,
                     SetOptions.merge()
@@ -373,10 +380,23 @@ class AttendanceRepository private constructor(
             return existingMemberId
         }
 
+        /*
+         * מתאמן מחובר: מזהה יציב לפי Firebase UID.
+         * מתאמן ידני: מזהה חדש שאינו תלוי בשם.
+         *
+         * כך שני מתאמנים בעלי אותו שם
+         * יכולים להתקיים באותה קבוצה.
+         */
         val memberId =
-            stablePositiveLong(
-                "$branch|$groupKey|$key"
-            )
+            if (cleanAuthUid.isNotBlank()) {
+                stablePositiveLong(
+                    "$branch|$groupKey|uid:$cleanAuthUid"
+                )
+            } else {
+                stablePositiveLong(
+                    UUID.randomUUID().toString()
+                )
+            }
 
         val docRef =
             membersRef(
@@ -405,6 +425,7 @@ class AttendanceRepository private constructor(
                             .orEmpty(),
                 "source" to
                         "manual_or_bootstrap",
+                "isActive" to true,
                 "createdAtMillis" to now,
                 "updatedAtMillis" to now,
                 "updatedAt" to
@@ -421,44 +442,52 @@ class AttendanceRepository private constructor(
                 cleanPhone
         }
 
-        docRef
-            .set(
-                data,
-                SetOptions.merge()
+        /*
+         * יצירת מתאמן חדש בצורה אטומית.
+         *
+         * אם המסמך כבר קיים, אין לדרוס אותו:
+         * ייתכן שהוא שייך למתאמן אחר או שהוא
+         * מכיל היסטוריית נוכחות קיימת.
+         */
+        firestore.runTransaction { transaction ->
+
+            val existingDocument =
+                transaction.get(docRef)
+
+            check(!existingDocument.exists()) {
+                "Attendance member document already exists"
+            }
+
+            transaction.set(
+                docRef,
+                data
             )
-            .await()
+
+            true
+        }.await()
 
         return memberId
     }
 
     /**
-     * מחיקת מתאמן מהקבוצה.
-     * מוחק גם סימוני נוכחות שלו מתוך כל השיעורים של הקבוצה.
+     * הסרה לוגית של מתאמן מהקבוצה.
+     *
+     * רשומת המתאמן והיסטוריית הנוכחות נשמרות.
+     * מתאמנים ללא שדה isActive נחשבים פעילים.
      */
     suspend fun removeMember(branch: String, groupKey: String, memberId: Long) {
-        if (branch.isBlank() || groupKey.isBlank()) return
-
-        ensureGroupMetadata(branch, groupKey)
+        if (branch.isBlank() || groupKey.isBlank() || memberId <= 0L) return
 
         membersRef(branch, groupKey)
             .document(memberId.toString())
-            .delete()
+            .update(
+                mapOf(
+                    "isActive" to false,
+                    "updatedAtMillis" to System.currentTimeMillis(),
+                    "updatedAt" to FieldValue.serverTimestamp()
+                )
+            )
             .await()
-
-        val sessions = sessionsRef(branch, groupKey)
-            .get()
-            .await()
-            .documents
-
-        sessions.forEach { session ->
-            runCatching {
-                session.reference
-                    .collection("records")
-                    .document(memberId.toString())
-                    .delete()
-                    .await()
-            }
-        }
     }
 
     /**
@@ -540,51 +569,12 @@ class AttendanceRepository private constructor(
             ) to sessionDocumentId
 
         /*
-         * מיפוי Firebase UID -> memberId הנוכחי בקבוצה.
-         *
-         * זה חשוב במיוחד למשתמש שהוא גם מאמן וגם מתאמן,
-         * או ל-member שנוצר מחדש / שודרג בזמן bootstrap.
-         */
-        var memberIdByAuthUid:
-                Map<String, Long> =
-            emptyMap()
-
-        /*
-         * fallback נוסף למשתמשים ישנים:
-         * displayNameKey -> memberId
-         */
-        var memberIdByNameKey:
-                Map<String, Long> =
-            emptyMap()
-
-        /*
-         * Firebase UID -> displayNameKey מתוך users.
-         *
-         * משמש כאשר מסמך member קיים אבל עדיין
-         * אינו מכיל authUid.
-         */
-        var userNameKeyByUid:
-                Map<String, String> =
-            emptyMap()
-
-        /*
          * שומרים את מסמכי הנוכחות האחרונים כדי שכל שינוי
          * ב-members או ב-records ירענן מיד את המסך.
          */
         var latestRecordDocuments:
                 List<com.google.firebase.firestore.DocumentSnapshot> =
             emptyList()
-
-        /*
- * מזהי ה-members שקיימים כרגע בקבוצה.
- *
- * אם רשומת הנוכחות כבר מצביעה על member
- * שקיים בקבוצה — זהו המזהה המועדף ואין
- * להחליף אותו לפי authUid.
- */
-        var currentMemberIds:
-                Set<Long> =
-            emptySet()
 
         fun emitAttendance() {
 
@@ -813,64 +803,23 @@ class AttendanceRepository private constructor(
                                         .toLongOrNull()
                                     ?: return@mapNotNull null
 
-                            val traineeUid =
-                                document
-                                    .getString(
-                                        "traineeUid"
-                                    )
-                                    ?.trim()
-                                    .orEmpty()
-
-                            val memberIdFromUid =
-                                traineeUid
-                                    .takeIf {
-                                        it.isNotBlank()
-                                    }
-                                    ?.let { uid ->
-                                        memberIdByAuthUid[
-                                            uid
-                                        ]
-                                    }
-
-                            val memberIdFromName =
-                                traineeUid
-                                    .takeIf {
-                                        it.isNotBlank()
-                                    }
-                                    ?.let { uid ->
-                                        userNameKeyByUid[
-                                            uid
-                                        ]
-                                    }
-                                    ?.let { userNameKey ->
-                                        memberIdByNameKey[
-                                            userNameKey
-                                        ]
-                                    }
-
                             /*
-                             * אם ה-memberId המקורי עדיין
-                             * קיים בקבוצה — לא משנים אותו.
+                             * רשומת נוכחות היסטורית שומרת
+                             * תמיד על memberId המקורי.
+                             *
+                             * אין להעביר אותה אוטומטית
+                             * למתאמן אחר לפי UID או שם.
+                             *
+                             * מתאמן שהוסר לוגית עדיין
+                             * שומר על מזהה הנוכחות שלו.
                              */
                             val resolvedMemberId =
-                                if (
-                                    storedMemberId in
-                                    currentMemberIds
-                                ) {
-                                    storedMemberId
-                                } else {
-                                    memberIdFromUid
-                                        ?: memberIdFromName
-                                        ?: storedMemberId
-                                }
+                                storedMemberId
 
                             android.util.Log.d(
                                 "KMI_ATTENDANCE_MEMBER",
                                 "stored=$storedMemberId" +
-                                        " | resolved=$resolvedMemberId" +
-                                        " | fromUid=$memberIdFromUid" +
-                                        " | fromName=$memberIdFromName" +
-                                        " | existsInGroup=${storedMemberId in currentMemberIds}"
+                                        " | resolved=$resolvedMemberId"
                             )
 
                             AttendanceRecord(
@@ -928,73 +877,11 @@ class AttendanceRepository private constructor(
                         return@addSnapshotListener
                     }
 
-                    val memberDocuments =
-                        snapshot
-                            ?.documents
-                            .orEmpty()
-
-                    currentMemberIds =
-                        memberDocuments
-                            .mapNotNull { document ->
-                                document.getLong("id")
-                                    ?: document.id
-                                        .toLongOrNull()
-                            }
-                            .toSet()
-
-                    memberIdByAuthUid =
-                        memberDocuments
-                            .mapNotNull { document ->
-
-                                val uid =
-                                    document
-                                        .getString("authUid")
-                                        ?.trim()
-                                        .orEmpty()
-
-                                if (uid.isBlank()) {
-                                    return@mapNotNull null
-                                }
-
-                                val memberId =
-                                    document.getLong("id")
-                                        ?: document.id
-                                            .toLongOrNull()
-                                        ?: return@mapNotNull null
-
-                                uid to memberId
-                            }
-                            .toMap()
-
-                    memberIdByNameKey =
-                        memberDocuments
-                            .mapNotNull { document ->
-
-                                val memberId =
-                                    document.getLong("id")
-                                        ?: document.id
-                                            .toLongOrNull()
-                                        ?: return@mapNotNull null
-
-                                val displayNameKey =
-                                    document
-                                        .getString("displayNameKey")
-                                        ?.trim()
-                                        ?.takeIf {
-                                            it.isNotBlank()
-                                        }
-                                        ?: document
-                                            .getString("displayName")
-                                            ?.nameKey()
-                                            ?.takeIf {
-                                                it.isNotBlank()
-                                            }
-                                        ?: return@mapNotNull null
-
-                                displayNameKey to memberId
-                            }
-                            .toMap()
-
+                    /*
+                     * רענון הנוכחות בעקבות שינוי ברשימת
+                     * המתאמנים, ללא מיפוי מזהים לפי
+                     * שם או Firebase UID.
+                     */
                     emitAttendance()
                 }
 
@@ -1020,117 +907,10 @@ class AttendanceRepository private constructor(
                             .orEmpty()
 
                     /*
-                     * קודם מציגים כל מה שכבר ניתן לפתור
-                     * בלי קריאת Firestore נוספת.
+                     * כל שינוי בסימוני הנוכחות
+                     * מרענן מיד את הנתונים במסך.
                      */
                     emitAttendance()
-
-                    val unresolvedTraineeUids =
-                        latestRecordDocuments
-                            .mapNotNull { document ->
-                                document
-                                    .getString("traineeUid")
-                                    ?.trim()
-                                    ?.takeIf {
-                                        it.isNotBlank()
-                                    }
-                            }
-                            .filter { uid ->
-                                memberIdByAuthUid[uid] == null &&
-                                        userNameKeyByUid[uid] == null
-                            }
-                            .distinct()
-
-                    if (unresolvedTraineeUids.isNotEmpty()) {
-
-                        launch {
-
-                            val secureResult =
-                                runCatching {
-
-                                    FirebaseFunctions
-                                        .getInstance()
-                                        .getHttpsCallable(
-                                            "loadSecureCoachTrainees"
-                                        )
-                                        .call(
-                                            mapOf(
-                                                "branch" to
-                                                        cleanBranch,
-                                                "group" to
-                                                        cleanGroup
-                                            )
-                                        )
-                                        .await()
-
-                                }.getOrNull()
-
-                            val payload =
-                                secureResult
-                                    ?.data as? Map<*, *>
-
-                            val rawItems =
-                                payload
-                                    ?.get("items")
-                                        as? List<*>
-                                    ?: emptyList<Any>()
-
-                            val unresolvedSet =
-                                unresolvedTraineeUids
-                                    .toSet()
-
-                            val resolvedNames =
-                                rawItems
-                                    .mapNotNull { rawItem ->
-
-                                        val item =
-                                            rawItem as? Map<*, *>
-                                                ?: return@mapNotNull null
-
-                                        val userDocId =
-                                            item["userDocId"]
-                                                ?.toString()
-                                                ?.trim()
-                                                .orEmpty()
-
-                                        if (
-                                            userDocId.isBlank() ||
-                                            userDocId !in unresolvedSet
-                                        ) {
-                                            return@mapNotNull null
-                                        }
-
-                                        val fullName =
-                                            item["fullName"]
-                                                ?.toString()
-                                                ?.trim()
-                                                .orEmpty()
-
-                                        val key =
-                                            fullName.nameKey()
-
-                                        if (key.isBlank()) {
-                                            return@mapNotNull null
-                                        }
-
-                                        userDocId to key
-                                    }
-                                    .toMap()
-
-                            if (resolvedNames.isNotEmpty()) {
-
-                                userNameKeyByUid =
-                                    userNameKeyByUid +
-                                            resolvedNames
-
-                                /*
-                                 * עכשיו אפשר לחשב מחדש את הרשומות
-                                 * ולחבר RSVP ישן ל-member הנוכחי.
-                                 */
-                                emitAttendance()
-                            }
-                        }
-                    }
                 }
 
         awaitClose {
@@ -1282,10 +1062,22 @@ class AttendanceRepository private constructor(
                         return@addSnapshotListener
                     }
 
+                    /*
+                     * צפי ההגעה כולל מתאמנים פעילים בלבד.
+                     *
+                     * רשומות ישנות ללא isActive
+                     * נחשבות פעילות לצורך תאימות.
+                     *
+                     * הסינון אינו משנה או מוחק
+                     * היסטוריית נוכחות.
+                     */
                     val memberDocuments =
                         snapshot
                             ?.documents
                             .orEmpty()
+                            .filter { document ->
+                                document.getBoolean("isActive") != false
+                            }
 
                     memberIds =
                         memberDocuments
@@ -1582,61 +1374,6 @@ class AttendanceRepository private constructor(
         )
     }
 
-    /**
-     * מחזיר את memberId של המשתמש המחובר
-     * בקבוצה המסוימת לפי Firebase UID.
-     *
-     * אם עדיין לא קיים member מקושר,
-     * יוצר / מקשר אותו באופן אוטומטי
-     * מתוך פרופיל המשתמש.
-     */
-
-    /**
-     * בודק האם המשתמש כבר רשום כ-member
-     * בסניף ובקבוצה הנתונים.
-     *
-     * חשוב:
-     * הפונקציה היא read-only.
-     * היא אינה יוצרת member חדש ואינה משנה Firestore.
-     */
-    suspend fun isRegisteredMemberByAuthUid(
-        branch: String,
-        groupKey: String,
-        authUid: String
-    ): Boolean {
-
-        val cleanBranch =
-            branch.trim()
-
-        val cleanGroup =
-            groupKey.trim()
-
-        val cleanUid =
-            authUid.trim()
-
-        if (
-            cleanBranch.isBlank() ||
-            cleanGroup.isBlank() ||
-            cleanUid.isBlank()
-        ) {
-            return false
-        }
-
-        return membersRef(
-            cleanBranch,
-            cleanGroup
-        )
-            .whereEqualTo(
-                "authUid",
-                cleanUid
-            )
-            .limit(1)
-            .get()
-            .await()
-            .documents
-            .isNotEmpty()
-    }
-
     suspend fun findMemberIdByAuthUid(
         branch: String,
         groupKey: String,
@@ -1697,122 +1434,17 @@ class AttendanceRepository private constructor(
         }
 
         /*
-         * אין עדיין member מקושר.
-         * קוראים את פרופיל המשתמש עצמו.
-         */
-        val userDoc =
-            firestore
-                .collection("users")
-                .document(cleanUid)
-                .get()
-                .await()
-
-        if (!userDoc.exists()) {
-            return null
-        }
-
-        val fullName =
-            (
-                    userDoc.getString("fullName")
-                        ?: userDoc.getString("name")
-                        ?: userDoc.getString("displayName")
-                    )
-                ?.trim()
-                .orEmpty()
-                .ifBlank {
-                    listOf(
-                        userDoc.getString("firstName")
-                            ?.trim()
-                            .orEmpty(),
-                        userDoc.getString("lastName")
-                            ?.trim()
-                            .orEmpty()
-                    )
-                        .filter {
-                            it.isNotBlank()
-                        }
-                        .joinToString(" ")
-                        .trim()
-                }
-
-        if (fullName.isBlank()) {
-            return null
-        }
-
-        val displayNameKey =
-            fullName.nameKey()
-
-        if (displayNameKey.isBlank()) {
-            return null
-        }
-
-        /*
-         * אותו memberId דטרמיניסטי שבו משתמש
-         * גם מנגנון הנוכחות הקיים.
-         */
-        val memberId =
-            stablePositiveLong(
-                "$cleanBranch|$cleanGroup|$displayNameKey"
-            )
-
-        val phone =
-            (
-                    userDoc.getString("phone")
-                        ?: userDoc.getString("phoneNumber")
-                        ?: userDoc.getString("phone_number")
-                        ?: userDoc.getString("mobile")
-                    )
-                ?.filter { it.isDigit() }
-                .orEmpty()
-
-        val now =
-            System.currentTimeMillis()
-
-        /*
-         * חשוב:
-         * לא קוראים כאן למסמך member לפי id לפני הכתיבה.
-         *
-         * אם הוא חדש — Firestore יבצע create.
-         * אם הוא כבר קיים כ-member ישן — merge יחבר אליו
-         * את ה-authUid בלי למחוק את הנתונים הקיימים.
-         */
-        val memberData =
-            mutableMapOf<String, Any>(
-                "id" to memberId,
-                "branch" to cleanBranch,
-                "groupKey" to cleanGroup,
-                "displayName" to fullName,
-                "displayNameKey" to displayNameKey,
-                "authUid" to cleanUid,
-                "updatedAtMillis" to now,
-                "updatedAt" to
-                        FieldValue.serverTimestamp()
-            )
-
-        if (phone.isNotBlank()) {
-            memberData["phone"] =
-                phone
-        }
-
-        membersRef(
-            cleanBranch,
-            cleanGroup
-        )
-            .document(
-                memberId.toString()
-            )
-            .set(
-                memberData,
-                SetOptions.merge()
-            )
-            .await()
-
-        return memberId
+   * אין member המשויך ל-Firebase UID המאומת.
+   *
+   * אין ליצור או לעדכן שיוך לפי שם או טלפון.
+   * קישור רשומה ישנה מחייב אימות בצד השרת.
+   */
+        return null
     }
 
     /**
      * טוען את הבחירה הקיימת של המתאמן
-     * עבור אימון מסוים.
+     * * עבור אימון מסוים.
      *
      * null = עדיין לא נבחר מגיע / לא מגיע.
      */
@@ -2148,29 +1780,6 @@ class AttendanceRepository private constructor(
     }
 
     /**
-     * ביטול סימון נוכחות למתאמן.
-     * מוחק את הרשומה של אותו מתאמן מהשיעור הנוכחי.
-     */
-    suspend fun clearMark(
-        sessionId: Long,
-        memberId: Long
-    ) {
-        val path = sessionPathById[sessionId]
-            ?: error("Missing Firestore session path for sessionId=$sessionId. ensureSession() must run before clearMark().")
-
-        val (groupDocId, sessionDocId) = path
-
-        firestore.collection("attendanceGroups")
-            .document(groupDocId)
-            .collection("sessions")
-            .document(sessionDocId)
-            .collection("records")
-            .document(memberId.toString())
-            .delete()
-            .await()
-    }
-
-    /**
      * סטטיסטיקות נוכחות לפי טווח תאריכים.
      * מחשוב מתוך Firestore.
      */
@@ -2348,22 +1957,6 @@ class AttendanceRepository private constructor(
             .document(reportId.toString())
             .set(data, SetOptions.merge())
             .await()
-
-        deleteReportsOlderThanOneYear(branch, groupKey)
-    }
-
-    private suspend fun deleteReportsOlderThanOneYear(branch: String, groupKey: String) {
-        val oneYearAgo = System.currentTimeMillis() - 365L * 24L * 60L * 60L * 1000L
-
-        val oldReports = reportsRef(branch, groupKey)
-            .whereLessThan("createdAtMillis", oneYearAgo)
-            .get()
-            .await()
-            .documents
-
-        oldReports.forEach { doc ->
-            doc.reference.delete().await()
-        }
     }
 
     suspend fun deleteReportsByIds(

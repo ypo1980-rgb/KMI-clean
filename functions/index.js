@@ -1964,10 +1964,43 @@ exports.loadSecurePaymentsReport =
             return;
           }
 
+          /*
+           * תשלום ייחשף למאמן רק אם הוא
+           * משויך לסניף שהמאמן מורשה לראות.
+           *
+           * תשלום Legacy ללא branchName
+           * אינו נחשף למאמן עד לאימות שיוכו.
+           *
+           * אדמין ממשיך לראות את כלל התשלומים.
+           */
+          if (!isAdminUser) {
+            const paymentBranch =
+              normalizeValue(
+                payment.branchName || ""
+              );
+
+            if (
+              !paymentBranch ||
+              !authorizedBranchKeys.has(
+                paymentBranch
+              )
+            ) {
+              return;
+            }
+          }
+
           keys.forEach((key) => {
+            const linkedPayments =
+              paymentByIdentity.get(key) || [];
+
+            linkedPayments.push({
+              id: document.id,
+              payment,
+            });
+
             paymentByIdentity.set(
               key,
-              payment
+              linkedPayments
             );
           });
         });
@@ -2049,51 +2082,147 @@ exports.loadSecurePaymentsReport =
            )
          );
 
-          let payment = null;
+          /*
+           * אוספים את מסמכי התשלום של הזהות
+           * המאוחדת, בלי לאבד רשומות.
+           *
+           * מזהה המסמך מונע ספירה כפולה של
+           * אותו תשלום שנמצא דרך כמה מזהים.
+           */
+          const identityPayments =
+            new Map();
 
           for (
             const identityKey
             of identityKeys
           ) {
-            const candidate =
+            const candidates =
               paymentByIdentity.get(
                 identityKey
+              ) || [];
+
+            candidates.forEach(
+              (candidate) => {
+                identityPayments.set(
+                  candidate.id,
+                  candidate.payment
+                );
+              }
+            );
+          }
+
+          /*
+           * שומרים פירוט תשלומים לפי סניף
+           * עבור המשתמש המאוחד.
+           *
+           * לא מאחדים סכומים של סניפים
+           * שונים לתשלום אחד.
+           */
+          const paymentsByBranch =
+            new Map();
+
+          for (
+            const [paymentId, paymentData]
+            of identityPayments
+          ) {
+            const paymentBranch =
+              cleanText(
+                paymentData.branchName
               );
 
-            if (candidate) {
-              payment =
-                candidate;
-              break;
+            const branchKey =
+              normalizeValue(
+                paymentBranch
+              );
+
+            if (!branchKey) {
+              throw new functions.https.HttpsError(
+                "failed-precondition",
+                "Legacy payment requires branch reconciliation."
+              );
+            }
+
+            if (paymentsByBranch.has(branchKey)) {
+              throw new functions.https.HttpsError(
+                "failed-precondition",
+                "Multiple payments found for the same branch."
+              );
+            }
+
+            paymentsByBranch.set(
+              branchKey,
+              {
+                paymentId,
+                branchName: paymentBranch,
+                payment: paymentData,
+              }
+            );
+          }
+
+          /*
+           * סניפים של כל רשומות המשתמש המאוחד.
+           * מאמן מקבל רק סניפים מורשים.
+           */
+          const visibleBranchMap =
+            new Map();
+
+          entries
+            .flatMap((entry) =>
+              userBranches(entry.user || {})
+            )
+            .forEach((branch) => {
+              const key = normalizeValue(branch);
+
+              if (
+                key &&
+                (
+                  isAdminUser ||
+                  authorizedBranchKeys.has(key)
+                ) &&
+                !visibleBranchMap.has(key)
+              ) {
+                visibleBranchMap.set(key, branch);
+              }
+            });
+
+          /*
+           * אין להסיק שיוך לסניף רק ממסמך
+           * תשלום של זהות מאוחדת.
+           */
+          for (
+            const branchKey
+            of paymentsByBranch.keys()
+          ) {
+            if (!visibleBranchMap.has(branchKey)) {
+              throw new functions.https.HttpsError(
+                "failed-precondition",
+                "Payment branch requires identity reconciliation."
+              );
             }
           }
 
-          const branches =
-            userBranches(
-              primaryUser
+          const visibleBranches =
+            Array.from(
+              visibleBranchMap.values()
+            ).sort((a, b) =>
+              a.localeCompare(b, "he")
             );
 
-          let branchName =
-            cleanText(
-              payment &&
-              payment.branchName
-            );
-
-          if (!branchName) {
-            if (isAdminUser) {
-              branchName =
-                branches[0] || "";
-            } else {
-              branchName =
-                branches.find(
-                  (branch) =>
-                    authorizedBranchKeys.has(
-                      normalizeValue(branch)
-                    )
-                ) ||
-                branches[0] ||
-                "";
-            }
+          if (visibleBranches.length === 0) {
+            return;
           }
+
+          const branchName =
+            visibleBranches[0];
+
+          /*
+           * שדות התשלום הראשיים נשמרים
+           * לתאימות עם לקוחות קיימים.
+           */
+          const payment =
+            paymentsByBranch.get(
+              normalizeValue(branchName)
+            )?.payment || null;
 
           const requiredAmountRaw =
             Number(
@@ -2114,6 +2243,78 @@ exports.loadSecurePaymentsReport =
             requiredAmountRaw > 0
               ? requiredAmountRaw
               : 150;
+
+          /*
+           * פירוט כספי נפרד לכל סניף.
+           * גם סניף ללא תשלום קיים מוחזר
+           * עם סכום ששולם 0.
+           */
+          const branchPayments =
+            visibleBranches.map((branch) => {
+
+              const existing =
+                paymentsByBranch.get(
+                  normalizeValue(branch)
+                ) || null;
+
+              const branchPayment =
+                existing?.payment || {};
+
+              const requiredRaw =
+                Number(
+                  branchPayment.requiredAmount ||
+                  requiredAmount
+                );
+
+              const branchRequired =
+                Number.isFinite(requiredRaw) &&
+                requiredRaw > 0
+                  ? requiredRaw
+                  : 150;
+
+              const paidRaw =
+                Number(
+                  branchPayment.paidAmount || 0
+                );
+
+              const branchPaid =
+                Number.isFinite(paidRaw)
+                  ? Math.max(0, paidRaw)
+                  : 0;
+
+              const branchStatus =
+                branchPaid <= 0
+                  ? "UNPAID"
+                  : branchPaid < branchRequired
+                    ? "PARTIAL"
+                    : "PAID";
+
+              return {
+                branchName: branch,
+                paymentId:
+                  existing?.paymentId || "",
+
+                requiredAmount: branchRequired,
+                paidAmount: branchPaid,
+                status: branchStatus,
+
+                paymentMethod:
+                  cleanText(
+                    branchPayment.paymentMethod ||
+                    "MANUAL"
+                  ),
+
+                paymentDate:
+                  cleanText(
+                    branchPayment.paymentDate
+                  ),
+
+                notes:
+                  cleanText(
+                    branchPayment.notes
+                  ),
+              };
+            });
 
           const paidAmountRaw =
             Number(
@@ -2204,6 +2405,8 @@ exports.loadSecurePaymentsReport =
                 payment &&
                 payment.notes
               ),
+
+            branchPayments,
           });
         }
       );
@@ -2283,6 +2486,9 @@ exports.loadSecurePaymentsReport =
 exports.updateSecureMembershipPayment =
   functions.https.onCall(
     async (data, context) => {
+
+      const { FieldValue } =
+        require("firebase-admin/firestore");
 
       const uid =
         String(
@@ -2644,30 +2850,64 @@ const traineeBranches =
     )
   );
 
-let resolvedBranch = "";
+/*
+ * הסניף מתקבל מהפריט שנבחר באנדרואיד.
+ * אין לבחור אוטומטית סניף אחר.
+ */
+const requestedPaymentBranch =
+  String(
+    data && data.branchName || ""
+  ).trim();
 
-      if (isAdminUser) {
-        resolvedBranch =
-          traineeBranches[0] || "";
-      } else {
-        resolvedBranch =
-          traineeBranches.find(
-            (branch) =>
-              authorizedBranchKeys.has(
-                normalizeTrainingTargetText(branch)
-              )
-          ) || "";
-      }
+const normalizedPaymentBranch =
+  normalizeTrainingTargetText(
+    requestedPaymentBranch
+  );
 
-      if (
-        !isAdminUser &&
-        !resolvedBranch
-      ) {
-        throw new functions.https.HttpsError(
-          "permission-denied",
-          "Trainee is outside the coach payment scope."
-        );
-      }
+if (
+  !requestedPaymentBranch ||
+  requestedPaymentBranch.length > 160
+) {
+  throw new functions.https.HttpsError(
+    "invalid-argument",
+    "A valid payment branch is required."
+  );
+}
+
+/*
+ * מוודאים שהסניף המבוקש מופיע
+ * בשיוכי המתאמן הקיימים.
+ */
+const resolvedBranch =
+  traineeBranches.find(
+    (branch) =>
+      normalizeTrainingTargetText(
+        branch
+      ) === normalizedPaymentBranch
+  ) || "";
+
+if (!resolvedBranch) {
+  throw new functions.https.HttpsError(
+    "permission-denied",
+    "Trainee is not assigned to the requested branch."
+  );
+}
+
+/*
+ * מאמן חייב להיות מורשה לסניף.
+ * אדמין רשאי לכל הסניפים.
+ */
+if (
+  !isAdminUser &&
+  !authorizedBranchKeys.has(
+    normalizedPaymentBranch
+  )
+) {
+  throw new functions.https.HttpsError(
+    "permission-denied",
+    "Coach is not authorized for the requested branch."
+  );
+}
 
       function paymentCleanText(value) {
         return String(value || "")
@@ -2750,36 +2990,267 @@ let resolvedBranch = "";
        )
      );
 
-   const existingPaymentSnapshots =
-     await Promise.all(
+   const paymentsCollection =
+     db.collection("membershipPayments");
+
+   const [
+     directPaymentSnapshots,
+     linkedPaymentQueries,
+   ] = await Promise.all([
+     Promise.all(
        paymentIdentityIds.map(
          (identityId) =>
-           db
-             .collection(
-               "membershipPayments"
-             )
+           paymentsCollection
              .doc(identityId)
              .get()
        )
+     ),
+
+     Promise.all(
+       paymentIdentityIds.map(
+         (identityId) =>
+           paymentsCollection
+             .where(
+               "userDocId",
+               "==",
+               identityId
+             )
+             .get()
+       )
+     ),
+   ]);
+
+   /*
+    * מאחדים את כל מסמכי התשלום שאותרו.
+    * אותו מסמך יופיע פעם אחת בלבד.
+    */
+   const existingPaymentMap =
+     new Map();
+
+   directPaymentSnapshots.forEach(
+     (snapshot) => {
+       if (snapshot.exists) {
+         existingPaymentMap.set(
+           snapshot.id,
+           snapshot
+         );
+       }
+     }
+   );
+
+   linkedPaymentQueries.forEach(
+     (querySnapshot) => {
+       querySnapshot.docs.forEach(
+         (snapshot) => {
+           existingPaymentMap.set(
+             snapshot.id,
+             snapshot
+           );
+         }
+       );
+     }
+   );
+
+   const existingPayments =
+     Array.from(
+       existingPaymentMap.values()
      );
 
-   const existingPaymentSnapshot =
-     existingPaymentSnapshots.find(
-       (snapshot) =>
-         snapshot.exists
+   /*
+    * גם אדמין חייב לבחור מסמך תשלום
+    * המשויך לסניף המבוקש.
+    *
+    * הרשאות אדמין מאפשרות ניהול סניפים,
+    * אך אינן מתירות ערבוב תשלומים ביניהם.
+    */
+   const matchingPayments =
+     existingPayments.filter(
+       (snapshot) => {
+
+         const payment =
+           snapshot.data() || {};
+
+         const paymentBranch =
+           String(
+             payment.branchName || ""
+           ).trim();
+
+         return (
+           paymentBranch &&
+           normalizeTrainingTargetText(
+             paymentBranch
+           ) ===
+           normalizeTrainingTargetText(
+             resolvedBranch
+           )
+         );
+       }
      );
+
+   /*
+    * אם קיימים תשלומים אך אף אחד מהם
+    * אינו משויך לסניף המבוקש,
+    * אין לבחור מסמך מסניף אחר.
+    *
+    * זהו חסם זמני עד להשלמת התמיכה
+    * בתשלומים נפרדים למספר סניפים.
+    */
+   const hasUnverifiedLegacyPayment =
+     existingPayments.some(
+       (snapshot) => {
+         const payment =
+           snapshot.data() || {};
+
+         return !String(
+           payment.branchName || ""
+         ).trim();
+       }
+     );
+
+   if (
+     matchingPayments.length === 0 &&
+     hasUnverifiedLegacyPayment
+   ) {
+     throw new functions.https.HttpsError(
+       "failed-precondition",
+       "Legacy payment requires branch reconciliation."
+     );
+   }
+
+   /*
+    * אם קיימים מספר מסמכים מתאימים,
+    * אין לבחור אחד באופן שרירותי.
+    */
+   if (matchingPayments.length > 1) {
+     throw new functions.https.HttpsError(
+       "failed-precondition",
+       "Multiple payment records require reconciliation."
+     );
+   }
+
+   const existingPaymentSnapshot =
+     matchingPayments[0] || null;
+
+   /*
+    * מזהה יציב מתוך קבוצת רשומות המשתמש.
+    * ללא תלות ברשומה שנבחרה בדוח.
+    */
+   const canonicalUserDocId =
+     matchedIdentityEntries
+       .map((entry) =>
+         String(entry.id || "").trim()
+       )
+       .filter(Boolean)
+       .sort()[0] || "";
+
+   if (!canonicalUserDocId) {
+     throw new functions.https.HttpsError(
+       "internal",
+       "Unable to resolve canonical user identity."
+     );
+   }
+
+   const branchPaymentKey =
+     crypto
+       .createHash("sha256")
+       .update(
+         JSON.stringify([
+           canonicalUserDocId,
+           normalizeTrainingTargetText(
+             resolvedBranch
+           ),
+         ])
+       )
+       .digest("hex");
+
+   const fallbackPaymentDocId =
+     `branch_${branchPaymentKey}`;
+
+   /*
+    * בודקים גם ישירות את המסמך בעל
+    * המזהה המחושב, ולא מסתמכים רק
+    * על שאילתות userDocId.
+    */
+   const fallbackPaymentSnapshot =
+     await paymentsCollection
+       .doc(fallbackPaymentDocId)
+       .get();
+
+   if (fallbackPaymentSnapshot.exists) {
+
+     const fallbackData =
+       fallbackPaymentSnapshot.data() || {};
+
+     const fallbackBranch =
+       normalizeTrainingTargetText(
+         fallbackData.branchName || ""
+       );
+
+     const fallbackUserDocId =
+       String(
+         fallbackData.userDocId || ""
+       ).trim();
+
+     if (
+       fallbackBranch !==
+         normalizeTrainingTargetText(resolvedBranch) ||
+       !paymentIdentityIds.includes(
+         fallbackUserDocId
+       )
+     ) {
+       throw new functions.https.HttpsError(
+         "failed-precondition",
+         "Payment identity requires reconciliation."
+       );
+     }
+
+     /*
+      * אם מסמך אחר כבר נבחר לאותו
+      * סניף, אין ליצור או לעדכן
+      * שני מסמכי תשלום מתחרים.
+      */
+     if (
+       existingPaymentSnapshot &&
+       existingPaymentSnapshot.id !==
+         fallbackPaymentDocId
+     ) {
+       throw new functions.https.HttpsError(
+         "failed-precondition",
+         "Multiple payment records require reconciliation."
+       );
+     }
+   }
 
    const paymentDocId =
      existingPaymentSnapshot
        ? existingPaymentSnapshot.id
-       : String(
-           matchedDocument.id || ""
-         ).trim();
+       : fallbackPaymentDocId;
 
    if (!paymentDocId) {
      throw new functions.https.HttpsError(
        "internal",
        "Unable to resolve payment identity."
+     );
+   }
+
+   /*
+    * מזהה ייחודי לפעולת תשלום.
+    * אותו requestId חייב להישלח שוב
+    * במקרה של ניסיון חוזר.
+    */
+   const requestId =
+     String(
+       data && data.requestId || ""
+     ).trim();
+
+   const validRequestId =
+     /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+       .test(requestId);
+
+   if (!validRequestId) {
+     throw new functions.https.HttpsError(
+       "invalid-argument",
+       "A valid payment requestId is required."
      );
    }
 
@@ -2790,13 +3261,41 @@ let resolvedBranch = "";
        )
        .doc(paymentDocId);
 
-      const historyRef =
-        paymentRef
-          .collection("history")
-          .doc();
+   /*
+    * מסמך בקרה משותף לזהות המאוחדת
+    * ולסניף שנבחר.
+    *
+    * הוא אינו מכיל נתוני תשלום או
+    * היסטוריה, אלא רק שיוך למזהה
+    * מסמך התשלום המאושר.
+    */
+   const paymentLockRef =
+     db
+       .collection("membershipPaymentLocks")
+       .doc(branchPaymentKey);
 
-      const nowMillis =
-        Date.now();
+   /*
+    * מזהה היסטוריה קבוע לאותה פעולה.
+    * כך גם שתי בקשות מקבילות עם
+    * אותו requestId פונות לאותו מסמך.
+    */
+   const historyRef =
+     paymentRef
+       .collection("history")
+       .doc(requestId);
+
+   /*
+    * מזהה פעולה גלובלי לכל הסניפים.
+    * מונע שימוש באותו requestId
+    * עבור מסמכי תשלום שונים.
+    */
+   const paymentOperationRef =
+     db
+       .collection("membershipPaymentOperations")
+       .doc(requestId);
+
+   const nowMillis =
+     Date.now();
 
       const paymentDate =
         new Intl.DateTimeFormat(
@@ -2840,15 +3339,250 @@ let resolvedBranch = "";
         await db.runTransaction(
           async (transaction) => {
 
+            /*
+             * כל הקריאות מתבצעות לפני
+             * פעולות הכתיבה ב-Transaction.
+             */
             const paymentSnapshot =
               await transaction.get(
                 paymentRef
               );
 
+            const historySnapshot =
+              await transaction.get(
+                historyRef
+              );
+
+            const paymentLockSnapshot =
+              await transaction.get(
+                paymentLockRef
+              );
+
+            const paymentOperationSnapshot =
+              await transaction.get(
+                paymentOperationRef
+              );
+
+            /*
+             * אותו requestId אינו רשאי
+             * לשמש מסמך תשלום אחר.
+             */
+            if (paymentOperationSnapshot.exists) {
+              const operation =
+                paymentOperationSnapshot.data() || {};
+
+              if (
+                String(operation.paymentDocId || "") !==
+                  paymentDocId
+              ) {
+                throw new functions.https.HttpsError(
+                  "already-exists",
+                  "Payment requestId was used for another operation."
+                );
+              }
+
+              /*
+               * מסמך פעולה ללא היסטוריה תואמת
+               * מחייב בירור ולא חיוב נוסף.
+               */
+              if (!historySnapshot.exists) {
+                throw new functions.https.HttpsError(
+                  "failed-precondition",
+                  "Payment operation requires reconciliation."
+                );
+              }
+            }
+
+            /*
+             * אם כבר נקבע מסמך תשלום
+             * לצירוף זהות + סניף,
+             * אסור לעבור למסמך אחר.
+             */
+            if (paymentLockSnapshot.exists) {
+              const lockedPaymentId =
+                String(
+                  paymentLockSnapshot.data()
+                    ?.paymentDocId || ""
+                ).trim();
+
+              if (
+                lockedPaymentId !== paymentDocId
+              ) {
+                throw new functions.https.HttpsError(
+                  "failed-precondition",
+                  "Payment branch identity requires reconciliation."
+                );
+              }
+            }
+
+            const operationData = {
+              paymentDocId,
+              canonicalUserDocId,
+              branchName: resolvedBranch,
+              amount: amountToAdd,
+              paymentMethod,
+              notes,
+              createdByUid: uid,
+            };
+
+            /*
+             * הפעולה כבר בוצעה בעבר.
+             * מחזירים את התוצאה המקורית
+             * בלי להוסיף סכום או היסטוריה.
+             */
+            if (historySnapshot.exists) {
+              const previous =
+                historySnapshot.data() || {};
+
+              const sameRequest =
+                previous.createdByUid === uid &&
+                Number(previous.amount) === amountToAdd &&
+                previous.paymentMethod === paymentMethod &&
+                String(previous.notes || "") === notes &&
+                normalizeTrainingTargetText(
+                  previous.branchName || ""
+                ) ===
+                normalizeTrainingTargetText(
+                  resolvedBranch
+                );
+
+              if (!sameRequest) {
+                throw new functions.https.HttpsError(
+                  "already-exists",
+                  "Payment requestId was used for another operation."
+                );
+              }
+
+              /*
+               * תמיכה בתשלומים קיימים:
+               * יוצרים אינדקס לפעולה המקורית,
+               * בלי לרשום תשלום נוסף.
+               */
+              if (!paymentOperationSnapshot.exists) {
+                transaction.create(
+                  paymentOperationRef,
+                  operationData
+                );
+              }
+
+              /*
+               * הבקשה כבר נשמרה.
+               * לא מבצעים כתיבה נוספת.
+               *
+               * מחזירים מצב כספי עדכני ועקבי
+               * מתוך מסמך התשלום הקיים.
+               */
+              const currentPayment =
+                paymentSnapshot.exists
+                  ? paymentSnapshot.data() || {}
+                  : null;
+
+              if (
+                !currentPayment ||
+                normalizeTrainingTargetText(
+                  currentPayment.branchName || ""
+                ) !==
+                normalizeTrainingTargetText(
+                  resolvedBranch
+                )
+              ) {
+                throw new functions.https.HttpsError(
+                  "failed-precondition",
+                  "Payment record requires reconciliation."
+                );
+              }
+
+              return {
+                traineeId: paymentDocId,
+                paymentId: paymentDocId,
+
+                userDocId:
+                  String(currentPayment.userDocId || ""),
+
+                fullName:
+                  String(currentPayment.fullName || ""),
+
+                branchName:
+                  String(currentPayment.branchName || ""),
+
+                phone:
+                  String(currentPayment.phone || ""),
+
+                requiredAmount:
+                  Number(currentPayment.requiredAmount || 0),
+
+                paidAmount:
+                  Number(currentPayment.paidAmount || 0),
+
+                status:
+                  String(currentPayment.status || "UNPAID"),
+
+                paymentMethod:
+                  String(currentPayment.paymentMethod || "MANUAL"),
+
+                paymentDate:
+                  String(currentPayment.paymentDate || ""),
+
+                notes:
+                  String(currentPayment.notes || ""),
+              };
+            }
+
             const existingPayment =
               paymentSnapshot.exists
                 ? paymentSnapshot.data() || {}
                 : {};
+
+            /*
+             * מאמן אינו רשאי לשנות תשלום קיים
+             * המשויך לסניף אחר.
+             *
+             * אדמין רשאי לנהל את כלל הסניפים.
+             *
+             * מסמכים ישנים ללא branchName
+             * ייבדקו בנפרד בהמשך.
+             */
+            const existingPaymentBranch =
+              String(
+                existingPayment.branchName || ""
+              ).trim();
+
+            const existingPaymentUserDocId =
+              String(
+                existingPayment.userDocId || ""
+              ).trim();
+
+            /*
+             * כל תשלום קיים חייב להשתייך
+             * למתאמן המאוחד ולסניף שנבחר.
+             *
+             * אין לאפשר שינוי בעלות או
+             * שיוך סניף דרך פעולת תשלום.
+             */
+            if (paymentSnapshot.exists) {
+
+              const sameIdentity =
+                existingPaymentUserDocId &&
+                paymentIdentityIds.includes(
+                  existingPaymentUserDocId
+                );
+
+              const sameBranch =
+                existingPaymentBranch &&
+                normalizeTrainingTargetText(
+                  existingPaymentBranch
+                ) ===
+                normalizeTrainingTargetText(
+                  resolvedBranch
+                );
+
+              if (!sameIdentity || !sameBranch) {
+                throw new functions.https.HttpsError(
+                  "failed-precondition",
+                  "Payment identity or branch requires reconciliation."
+                );
+              }
+            }
 
             const existingPaidAmountRaw =
               Number(
@@ -2976,9 +3710,7 @@ let resolvedBranch = "";
               notes,
 
               updatedAt:
-                admin.firestore
-                  .FieldValue
-                  .serverTimestamp(),
+                FieldValue.serverTimestamp(),
 
               updatedAtMillis:
                 nowMillis,
@@ -2991,6 +3723,8 @@ let resolvedBranch = "";
             };
 
             const historyData = {
+              requestId,
+
               traineeId:
                 paymentDocId,
 
@@ -3022,9 +3756,7 @@ let resolvedBranch = "";
               notes,
 
               createdAt:
-                admin.firestore
-                  .FieldValue
-                  .serverTimestamp(),
+                FieldValue.serverTimestamp(),
 
               createdAtMillis:
                 nowMillis,
@@ -3035,6 +3767,50 @@ let resolvedBranch = "";
               source:
                 "server_secure_payments_report_history",
             };
+
+            /*
+             * יצירת הבקרה מתבצעת בתוך
+             * אותו Transaction.
+             *
+             * אם פעולה מקבילה כבר יצרה
+             * אותה בקרה, Firestore ימנע
+             * יצירה כפולה.
+             */
+            if (!paymentLockSnapshot.exists) {
+              transaction.create(
+                paymentLockRef,
+                {
+                  paymentDocId,
+                  canonicalUserDocId,
+
+                  branchName:
+                    resolvedBranch,
+
+                  branchKey:
+                    normalizeTrainingTargetText(
+                      resolvedBranch
+                    ),
+
+                  createdAt:
+                    FieldValue.serverTimestamp(),
+
+                  createdByUid:
+                    uid,
+                }
+              );
+            }
+
+            /*
+             * שומרים את מזהה הפעולה הגלובלי
+             * יחד עם התשלום וההיסטוריה
+             * באותו Transaction.
+             *
+             * הפעולה נוצרת פעם אחת בלבד.
+             */
+            transaction.create(
+              paymentOperationRef,
+              operationData
+            );
 
             transaction.set(
               paymentRef,
@@ -3050,8 +3826,18 @@ let resolvedBranch = "";
             );
 
             return {
+              /*
+               * מזהה מסמך התשלום נשמר בנפרד
+               * ממזהה המתאמן המאוחד.
+               */
               traineeId:
                 paymentDocId,
+
+              paymentId:
+                paymentDocId,
+
+              userDocId:
+                matchedDocument.id,
 
               fullName,
 
@@ -4614,13 +5400,56 @@ exports.loadSecureCoachTrainees =
               )
             );
 
-          return (
-            branches.includes(
-              normalizedBranch
-            ) &&
-            groups.includes(
-              normalizedGroup
-            )
+          return entries.some(
+            (entry) => {
+
+              const user =
+                entry.user || {};
+
+              const entryBranches =
+                parseUserTargetValues(
+                  user,
+                  [
+                    "branch",
+                    "branches",
+                    "branches_json",
+                    "branchesCsv",
+                    "selected_branches",
+                    "selectedBranches",
+                    "active_branch",
+                    "activeBranch",
+                    "branchName",
+                  ]
+                );
+
+              const entryGroups =
+                parseUserTargetValues(
+                  user,
+                  [
+                    "group",
+                    "groups",
+                    "groups_json",
+                    "groupsCsv",
+                    "selected_groups",
+                    "selectedGroups",
+                    "active_group",
+                    "activeGroup",
+                    "age_group",
+                    "age_groups",
+                    "primaryGroup",
+                    "groupKey",
+                  ]
+                );
+
+              return (
+                entryBranches.includes(
+                  normalizedBranch
+                ) &&
+                entryGroups.includes(
+                  normalizedGroup
+                )
+              );
+            }
           );
         }
       );

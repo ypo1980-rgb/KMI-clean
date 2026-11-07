@@ -2,23 +2,39 @@ package il.kmi.app.attendance.ui
 
 import android.app.Application
 import android.content.Context
+import androidx.core.content.edit
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import il.kmi.app.attendance.data.AttendanceRecord
-import il.kmi.app.attendance.data.AttendanceStatus
-import il.kmi.app.attendance.data.GroupMember
-import il.kmi.app.attendance.data.AttendanceRepository
-import il.kmi.app.training.TrainingCatalog
-import kotlinx.coroutines.Job
-import java.time.LocalDate
-import kotlinx.coroutines.flow.*
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.Dispatchers
 import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FieldPath
 import com.google.firebase.firestore.ktx.firestore
 import com.google.firebase.ktx.Firebase
+import il.kmi.app.attendance.data.AttendanceRecord
+import il.kmi.app.attendance.data.AttendanceRepository
+import il.kmi.app.attendance.data.AttendanceStatus
+import il.kmi.app.attendance.data.GroupMember
+import il.kmi.app.training.TrainingCatalog
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
+import java.time.LocalDate
 
 data class AttendanceUiState(
     val date: LocalDate = LocalDate.now(),
@@ -39,58 +55,14 @@ sealed class UiEvent {
     data class ReportSaveFailed(val message: String) : UiEvent()
 }
 
+@OptIn(ExperimentalCoroutinesApi::class)
 class AttendanceViewModel(app: Application) : AndroidViewModel(app) {
 
-    private fun String.nameKey(): String = this
-        .trim()
-        .replace('־', '-')   // maqaf
-        .replace('–', '-')   // en-dash
-        .replace('—', '-')   // em-dash
-        .replace(Regex("\\s+"), " ")
-        .replace(Regex("""[."'\u05F3\u05F4,;:()\\[\\]{}]"""), "")
-        .lowercase()
-
-    private fun String.phoneKey(): String = filter { it.isDigit() }
-        .removePrefix("972")
-        .removePrefix("0")
-
-    private fun GroupMember.attendanceUniqueKey(): String {
-        val phoneKey = phone.orEmpty().phoneKey()
-        val nameKey = displayName.nameKey()
-
-        return when {
-            phoneKey.isNotBlank() -> "phone:$phoneKey"
-            nameKey.isNotBlank() -> "name:${nameKey.substringBefore(" ")}"
-            else -> "member:$id"
-        }
-    }
-
-    private fun cleanupDuplicateMembersInDb() {
-        val members = uiState.value.members
-        if (members.size <= 1) return
-
-        val dups = members
-            .groupBy { it.attendanceUniqueKey() }
-            .values
-            .filter { it.size > 1 }
-
-        if (dups.isEmpty()) return
-
-        viewModelScope.launch {
-            dups.forEach { group ->
-                group
-                    .sortedBy { it.id }
-                    .drop(1)
-                    .forEach { m ->
-                        runCatching {
-                            repo.removeMember(_branch.value, _groupKey.value, m.id)
-                        }
-                    }
-            }
-
-            _refreshTick.update { it + 1 }
-        }
-    }
+    /*
+     * אין למחוק מתאמנים אוטומטית לפי שם או טלפון.
+     * זיהוי כפילויות ומיזוג רשומות דורשים
+     * מזהה מאומת ובדיקת שיוך הנוכחות הקיים.
+     */
 
     private val _events = MutableSharedFlow<UiEvent>(extraBufferCapacity = 1)
     val events: SharedFlow<UiEvent> = _events.asSharedFlow()
@@ -107,7 +79,6 @@ class AttendanceViewModel(app: Application) : AndroidViewModel(app) {
     // ✅ NEW: bootstrap state
     private var bootstrapJob: Job? = null
     private var lastBootstrapKey: String? = null
-    private var lastCleanupKey: String? = null
 
     private val _date =
         MutableStateFlow(LocalDate.now())
@@ -358,37 +329,6 @@ class AttendanceViewModel(app: Application) : AndroidViewModel(app) {
             AttendanceUiState()
         )
 
-    init {
-        viewModelScope.launch {
-            uiState
-                .map { state ->
-                    Triple(
-                        state.branch.trim(),
-                        state.groupKey.trim(),
-                        state.members.map { it.attendanceUniqueKey() }
-                    )
-                }
-                .distinctUntilChanged()
-                .collect { (branch, groupKey, names) ->
-                    if (branch.isBlank() || groupKey.isBlank()) return@collect
-                    if (names.size <= 1) return@collect
-
-                    val key = "$branch|$groupKey|${names.sorted().joinToString("|")}"
-                    if (lastCleanupKey == key) return@collect
-
-                    val hasDuplicates = names
-                        .filter { it.isNotBlank() }
-                        .groupBy { it }
-                        .any { (_, sameMembers) -> sameMembers.size > 1 }
-
-                    if (hasDuplicates) {
-                        lastCleanupKey = key
-                        cleanupDuplicateMembersInDb()
-                    }
-                }
-        }
-    }
-
     fun setContext(
         date: LocalDate,
         branch: String,
@@ -503,9 +443,7 @@ class AttendanceViewModel(app: Application) : AndroidViewModel(app) {
         val fromIncoming = splitAttendanceOptions(incoming)
 
         fun readPrefOptionValues(key: String): List<String> {
-            val raw: Any? = sp.all[key]
-
-            return when (raw) {
+            return when (val raw: Any? = sp.all[key]) {
                 is String -> {
                     splitAttendanceOptions(raw)
                 }
@@ -585,7 +523,7 @@ class AttendanceViewModel(app: Application) : AndroidViewModel(app) {
                             branch = branch,
                             groupKey = candidate
                         )
-                    } catch (e: Exception) {
+                    } catch (_: Exception) {
                         hadReadError = true
                         continue
                     }
@@ -760,27 +698,6 @@ class AttendanceViewModel(app: Application) : AndroidViewModel(app) {
         _refreshTick.update { it + 1 }
     }
 
-    fun selectAttendanceDate(date: LocalDate) {
-        val today =
-            LocalDate.now()
-
-        val safeDate =
-            if (date.isAfter(today)) {
-                today
-            } else {
-                date
-            }
-
-        refreshScheduleOptionsForDate(
-            date = safeDate,
-            preferredBranch = _branch.value,
-            preferredGroup = _groupKey.value
-        )
-
-        ensureSession()
-        _refreshTick.update { it + 1 }
-    }
-
     fun selectBranch(branch: String) {
         val cleanBranch =
             branch.normAttendanceOption()
@@ -839,12 +756,12 @@ class AttendanceViewModel(app: Application) : AndroidViewModel(app) {
                 "kmi_user",
                 Context.MODE_PRIVATE
             )
-            .edit()
-            .putString(
-                "active_branch",
-                selectedBranch
-            )
-            .apply()
+            .edit {
+                putString(
+                    "active_branch",
+                    selectedBranch
+                )
+            }
 
         ensureSession()
         _refreshTick.update { it + 1 }
@@ -875,9 +792,9 @@ class AttendanceViewModel(app: Application) : AndroidViewModel(app) {
 
         getApplication<Application>()
             .getSharedPreferences("kmi_user", Context.MODE_PRIVATE)
-            .edit()
-            .putString("active_group", clean)
-            .apply()
+            .edit {
+                putString("active_group", clean)
+            }
 
         ensureSession()
         _refreshTick.update { it + 1 }
@@ -980,10 +897,6 @@ class AttendanceViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
-    fun mark(memberId: String, status: AttendanceStatus) {
-        memberId.toLongOrNull()?.let { mark(it, status) }
-    }
-
     /** מחיקת מתאמן לפי memberId (Long) + רענון UI */
     fun removeMember(memberId: Long) {
         val b = _branch.value
@@ -1006,10 +919,6 @@ class AttendanceViewModel(app: Application) : AndroidViewModel(app) {
 
             _refreshTick.update { it + 1 }
         }
-    }
-
-    fun removeMember(memberId: String) {
-        memberId.toLongOrNull()?.let { removeMember(it) }
     }
 
     /** 🔹 שמירת דו"ח נוכחות של האימון הנוכחי לארכיון */
@@ -1169,7 +1078,7 @@ class AttendanceViewModel(app: Application) : AndroidViewModel(app) {
             }
 
             fun DocumentSnapshot.hasGroupMatch(): Boolean {
-                if (groupCandidates.firstOrNull().isNullOrBlank()) return true
+                if (groupCandidates.firstOrNull().isNullOrBlank()) return false
 
                 fun splitTokens(raw: String?): List<String> {
                     if (raw.isNullOrBlank()) return emptyList()
@@ -1333,7 +1242,7 @@ class AttendanceViewModel(app: Application) : AndroidViewModel(app) {
                         }
                         .distinct()
 
-                if (tokenBag.isEmpty()) return true
+                if (tokenBag.isEmpty()) return false
 
                 val candNorm = groupCandidates
                     .flatMap { expandGroupAliases(it) }
@@ -1341,12 +1250,7 @@ class AttendanceViewModel(app: Application) : AndroidViewModel(app) {
                     .toSet()
 
                 return tokenBag.any { tok ->
-                    tok in candNorm ||
-                            candNorm.any { cand ->
-                                cand.length >= 2 &&
-                                        tok.length >= 2 &&
-                                        (tok.contains(cand) || cand.contains(tok))
-                            }
+                    tok in candNorm
                 }
             }
 
@@ -1504,10 +1408,7 @@ class AttendanceViewModel(app: Application) : AndroidViewModel(app) {
             fun matchesBranch(tokens: List<String>, candSet: Set<String>): Boolean {
                 if (tokens.isEmpty() || candSet.isEmpty()) return false
                 return tokens.any { tok ->
-                    tok in candSet ||
-                            candSet.any { cand ->
-                                cand.length >= 4 && (tok.contains(cand) || cand.contains(tok))
-                            }
+                    tok in candSet
                 }
             }
 
@@ -1520,54 +1421,14 @@ class AttendanceViewModel(app: Application) : AndroidViewModel(app) {
                         it.id
                     }
 
-            val col =
-                Firebase.firestore
-                    .collection("users")
-
+            /*
+             * אין לבצע סריקה מלאה של users מהלקוח.
+             *
+             * שיוך מתאמנים לנוכחות מחייב
+             * מקור זהות מאומת בצד השרת.
+             */
             val allUsers =
-                mutableListOf<DocumentSnapshot>()
-
-            var last:
-                    DocumentSnapshot? =
-                null
-
-            while (true) {
-
-                var query =
-                    col
-                        .orderBy(
-                            FieldPath.documentId()
-                        )
-                        .limit(1000)
-
-                if (last != null) {
-                    query =
-                        query.startAfter(
-                            last!!
-                        )
-                }
-
-                val snapshot =
-                    query
-                        .get()
-                        .await()
-
-                val page =
-                    snapshot.documents
-
-                if (page.isEmpty()) {
-                    break
-                }
-
-                allUsers.addAll(page)
-
-                last =
-                    page.last()
-
-                if (allUsers.size >= 5000) {
-                    break
-                }
-            }
+                emptyList<DocumentSnapshot>()
 
             val branchCandidateSet =
                 branchCandidates
@@ -1588,7 +1449,7 @@ class AttendanceViewModel(app: Application) : AndroidViewModel(app) {
                         )
                     }
 
-            var docs =
+            val docs =
                 (
                         directDocs +
                                 matchedFromFullScan
@@ -1655,40 +1516,13 @@ class AttendanceViewModel(app: Application) : AndroidViewModel(app) {
                     .toList()
 
             /*
-   * מסנכרנים את כל המתאמנים שנמצאו ב-users.
-   *
-   * AttendanceRepository.addMember כבר:
-   * 1. מחפש קודם לפי authUid.
-   * 2. נופל חזרה לחיפוש לפי השם למשתמשים ישנים.
-   * 3. משדרג member קיים עם authUid ו-phone.
-   * 4. אינו יוצר כפילות אם המתאמן כבר קיים.
-   */
-            val traineesToSync =
-                trainees
-                    .filter { trainee ->
-                        trainee.uid.isNotBlank() &&
-                                trainee.displayName.isNotBlank()
-                    }
-
-            val repoBranch = _branch.value.ifBlank { b0 }.trim()
-            val repoGroup = _groupKey.value.ifBlank { g0 }.trim()
-
-            traineesToSync.forEach { trainee ->
-                runCatching {
-                    repo.addMember(
-                        branch = repoBranch,
-                        groupKey = repoGroup,
-                        displayName = trainee.displayName,
-                        authUid = trainee.uid,
-                        phone = trainee.phone
-                    )
-                }
-            }
-
+          * לא יוצרים או מקשרים members מתוך users
+          * ללא אימות Firebase Auth UID בצד השרת.
+          *
+          * הרשומות הקיימות נשארות ללא שינוי.
+          * קישור מתאמנים חדשים יטופל במסלול מאומת.
+          */
             _refreshTick.update { it + 1 }
-
-            // ✅ ניקוי כפילויות קיימות ב-DB / Firestore לפי המימוש הנוכחי של ה-Repository
-            cleanupDuplicateMembersInDb()
         }
     }
 }

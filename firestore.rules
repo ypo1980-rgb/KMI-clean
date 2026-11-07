@@ -1473,7 +1473,10 @@ match /records/{recordId} {
       )
       && get(
         /databases/$(database)/documents/attendanceGroups/$(groupId)/members/$(recordId)
-      ).data.authUid == request.auth.uid;
+      ).data.authUid == request.auth.uid
+      && get(
+        /databases/$(database)/documents/attendanceGroups/$(groupId)/members/$(recordId)
+      ).data.get("isActive", true) != false;
   }
 
   /*
@@ -1628,11 +1631,15 @@ function isValidTraineeAttendanceData() {
            /databases/$(database)/documents/attendanceGroups/$(groupId)/members/$(recordId)
          )
 
-         && get(
-           /databases/$(database)/documents/attendanceGroups/$(groupId)/members/$(recordId)
-         ).data.authUid == request.auth.uid
+                && get(
+                  /databases/$(database)/documents/attendanceGroups/$(groupId)/members/$(recordId)
+                ).data.authUid == request.auth.uid
 
-         && request.resource.data.memberId ==
+                && get(
+                  /databases/$(database)/documents/attendanceGroups/$(groupId)/members/$(recordId)
+                ).data.get("isActive", true) != false
+
+                && request.resource.data.memberId ==
            get(
               /databases/$(database)/documents/attendanceGroups/$(groupId)/members/$(recordId)
             ).data.id

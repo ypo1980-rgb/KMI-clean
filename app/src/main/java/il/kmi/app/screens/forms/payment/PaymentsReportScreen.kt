@@ -102,6 +102,45 @@ private fun PaymentsPremiumLoading(
 
 private const val DEFAULT_MEMBERSHIP_REQUIRED_AMOUNT = 150.0
 
+/**
+ * רשומות חישוב לפי סניף.
+ *
+ * זהות המתאמן נשמרת ללא שינוי.
+ * כל סכום שייך לסניף שלו בלבד.
+ *
+ * רשומות ישנות ללא branchPayments ממשיכות
+ * להשתמש בשדות הקיימים.
+ */
+private fun PaymentReportItem.paymentRowsForBranch(
+    selectedBranch: String? = null
+): List<PaymentReportItem> {
+
+    if (branchPayments.isEmpty()) {
+        return listOf(this).filter { item ->
+            selectedBranch == null ||
+                    item.branchName == selectedBranch
+        }
+    }
+
+    return branchPayments
+        .filter { payment ->
+            selectedBranch == null ||
+                    payment.branchName == selectedBranch
+        }
+        .map { payment ->
+            copy(
+                branchName = payment.branchName,
+                requiredAmount = payment.requiredAmount,
+                paidAmount = payment.paidAmount,
+                status = payment.status,
+                paymentMethod = payment.paymentMethod,
+                paymentDate = payment.paymentDate,
+                notes = payment.notes,
+                branchPayments = emptyList()
+            )
+        }
+}
+
 private fun paymentNowDateText(): String {
     return SimpleDateFormat(
         "dd/MM/yyyy",
@@ -564,6 +603,65 @@ private suspend fun loadRealPaymentsReportItems(): List<PaymentReportItem> {
                     ?.trim()
                     .orEmpty()
 
+            val branchPayments =
+                (item["branchPayments"] as? List<*>)
+                    .orEmpty()
+                    .mapNotNull { rawBranch ->
+                        val branch =
+                            rawBranch as? Map<*, *>
+                                ?: return@mapNotNull null
+
+                        val name =
+                            branch["branchName"]
+                                ?.toString()
+                                ?.trim()
+                                .orEmpty()
+
+                        if (name.isBlank()) {
+                            return@mapNotNull null
+                        }
+
+                        val required =
+                            (branch["requiredAmount"] as? Number)
+                                ?.toDouble()
+                                ?.takeIf { it > 0.0 }
+                                ?: DEFAULT_MEMBERSHIP_REQUIRED_AMOUNT
+
+                        val paid =
+                            (branch["paidAmount"] as? Number)
+                                ?.toDouble()
+                                ?.coerceAtLeast(0.0)
+                                ?: 0.0
+
+                        PaymentBranchItem(
+                            branchName = name,
+                            requiredAmount = required,
+                            paidAmount = paid,
+                            status = paymentStatusFromAmount(
+                                paidAmount = paid,
+                                requiredAmount = required
+                            ),
+                            paymentMethod = paymentMethodFromString(
+                                branch["paymentMethod"]?.toString()
+                            ),
+                            paymentDate =
+                                branch["paymentDate"]
+                                    ?.toString()
+                                    ?.trim()
+                                    .orEmpty(),
+                            notes =
+                                branch["notes"]
+                                    ?.toString()
+                                    ?.trim()
+                                    .orEmpty(),
+                            paymentId =
+                                branch["paymentId"]
+                                    ?.toString()
+                                    ?.trim()
+                                    .orEmpty()
+                        )
+                    }
+
             PaymentReportItem(
                 traineeId = traineeId,
                 fullName = fullName,
@@ -574,7 +672,8 @@ private suspend fun loadRealPaymentsReportItems(): List<PaymentReportItem> {
                 status = status,
                 paymentMethod = paymentMethod,
                 paymentDate = paymentDate,
-                notes = notes
+                notes = notes,
+                branchPayments = branchPayments
             )
         }
         .filter { item ->
@@ -596,8 +695,13 @@ private suspend fun saveManualMembershipPaymentToFirestore(
     item: PaymentReportItem,
     amountToAdd: Double,
     method: PaymentMethod,
-    notes: String
+    notes: String,
+    requestId: String
 ): PaymentReportItem {
+
+    require(item.branchName.isNotBlank()) {
+        "Payment branch is required."
+    }
 
     val result =
         FirebaseFunctions
@@ -610,6 +714,9 @@ private suspend fun saveManualMembershipPaymentToFirestore(
                     "traineeId" to
                             item.traineeId,
 
+                    "branchName" to
+                            item.branchName.trim(),
+
                     "amountToAdd" to
                             amountToAdd,
 
@@ -619,7 +726,10 @@ private suspend fun saveManualMembershipPaymentToFirestore(
                             ),
 
                     "notes" to
-                            notes.trim()
+                            notes.trim(),
+
+                    "requestId" to
+                            requestId
                 )
             )
             .await()
@@ -636,11 +746,21 @@ private suspend fun saveManualMembershipPaymentToFirestore(
                 "Missing payment item"
             )
 
-    val traineeId =
-        rawItem["traineeId"]
+    val returnedBranch =
+        rawItem["branchName"]
             ?.toString()
             ?.trim()
             .orEmpty()
+
+    check(
+        returnedBranch.isNotBlank() &&
+                returnedBranch.equals(
+                    item.branchName.trim(),
+                    ignoreCase = true
+                )
+    ) {
+        "Payment response branch mismatch"
+    }
 
     val fullName =
         rawItem["fullName"]
@@ -710,11 +830,18 @@ private suspend fun saveManualMembershipPaymentToFirestore(
             ?.trim()
             .orEmpty()
 
+    /*
+     * שומרים על מזהה המתאמן המקורי שהתקבל בדוח.
+     *
+     * מזהה מסמך התשלום שהשרת מחזיר אינו בהכרח
+     * זהה למזהה המשתמש המאוחד.
+     *
+     * כך עדכון התשלום אינו משנה את זהות
+     * הפריט ברשימת התשלומים.
+     */
     return item.copy(
         traineeId =
-            traineeId.ifBlank {
-                item.traineeId
-            },
+            item.traineeId,
 
         fullName =
             fullName.ifBlank {
@@ -764,6 +891,13 @@ fun PaymentsReportScreen(
     var filter by rememberSaveable { mutableStateOf("ALL") }
     var manualDialogItem by remember { mutableStateOf<PaymentReportItem?>(null) }
 
+    var manualPaymentSessionId by remember {
+        mutableStateOf(java.util.UUID.randomUUID().toString())
+    }
+
+    var isSavingManualPayment by remember { mutableStateOf(false) }
+    var manualPaymentError by remember { mutableStateOf<String?>(null) }
+
     var isLoadingPayments by remember { mutableStateOf(true) }
     var paymentsError by remember { mutableStateOf<String?>(null) }
     val screenScope = rememberCoroutineScope()
@@ -779,21 +913,32 @@ fun PaymentsReportScreen(
             items = realItems
             isLoadingPayments = false
         }.onFailure { error ->
+            android.util.Log.e(
+                "KMI_PAYMENTS",
+                "Failed loading secure payments report",
+                error
+            )
+
             val rawMessage = error.localizedMessage.orEmpty()
 
-            paymentsError = if (rawMessage.contains("PERMISSION_DENIED", ignoreCase = true) ||
-                rawMessage.contains("insufficient permissions", ignoreCase = true)
-            ) {
-                if (isEnglish) {
-                    "You do not have permission to load payment data. Please check Firestore rules."
+            paymentsError =
+                if (
+                    rawMessage.contains("PERMISSION_DENIED", ignoreCase = true) ||
+                    rawMessage.contains("permission-denied", ignoreCase = true) ||
+                    rawMessage.contains("insufficient permissions", ignoreCase = true)
+                ) {
+                    if (isEnglish) {
+                        "You do not have permission to view this payments report."
+                    } else {
+                        "אין לך הרשאה לצפות בדוח התשלומים."
+                    }
                 } else {
-                    "אין הרשאה לטעון את נתוני התשלומים מהשרת. צריך לבדוק הרשאות Firestore למנהל/מאמן."
+                    if (isEnglish) {
+                        "Unable to load payments. Please check your connection and try again."
+                    } else {
+                        "לא ניתן לטעון את התשלומים. יש לבדוק את החיבור ולנסות שוב."
+                    }
                 }
-            } else {
-                rawMessage.ifBlank {
-                    if (isEnglish) "Unknown loading error" else "שגיאה לא ידועה בטעינת התשלומים"
-                }
-            }
 
             isLoadingPayments = false
         }
@@ -829,11 +974,20 @@ fun PaymentsReportScreen(
     val allBranchesLabel = if (isEnglish) "All Branches" else "כל הסניפים"
 
     val branchOptions = remember(isEnglish, items) {
-        val realBranches = items
-            .map { it.branchName.trim() }
-            .filter { it.isNotBlank() }
-            .distinct()
-            .sorted()
+        val realBranches =
+            items
+                .flatMap { item ->
+                    if (item.branchPayments.isNotEmpty()) {
+                        item.branchPayments.map { payment ->
+                            payment.branchName.trim()
+                        }
+                    } else {
+                        listOf(item.branchName.trim())
+                    }
+                }
+                .filter { it.isNotBlank() }
+                .distinct()
+                .sorted()
 
         listOf(allBranchesLabel) + realBranches
     }
@@ -848,39 +1002,122 @@ fun PaymentsReportScreen(
         }
     }
 
+    val activePaymentBranch =
+        selectedBranch.takeUnless {
+            it == allBranchesLabel
+        }
+
     val filteredItems = items.filter { item ->
+        val branchRows =
+            item.paymentRowsForBranch(activePaymentBranch)
+
         val matchesQuery =
             query.isBlank() ||
                     item.fullName.contains(query, ignoreCase = true) ||
                     item.phone.contains(query, ignoreCase = true) ||
-                    item.branchName.contains(query, ignoreCase = true)
+                    branchRows.any { row ->
+                        row.branchName.contains(
+                            query,
+                            ignoreCase = true
+                        )
+                    }
 
-        val matchesFilter = when (filter) {
-            // ✅ שילמו דמי חבר מלאים
-            "PAID" -> item.paidAmount >= item.requiredAmount
+        val matchesFilter =
+            branchRows.any { row ->
+                when (filter) {
+                    "PAID" ->
+                        row.paidAmount >= row.requiredAmount
 
-            // ✅ לא שילמו מלא:
-            // כולל מי שלא שילם בכלל וגם מי ששילם חלקית.
-            "UNPAID" -> item.paidAmount < item.requiredAmount
+                    "UNPAID" ->
+                        row.paidAmount < row.requiredAmount
 
-            else -> true
-        }
+                    else -> true
+                }
+            }
 
-        val matchesBranch =
-            selectedBranch == allBranchesLabel ||
-                    item.branchName == selectedBranch
-
-        matchesQuery && matchesFilter && matchesBranch
+        branchRows.isNotEmpty() &&
+                matchesQuery &&
+                matchesFilter
     }
 
-    val totalRequired = items.sumOf { it.requiredAmount }
-    val totalPaid = items.sumOf { it.paidAmount }
+    /*
+     * רשומות כספיות לפי סניף, לאחר סינון.
+     * המתאמן עצמו נשאר רשומה אחת ברשימה.
+     */
+    val reportPaymentRows =
+        filteredItems
+            .flatMap { item ->
+                item.paymentRowsForBranch(activePaymentBranch)
+            }
+            .filter { row ->
+                when (filter) {
+                    "PAID" ->
+                        row.paidAmount >= row.requiredAmount
 
-    // ✅ שילמו = שילמו את מלוא הסכום הנדרש.
-    val paidCount = items.count { it.paidAmount >= it.requiredAmount }
+                    "UNPAID" ->
+                        row.paidAmount < row.requiredAmount
 
-    // ✅ לא שילמו = כל מי שלא הגיע למלוא הסכום, כולל חלקי.
-    val unpaidCount = items.count { it.paidAmount < it.requiredAmount }
+                    else -> true
+                }
+            }
+
+    /*
+     * רשומת מתאמן אחת בתצוגה,
+     * עם פירוט הסניפים שעומדים בסינון בלבד.
+     *
+     * items המקורי נשאר ללא שינוי,
+     * ולכן דיאלוג התשלום יכול להציע את כל
+     * הסניפים שהשרת החזיר למתאמן.
+     */
+    val visiblePaymentItems =
+        filteredItems.map { item ->
+            if (item.branchPayments.isEmpty()) {
+                item
+            } else {
+                val visibleBranches =
+                    item.branchPayments.filter { payment ->
+                        val matchesBranch =
+                            activePaymentBranch == null ||
+                                    payment.branchName == activePaymentBranch
+
+                        val matchesStatus =
+                            when (filter) {
+                                "PAID" ->
+                                    payment.paidAmount >= payment.requiredAmount
+
+                                "UNPAID" ->
+                                    payment.paidAmount < payment.requiredAmount
+
+                                else -> true
+                            }
+
+                        matchesBranch && matchesStatus
+                    }
+
+                item.copy(
+                    branchName =
+                        visibleBranches.firstOrNull()?.branchName
+                            ?: item.branchName,
+                    branchPayments = visibleBranches
+                )
+            }
+        }
+
+    val totalRequired =
+        reportPaymentRows.sumOf { it.requiredAmount }
+
+    val totalPaid =
+        reportPaymentRows.sumOf { it.paidAmount }
+
+    val paidCount =
+        reportPaymentRows.count {
+            it.paidAmount >= it.requiredAmount
+        }
+
+    val unpaidCount =
+        reportPaymentRows.count {
+            it.paidAmount < it.requiredAmount
+        }
 
     val collectionPercent =
         if (totalRequired > 0.0) {
@@ -905,10 +1142,10 @@ fun PaymentsReportScreen(
                     showBottomActions = true,
                     currentLang = if (isEnglish) "en" else "he",
                     onShare = {
-                        if (filteredItems.isNotEmpty()) {
+                        if (reportPaymentRows.isNotEmpty()) {
                             val pdfFile = createPaymentsReportPdf(
                                 context = context,
-                                items = filteredItems,
+                                items = reportPaymentRows,
                                 totalRequired = totalRequired,
                                 totalPaid = totalPaid,
                                 paidCount = paidCount,
@@ -1123,7 +1360,7 @@ fun PaymentsReportScreen(
                                                 min = 96.dp
                                             ),
                                     title = if (isEnglish) "Trainees" else "מתאמנים",
-                                    value = items.size.toString(),
+                                    value = filteredItems.size.toString(),
                                     icon = Icons.Default.Groups,
                                     selected = filter == "ALL",
                                     baseColor = Color(0xFF8B5CF6),
@@ -1370,15 +1607,24 @@ fun PaymentsReportScreen(
                             }
 
                             else -> {
-                                filteredItems.forEachIndexed { index,
-                                                               item ->
+                                visiblePaymentItems.forEachIndexed { index, item ->
 
                                     PaymentReportRow(
                                         item = item,
                                         demoIndex = index + 1,
                                         isEnglish = isEnglish,
                                         onManualUpdate = {
-                                            manualDialogItem = item
+                                            if (!isSavingManualPayment) {
+                                                manualPaymentSessionId =
+                                                    java.util.UUID.randomUUID().toString()
+
+                                                manualPaymentError = null
+
+                                                // הדיאלוג מקבל את כל הסניפים,
+                                                // גם כאשר הכרטיס מסונן.
+                                                manualDialogItem =
+                                                    filteredItems[index]
+                                            }
                                         }
                                     )
                                 }
@@ -1406,39 +1652,139 @@ fun PaymentsReportScreen(
                         isEnglish = isEnglish,
                         item = selected,
                         demoIndex = selectedDemoIndex,
+                        paymentSessionId = manualPaymentSessionId,
+                        isSaving = isSavingManualPayment,
+                        paymentError = manualPaymentError,
                         onDismiss = {
-                            manualDialogItem = null
+                            if (!isSavingManualPayment) {
+                                manualDialogItem = null
+                                manualPaymentError = null
+                            }
                         },
-                        onSave = { amount, method, notes ->
-                            screenScope.launch {
-                                runCatching {
-                                    saveManualMembershipPaymentToFirestore(
-                                        item = selected,
-                                        amountToAdd = amount,
-                                        method = method,
-                                        notes = notes
-                                    )
+                        onSave = { branch, amount, method, notes, requestId ->
+                            if (!isSavingManualPayment) {
+                                isSavingManualPayment = true
+                                manualPaymentError = null
+
+                                screenScope.launch {
+                                    runCatching {
+                                    val selectedBranchPayment =
+                                        selected.branchPayments.firstOrNull {
+                                            it.branchName == branch
+                                        }
+
+                                    val paymentItem =
+                                        selected.copy(
+                                            branchName = branch,
+                                            requiredAmount =
+                                                selectedBranchPayment
+                                                    ?.requiredAmount
+                                                    ?: selected.requiredAmount,
+                                            paidAmount =
+                                                selectedBranchPayment
+                                                    ?.paidAmount
+                                                    ?: selected.paidAmount
+                                        )
+
+                                        saveManualMembershipPaymentToFirestore(
+                                            item = paymentItem,
+                                            amountToAdd = amount,
+                                            method = method,
+                                            notes = notes,
+                                            requestId = requestId
+                                        )
                                 }.onSuccess { updatedItem ->
+
                                     items = items.map { current ->
-                                        if (current.traineeId == selected.traineeId) {
-                                            updatedItem
-                                        } else {
+
+                                        if (current.traineeId != selected.traineeId) {
                                             current
+                                        } else {
+
+                                            val updatedBranchPayment =
+                                                PaymentBranchItem(
+                                                    branchName = branch,
+                                                    requiredAmount = updatedItem.requiredAmount,
+                                                    paidAmount = updatedItem.paidAmount,
+                                                    status = updatedItem.status,
+                                                    paymentMethod = updatedItem.paymentMethod,
+                                                    paymentDate = updatedItem.paymentDate,
+                                                    notes = updatedItem.notes
+                                                )
+
+                                            val previousBranches =
+                                                current.branchPayments
+
+                                            val branchExists =
+                                                previousBranches.any {
+                                                    it.branchName == branch
+                                                }
+
+                                            val updatedBranches =
+                                                if (previousBranches.isEmpty()) {
+                                                    listOf(updatedBranchPayment)
+                                                } else {
+                                                    previousBranches.map { existing ->
+                                                        if (existing.branchName == branch) {
+                                                            updatedBranchPayment.copy(
+                                                                paymentId = existing.paymentId
+                                                            )
+                                                        } else {
+                                                            existing
+                                                        }
+                                                    } + if (branchExists) {
+                                                        emptyList()
+                                                    } else {
+                                                        listOf(updatedBranchPayment)
+                                                    }
+                                                }
+
+                                            if (
+                                                previousBranches.isEmpty() ||
+                                                current.branchName == branch
+                                            ) {
+                                                updatedItem.copy(
+                                                    branchPayments = updatedBranches
+                                                )
+                                            } else {
+                                                current.copy(
+                                                    branchPayments = updatedBranches
+                                                )
+                                            }
                                         }
                                     }
 
-                                    onSaveManualPayment(
-                                        selected.traineeId,
-                                        amount,
-                                        method,
-                                        notes
-                                    )
+                                        /*
+                                         * השמירה בשרת כבר הצליחה.
+                                         * כשל ב-callback המקומי אינו
+                                         * הופך את התשלום לכישלון.
+                                         */
+                                        runCatching {
+                                            onSaveManualPayment(
+                                                selected.traineeId,
+                                                amount,
+                                                method,
+                                                notes
+                                            )
+                                        }.onFailure {
+                                            android.util.Log.w(
+                                                "KMI_PAYMENTS",
+                                                "Payment callback failed after server confirmation"
+                                            )
+                                        }
 
-                                    manualDialogItem = null
-                                }.onFailure { error ->
-                                    paymentsError =
-                                        error.localizedMessage ?: "Failed saving payment"
-                                    manualDialogItem = null
+                                        manualDialogItem = null
+                                        manualPaymentError = null
+                                    }.onFailure {
+                                        manualPaymentError =
+                                            if (isEnglish) {
+                                                "Payment could not be confirmed. Retry the same operation, or verify its status before starting a new payment."
+                                            } else {
+                                                "לא ניתן לאשר את שמירת התשלום. אפשר לנסות שוב את אותה פעולה, או לבדוק את מצבה לפני יצירת תשלום חדש."
+                                            }
+                                    }
+
+                                    isSavingManualPayment = false
                                 }
                             }
                         }
@@ -1759,37 +2105,34 @@ private fun PaymentReportRow(
                     Modifier.width(8.dp)
                 )
 
-                Surface(
-                    shape =
-                        RoundedCornerShape(14.dp),
-                    color =
-                        statusColor(item.status)
-                            .copy(alpha = 0.18f),
-                    tonalElevation = 0.dp,
-                    shadowElevation = 0.dp
-                ) {
-                    Text(
-                        text =
-                            statusLabel(
-                                item.status,
-                                isEnglish
-                            ),
-                        color =
-                            statusColor(
-                                item.status
-                            ),
-                        modifier =
-                            Modifier.padding(
-                                horizontal = 9.dp,
-                                vertical = 5.dp
-                            ),
-                        style =
-                            KmiTypography.caption,
-                        fontWeight =
-                            FontWeight.Bold,
-                        textAlign =
-                            TextAlign.Center
-                    )
+                if (item.branchPayments.size <= 1) {
+                    val displayedStatus =
+                        item.branchPayments.firstOrNull()
+                            ?.status
+                            ?: item.status
+
+                    Surface(
+                            shape = RoundedCornerShape(14.dp),
+                            color = statusColor(displayedStatus)
+                                .copy(alpha = 0.18f),
+                            tonalElevation = 0.dp,
+                            shadowElevation = 0.dp
+                        ) {
+                            Text(
+                                text = statusLabel(
+                                    displayedStatus,
+                                    isEnglish
+                                ),
+                                color = statusColor(displayedStatus),
+                                modifier = Modifier.padding(
+                                    horizontal = 9.dp,
+                                    vertical = 5.dp
+                                ),
+                                style = KmiTypography.caption,
+                                fontWeight = FontWeight.Bold,
+                                textAlign = TextAlign.Center
+                            )
+                    }
                 }
             }
 
@@ -1798,23 +2141,69 @@ private fun PaymentReportRow(
                     cardDividerColor
             )
 
-            Text(
-                text =
-                    if (isEnglish) {
-                        "Fee: ₪${"%.0f".format(item.paidAmount)} / ₪${"%.0f".format(item.requiredAmount)}"
-                    } else {
-                        "דמי חבר: ₪${"%.0f".format(item.paidAmount)} / ₪${"%.0f".format(item.requiredAmount)}"
-                    },
-                color =
-                    cardPrimaryTextColor,
-                style =
-                    KmiTypography.secondary,
-                fontWeight = FontWeight.Bold,
-                textAlign = TextAlign.Start,
-                modifier = Modifier.fillMaxWidth()
-            )
+            if (item.branchPayments.isNotEmpty()) {
+                item.branchPayments.forEach { branchPayment ->
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(3.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = branchPayment.branchName,
+                                color = cardPrimaryTextColor,
+                                style = KmiTypography.secondary,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.weight(1f),
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis
+                            )
 
-            if (item.paymentDate.isNotBlank()) {
+                            Text(
+                                text = statusLabel(
+                                    branchPayment.status,
+                                    isEnglish
+                                ),
+                                color = statusColor(branchPayment.status),
+                                style = KmiTypography.caption,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+
+                        Text(
+                            text =
+                                if (isEnglish) {
+                                    "Fee: ₪${"%.0f".format(branchPayment.paidAmount)} / ₪${"%.0f".format(branchPayment.requiredAmount)}"
+                                } else {
+                                    "דמי חבר: ₪${"%.0f".format(branchPayment.paidAmount)} / ₪${"%.0f".format(branchPayment.requiredAmount)}"
+                                },
+                            color = cardSecondaryTextColor,
+                            style = KmiTypography.secondary,
+                            textAlign = TextAlign.Start,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                }
+            } else {
+                Text(
+                    text =
+                        if (isEnglish) {
+                            "Fee: ₪${"%.0f".format(item.paidAmount)} / ₪${"%.0f".format(item.requiredAmount)}"
+                        } else {
+                            "דמי חבר: ₪${"%.0f".format(item.paidAmount)} / ₪${"%.0f".format(item.requiredAmount)}"
+                        },
+                    color = cardPrimaryTextColor,
+                    style = KmiTypography.secondary,
+                    fontWeight = FontWeight.Bold,
+                    textAlign = TextAlign.Start,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+
+            if (item.paymentDate.isNotBlank() && item.branchPayments.isEmpty()) {
                 Text(
                     text =
                         if (isEnglish) {
@@ -1882,13 +2271,27 @@ private fun ManualPaymentDialog(
     isEnglish: Boolean,
     item: PaymentReportItem,
     demoIndex: Int?,
+    paymentSessionId: String,
+    isSaving: Boolean,
+    paymentError: String?,
     onDismiss: () -> Unit,
     onSave: (
+        branchName: String,
         amount: Double,
         method: PaymentMethod,
-        notes: String
+        notes: String,
+        requestId: String
     ) -> Unit
 ) {
+    val requestId = paymentSessionId
+
+    var paymentAttempted by rememberSaveable(paymentSessionId) {
+        mutableStateOf(false)
+    }
+
+    val fieldsEnabled = !isSaving && !paymentAttempted
+    val canDismissPayment = !isSaving && !paymentAttempted
+
     var amountText by rememberSaveable { mutableStateOf("") }
     var notes by rememberSaveable {
         mutableStateOf("")
@@ -1896,6 +2299,23 @@ private fun ManualPaymentDialog(
 
     var method by remember {
         mutableStateOf(PaymentMethod.MANUAL)
+    }
+
+    val paymentBranches =
+        if (item.branchPayments.isNotEmpty()) {
+            item.branchPayments
+                .map { it.branchName.trim() }
+                .filter { it.isNotBlank() }
+                .distinct()
+        } else {
+            listOf(item.branchName.trim())
+                .filter { it.isNotBlank() }
+        }
+
+    var selectedPaymentBranch by remember(item.traineeId, paymentBranches) {
+        mutableStateOf(
+            paymentBranches.firstOrNull().orEmpty()
+        )
     }
 
     val paymentMethodOptions =
@@ -1909,7 +2329,11 @@ private fun ManualPaymentDialog(
         }
 
     AlertDialog(
-        onDismissRequest = onDismiss,
+        onDismissRequest = {
+            if (canDismissPayment) {
+                onDismiss()
+            }
+        },
         title = {
             Text(
                 text =
@@ -1960,9 +2384,24 @@ private fun ManualPaymentDialog(
                     modifier = Modifier.fillMaxWidth()
                 )
 
+                KmiPremiumDropdown(
+                    title =
+                        if (isEnglish) "Payment branch" else "סניף לתשלום",
+                    options = paymentBranches,
+                    selectedValue = selectedPaymentBranch,
+                    isEnglish = isEnglish,
+                    placeholder =
+                        if (isEnglish) "Select branch" else "בחר סניף",
+                    enabled = fieldsEnabled && paymentBranches.size > 1,
+                    onSelected = { branch ->
+                        selectedPaymentBranch = branch
+                    }
+                )
+
                 OutlinedTextField(
                     value = amountText,
                     onValueChange = { amountText = it.filter { ch -> ch.isDigit() || ch == '.' } },
+                    enabled = fieldsEnabled,
                     modifier = Modifier.fillMaxWidth(),
                     singleLine = true,
                     label = { Text(if (isEnglish) "Amount" else "סכום") },
@@ -2000,7 +2439,7 @@ private fun ManualPaymentDialog(
                             "בחר אמצעי תשלום"
                         },
                     enabled =
-                        paymentMethodOptions.size > 1,
+                        fieldsEnabled && paymentMethodOptions.size > 1,
                     onSelected = { selectedLabel ->
                         PaymentMethod.entries
                             .firstOrNull { option ->
@@ -2018,6 +2457,7 @@ private fun ManualPaymentDialog(
                 OutlinedTextField(
                     value = notes,
                     onValueChange = { notes = it },
+                    enabled = fieldsEnabled,
                     modifier = Modifier.fillMaxWidth(),
                     minLines = 3,
                     label = { Text(if (isEnglish) "Notes" else "הערות") },
@@ -2032,21 +2472,70 @@ private fun ManualPaymentDialog(
                         ),
                     colors = reportFieldColors()
                 )
+
+                if (paymentError != null) {
+                    Text(
+                        text = paymentError,
+                        color = MaterialTheme.colorScheme.error,
+                        style = KmiTypography.caption,
+                        modifier = Modifier.fillMaxWidth(),
+                        textAlign = TextAlign.Start
+                    )
+                }
+
+                if (paymentAttempted && !isSaving) {
+                    Text(
+                        text =
+                            if (isEnglish) {
+                                "This payment attempt is locked. Retry the same operation without changing its details."
+                            } else {
+                                "ניסיון התשלום נעול. יש לנסות שוב את אותה פעולה ללא שינוי בפרטי התשלום."
+                            },
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = KmiTypography.caption,
+                        modifier = Modifier.fillMaxWidth(),
+                        textAlign = TextAlign.Start
+                    )
+                }
             }
         },
         confirmButton = {
             TextButton(
+                enabled = !isSaving,
                 onClick = {
-                    val amount = amountText.toDoubleOrNull() ?: 0.0
-                    if (amount > 0.0) onSave(amount, method, notes.trim())
+                    val amount = amountText.toDoubleOrNull()
+
+                    val validAmount =
+                        amount != null &&
+                                amount.isFinite() &&
+                                amount > 0.0 &&
+                                Regex("""^\d+(\.\d{1,2})?$""")
+                                    .matches(amountText)
+
+                    if (
+                        validAmount &&
+                        selectedPaymentBranch.isNotBlank()
+                    ) {
+                        paymentAttempted = true
+
+                        onSave(
+                            selectedPaymentBranch,
+                            amount ?: return@TextButton,
+                            method,
+                            notes.trim(),
+                            requestId
+                        )
+                    }
                 }
             ) {
                 Text(
                     text =
-                        if (isEnglish) {
-                            "Save"
+                        if (isSaving) {
+                            if (isEnglish) "Saving..." else "שומר..."
+                        } else if (paymentAttempted) {
+                            if (isEnglish) "Retry" else "נסה שוב"
                         } else {
-                            "שמור"
+                            if (isEnglish) "Save" else "שמור"
                         },
                     color =
                         MaterialTheme
@@ -2058,6 +2547,7 @@ private fun ManualPaymentDialog(
         },
         dismissButton = {
             TextButton(
+                enabled = canDismissPayment,
                 onClick = onDismiss
             ) {
                 Text(
@@ -2389,7 +2879,11 @@ private fun createPaymentsReportPdf(
         y += 42f
     }
 
-    fun drawPaymentRow(index: Int, item: PaymentReportItem) {
+    fun drawPaymentRow(
+        index: Int,
+        item: PaymentReportItem,
+        demoIndex: Int
+    ) {
         ensureSpace(38f)
 
         val rowBg = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -2456,7 +2950,7 @@ private fun createPaymentsReportPdf(
             item
                 .demoSafeName(
                     isEnglish = isEnglish,
-                    demoIndex = index + 1
+                    demoIndex = demoIndex
                 )
                 .take(22),
             item.branchName
@@ -2470,7 +2964,7 @@ private fun createPaymentsReportPdf(
             ).take(12),
             item.demoSafePhone(
                 isEnglish = isEnglish,
-                demoIndex = index + 1
+                demoIndex = demoIndex
             )
                 .ifBlank { "—" }
                 .take(13)
@@ -2553,8 +3047,21 @@ private fun createPaymentsReportPdf(
     y += 16f
     drawTableHeader()
 
+    val demoIndexByTrainee =
+        items
+            .map { it.traineeId }
+            .distinct()
+            .withIndex()
+            .associate { indexed ->
+                indexed.value to indexed.index + 1
+            }
+
     items.forEachIndexed { index, item ->
-        drawPaymentRow(index, item)
+        drawPaymentRow(
+            index = index,
+            item = item,
+            demoIndex = demoIndexByTrainee[item.traineeId] ?: index + 1
+        )
     }
 
     drawFooter()
