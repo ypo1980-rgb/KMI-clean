@@ -752,12 +752,24 @@ private suspend fun saveManualMembershipPaymentToFirestore(
             ?.trim()
             .orEmpty()
 
+    /*
+     * השרת מנרמל מקפים, רווחים
+     * ואותיות בשמות הסניפים.
+     *
+     * משווים את אותו ערך מנורמל
+     * בלי לוותר על אימות הסניף.
+     */
+    fun normalizePaymentBranch(value: String): String =
+        value
+            .trim()
+            .replace(Regex("[־–—]"), "-")
+            .replace(Regex("\\s+"), " ")
+            .lowercase(Locale.ROOT)
+
     check(
         returnedBranch.isNotBlank() &&
-                returnedBranch.equals(
-                    item.branchName.trim(),
-                    ignoreCase = true
-                )
+                normalizePaymentBranch(returnedBranch) ==
+                normalizePaymentBranch(item.branchName)
     ) {
         "Payment response branch mismatch"
     }
@@ -1775,12 +1787,18 @@ fun PaymentsReportScreen(
 
                                         manualDialogItem = null
                                         manualPaymentError = null
-                                    }.onFailure {
+                                    }.onFailure { error ->
+                                        android.util.Log.e(
+                                            "KMI_PAYMENTS",
+                                            "Manual membership payment failed",
+                                            error
+                                        )
+
                                         manualPaymentError =
                                             if (isEnglish) {
-                                                "Payment could not be confirmed. Retry the same operation, or verify its status before starting a new payment."
+                                                "Payment could not be confirmed. Verify its status before starting another payment."
                                             } else {
-                                                "לא ניתן לאשר את שמירת התשלום. אפשר לנסות שוב את אותה פעולה, או לבדוק את מצבה לפני יצירת תשלום חדש."
+                                                "לא ניתן לאשר את שמירת התשלום. יש לבדוק אם התשלום נקלט לפני ביצוע תשלום נוסף."
                                             }
                                     }
 
@@ -2075,29 +2093,16 @@ private fun PaymentReportRow(
                     )
 
                     Text(
-                        text =
-                            listOf(
-                                item.branchName,
-                                item.demoSafePhone(
-                                    isEnglish = isEnglish,
-                                    demoIndex = demoIndex
-                                )
-                            )
-                                .filter {
-                                    it.isNotBlank()
-                                }
-                                .joinToString(" • "),
-                        color =
-                            cardSecondaryTextColor,
-                        style =
-                            KmiTypography.caption,
-                        textAlign =
-                            TextAlign.Start,
-                        modifier =
-                            Modifier.fillMaxWidth(),
+                        text = item.demoSafePhone(
+                            isEnglish = isEnglish,
+                            demoIndex = demoIndex
+                        ),
+                        color = cardSecondaryTextColor,
+                        style = KmiTypography.caption,
+                        textAlign = TextAlign.Start,
+                        modifier = Modifier.fillMaxWidth(),
                         maxLines = 1,
-                        overflow =
-                            TextOverflow.Ellipsis
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
 
@@ -2105,34 +2110,27 @@ private fun PaymentReportRow(
                     Modifier.width(8.dp)
                 )
 
-                if (item.branchPayments.size <= 1) {
-                    val displayedStatus =
-                        item.branchPayments.firstOrNull()
-                            ?.status
-                            ?: item.status
-
-                    Surface(
-                            shape = RoundedCornerShape(14.dp),
-                            color = statusColor(displayedStatus)
-                                .copy(alpha = 0.18f),
-                            tonalElevation = 0.dp,
-                            shadowElevation = 0.dp
-                        ) {
-                            Text(
-                                text = statusLabel(
-                                    displayedStatus,
-                                    isEnglish
-                                ),
-                                color = statusColor(displayedStatus),
-                                modifier = Modifier.padding(
-                                    horizontal = 9.dp,
-                                    vertical = 5.dp
-                                ),
-                                style = KmiTypography.caption,
-                                fontWeight = FontWeight.Bold,
-                                textAlign = TextAlign.Center
-                            )
-                    }
+                Surface(
+                    shape = RoundedCornerShape(14.dp),
+                    color = statusColor(item.status)
+                        .copy(alpha = 0.18f),
+                    tonalElevation = 0.dp,
+                    shadowElevation = 0.dp
+                ) {
+                    Text(
+                        text = statusLabel(
+                            item.status,
+                            isEnglish
+                        ),
+                        color = statusColor(item.status),
+                        modifier = Modifier.padding(
+                            horizontal = 9.dp,
+                            vertical = 5.dp
+                        ),
+                        style = KmiTypography.caption,
+                        fontWeight = FontWeight.Bold,
+                        textAlign = TextAlign.Center
+                    )
                 }
             }
 
@@ -2142,66 +2140,36 @@ private fun PaymentReportRow(
             )
 
             if (item.branchPayments.isNotEmpty()) {
-                item.branchPayments.forEach { branchPayment ->
-                    Column(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalArrangement = Arrangement.spacedBy(3.dp)
-                    ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                text = branchPayment.branchName,
-                                color = cardPrimaryTextColor,
-                                style = KmiTypography.secondary,
-                                fontWeight = FontWeight.Bold,
-                                modifier = Modifier.weight(1f),
-                                maxLines = 2,
-                                overflow = TextOverflow.Ellipsis
-                            )
-
-                            Text(
-                                text = statusLabel(
-                                    branchPayment.status,
-                                    isEnglish
-                                ),
-                                color = statusColor(branchPayment.status),
-                                style = KmiTypography.caption,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    item.branchPayments.forEach { branchPayment ->
                         Text(
-                            text =
-                                if (isEnglish) {
-                                    "Fee: ₪${"%.0f".format(branchPayment.paidAmount)} / ₪${"%.0f".format(branchPayment.requiredAmount)}"
-                                } else {
-                                    "דמי חבר: ₪${"%.0f".format(branchPayment.paidAmount)} / ₪${"%.0f".format(branchPayment.requiredAmount)}"
-                                },
-                            color = cardSecondaryTextColor,
+                            text = branchPayment.branchName,
+                            color = cardPrimaryTextColor,
                             style = KmiTypography.secondary,
-                            textAlign = TextAlign.Start,
-                            modifier = Modifier.fillMaxWidth()
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.fillMaxWidth(),
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis
                         )
                     }
                 }
-            } else {
-                Text(
-                    text =
-                        if (isEnglish) {
-                            "Fee: ₪${"%.0f".format(item.paidAmount)} / ₪${"%.0f".format(item.requiredAmount)}"
-                        } else {
-                            "דמי חבר: ₪${"%.0f".format(item.paidAmount)} / ₪${"%.0f".format(item.requiredAmount)}"
-                        },
-                    color = cardPrimaryTextColor,
-                    style = KmiTypography.secondary,
-                    fontWeight = FontWeight.Bold,
-                    textAlign = TextAlign.Start,
-                    modifier = Modifier.fillMaxWidth()
-                )
             }
+
+            Text(
+                text =
+                    if (isEnglish) {
+                        "Annual fee: ₪${"%.0f".format(item.paidAmount)} / ₪${"%.0f".format(item.requiredAmount)}"
+                    } else {
+                        "דמי חבר שנתיים: ₪${"%.0f".format(item.paidAmount)} / ₪${"%.0f".format(item.requiredAmount)}"
+                    },
+                color = cardSecondaryTextColor,
+                style = KmiTypography.secondary,
+                textAlign = TextAlign.Start,
+                modifier = Modifier.fillMaxWidth()
+            )
 
             if (item.paymentDate.isNotBlank() && item.branchPayments.isEmpty()) {
                 Text(
@@ -2290,7 +2258,10 @@ private fun ManualPaymentDialog(
     }
 
     val fieldsEnabled = !isSaving && !paymentAttempted
-    val canDismissPayment = !isSaving && !paymentAttempted
+
+    // מאפשר סגירת הדיאלוג לאחר סיום ניסיון השמירה.
+    // בזמן שמירה פעילה הביטול נשאר חסום.
+    val canDismissPayment = !isSaving
 
     var amountText by rememberSaveable { mutableStateOf("") }
     var notes by rememberSaveable {
@@ -2350,9 +2321,9 @@ private fun ManualPaymentDialog(
                     KmiTypography.sectionTitle,
                 textAlign =
                     if (isEnglish) {
-                        TextAlign.Start
+                        TextAlign.Left
                     } else {
-                        TextAlign.End
+                        TextAlign.Right
                     },
                 modifier = Modifier.fillMaxWidth()
             )
@@ -2376,9 +2347,9 @@ private fun ManualPaymentDialog(
                         ),
                     textAlign =
                         if (isEnglish) {
-                            TextAlign.Start
+                            TextAlign.Left
                         } else {
-                            TextAlign.End
+                            TextAlign.Right
                         },
                     maxLines = 2,
                     modifier = Modifier.fillMaxWidth()

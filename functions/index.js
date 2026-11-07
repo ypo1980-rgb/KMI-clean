@@ -1033,6 +1033,392 @@ function escapeHtmlForRecovery(value) {
     .replace(/'/g, "&#039;");
 }
 
+/*
+ * KAMI — Secure Contact Request
+ *
+ * קבלת פניות מהאפליקציה דרך שרת מאובטח.
+ * ללא כתיבה ישירה מ-Android ל-Firestore.
+ */
+exports.submitKamiContactRequest =
+  functions
+    .region("europe-west1")
+    .https.onCall(async (data, context) => {
+
+      const uid =
+        String(context.auth?.uid || "").trim();
+
+      if (!uid) {
+        throw new functions.https.HttpsError(
+          "unauthenticated",
+          "User must be signed in."
+        );
+      }
+
+      const fullName =
+        String(data?.fullName || "").trim();
+
+      const phone =
+        String(data?.phone || "").trim();
+
+      const email =
+        normalizeEmail(data?.email);
+
+      const authEmail =
+        normalizeEmail(context.auth?.token?.email);
+
+      const subject =
+        String(data?.subject || "").trim();
+
+      const message =
+        String(data?.message || "").trim();
+
+      const appLanguage =
+        String(data?.appLanguage || "he")
+          .trim()
+          .toLowerCase() === "en"
+          ? "en"
+          : "he";
+
+      if (
+        !email ||
+        !authEmail ||
+        email !== authEmail
+      ) {
+        throw new functions.https.HttpsError(
+          "invalid-argument",
+          "Contact email must match the signed-in account."
+        );
+      }
+
+      if (
+        fullName.length < 2 ||
+        fullName.length > 150 ||
+        phone.length < 5 ||
+        phone.length > 60 ||
+        subject.length < 2 ||
+        subject.length > 200 ||
+        message.length < 2 ||
+        message.length > 5000
+      ) {
+        throw new functions.https.HttpsError(
+          "invalid-argument",
+          "Invalid contact request details."
+        );
+      }
+
+      const allowed =
+        await allowPublicAction(
+          "kami_contact_request",
+          uid,
+          3,
+          60 * 60 * 1000
+        );
+
+      if (!allowed) {
+        throw new functions.https.HttpsError(
+          "resource-exhausted",
+          "Too many contact requests."
+        );
+      }
+
+      const nowMillis = Date.now();
+
+      const managementEmail =
+        "management@kami.org.il";
+
+      const contactRef =
+        db.collection("contactRequests").doc();
+
+      const notificationRef =
+        db.collection("appNotificationQueue").doc();
+
+      const batch = db.batch();
+
+      batch.create(contactRef, {
+        requestId: contactRef.id,
+        fullName,
+        phone,
+        email,
+        subject,
+        message,
+        appLanguage,
+
+        userUid: uid,
+        userEmail: authEmail,
+
+        status: "open",
+        source: "android_contact_us",
+
+        notifyEnabled: true,
+        notifyStatus: "pending",
+        notifyTargetType:
+          "association_contact_manager",
+        notifyTargetUid: "",
+        notifyTargetEmail: managementEmail,
+        notifyTargetPhone: "",
+        notifyCreatedAtMillis: nowMillis,
+
+        createdAt:
+          admin.firestore.FieldValue.serverTimestamp(),
+        createdAtMillis: nowMillis,
+      });
+
+      batch.create(notificationRef, {
+        notificationId: notificationRef.id,
+
+        type: "contact_request",
+        status: "pending",
+        source: "android_contact_us",
+
+        targetType:
+          "association_contact_manager",
+        targetUid: "",
+        targetEmail: managementEmail,
+        targetPhone: "",
+
+        contactRequestId: contactRef.id,
+        relatedCollection: "contactRequests",
+        relatedDocumentId: contactRef.id,
+
+        titleHe: "פנייה חדשה מהאפליקציה",
+        titleEn: "New contact request from KAMI",
+
+        bodyHe:
+          `התקבלה פנייה חדשה מאת ${fullName} בנושא: ${subject}`,
+
+        bodyEn:
+          `A new contact request was received from ${fullName} regarding: ${subject}`,
+
+        fullName,
+        phone,
+        email,
+        subject,
+        messagePreview: message.slice(0, 180),
+
+        userUid: uid,
+        userEmail: authEmail,
+
+        createdAt:
+          admin.firestore.FieldValue.serverTimestamp(),
+        createdAtMillis: nowMillis,
+      });
+
+      await batch.commit();
+
+      console.log("KAMI_CONTACT_REQUEST_CREATED", {
+        requestId: contactRef.id,
+        uid,
+      });
+
+      return {
+        accepted: true,
+        requestId: contactRef.id,
+        status: "received",
+      };
+    });
+
+/*
+ * KAMI — Contact Request Emails
+ *
+ * משתמש במנגנון Firebase Trigger Email הקיים.
+ * יוצר הודעה אחת לעמותה והודעת אישור לפונה.
+ *
+ * מזהי המסמכים קבועים לפי הפנייה כדי למנוע
+ * יצירת הודעות כפולות אם ה-Trigger מופעל שוב.
+ */
+exports.onKamiContactRequestCreated =
+  functions
+    .region("europe-west1")
+    .firestore
+    .document("contactRequests/{requestId}")
+    .onCreate(async (snapshot) => {
+
+      const contact = snapshot.data() || {};
+
+      const fullName =
+        String(contact.fullName || "").trim().slice(0, 150);
+
+      const phone =
+        String(contact.phone || "").trim().slice(0, 60);
+
+      const email =
+        normalizeEmail(contact.email).slice(0, 254);
+
+      const subject =
+        String(contact.subject || "").trim().slice(0, 200);
+
+      const message =
+        String(contact.message || "").trim().slice(0, 5000);
+
+      const isEnglish =
+        String(contact.appLanguage || "")
+          .trim()
+          .toLowerCase() === "en";
+
+      const managementEmail =
+        "management@kami.org.il";
+
+      if (!fullName || !subject || !message) {
+        console.warn(
+          "KAMI_CONTACT_INVALID_REQUEST",
+          snapshot.id
+        );
+        return null;
+      }
+
+      const validEmail =
+        /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+
+      const acknowledgementText =
+        isEnglish
+          ? [
+              `Hello ${fullName},`,
+              "",
+              `Your request regarding "${subject}" has been received successfully.`,
+              "",
+              "Your request has been forwarded to the KAMI association team for further handling.",
+              "A representative will contact you as soon as possible.",
+              "",
+              "There is no need to submit the same request again.",
+              "",
+              "Thank you,",
+              "KAMI Association Team",
+              managementEmail,
+            ].join("\n")
+          : [
+              `שלום ${fullName},`,
+              "",
+              `פנייתך בנושא "${subject}" התקבלה בהצלחה.`,
+              "",
+              "הפנייה הועברה להמשך טיפול צוות עמותת KAMI.",
+              "נציג העמותה יחזור אליך בהקדם האפשרי.",
+              "",
+              "אין צורך לשלוח את אותה הפנייה פעם נוספת.",
+              "",
+              "תודה על פנייתך,",
+              "צוות עמותת KAMI",
+              managementEmail,
+            ].join("\n");
+
+      const acknowledgementSubject =
+        isEnglish
+          ? "KAMI - We received your request"
+          : "KAMI - אישור קבלת הפנייה";
+
+      const managementText = [
+        "התקבלה פנייה חדשה דרך אפליקציית KAMI.",
+        "",
+        `מספר פנייה: ${snapshot.id}`,
+        `שם: ${fullName}`,
+        `טלפון: ${phone}`,
+        `אימייל: ${email}`,
+        `נושא: ${subject}`,
+        "",
+        "תוכן הפנייה:",
+        message,
+      ].join("\n");
+
+      const asHtml = (value, direction) => `
+        <div dir="${direction}"
+             style="font-family:Arial,sans-serif;
+                    line-height:1.8;
+                    color:#17243a;
+                    max-width:640px;
+                    margin:auto;
+                    padding:24px;">
+          <div style="font-size:24px;
+                      font-weight:bold;
+                      color:#24679e;
+                      margin-bottom:20px;">
+            KAMI
+          </div>
+          <div>
+            ${escapeHtmlForRecovery(value).replace(/\n/g, "<br>")}
+          </div>
+        </div>
+      `;
+
+      const mailCollection =
+        db.collection("mail");
+
+      const batch = db.batch();
+
+      batch.create(
+        mailCollection.doc(
+          `contact_admin_${snapshot.id}`
+        ),
+        {
+          to: managementEmail,
+
+          message: {
+            subject: `KAMI - פנייה חדשה: ${subject}`,
+            text: managementText,
+            html: asHtml(managementText, "rtl"),
+          },
+
+          contactRequestId: snapshot.id,
+          type: "contact_request_admin",
+
+          createdAt:
+            admin.firestore.FieldValue.serverTimestamp(),
+        }
+      );
+
+      if (validEmail) {
+        batch.create(
+          mailCollection.doc(
+            `contact_ack_${snapshot.id}`
+          ),
+          {
+            to: email,
+
+            message: {
+              subject: acknowledgementSubject,
+              text: acknowledgementText,
+              html: asHtml(
+                acknowledgementText,
+                isEnglish ? "ltr" : "rtl"
+              ),
+            },
+
+            contactRequestId: snapshot.id,
+            type: "contact_request_ack",
+
+            createdAt:
+              admin.firestore.FieldValue.serverTimestamp(),
+          }
+        );
+      }
+
+      try {
+        await batch.commit();
+      } catch (error) {
+        /*
+         * הפנייה כבר טופלה בעבר.
+         * אין ליצור שוב אותן הודעות.
+         */
+        if (
+          error.code === 6 ||
+          error.code === "already-exists"
+        ) {
+          return null;
+        }
+
+        throw error;
+      }
+
+      console.log(
+        "KAMI_CONTACT_EMAILS_QUEUED",
+        {
+          requestId: snapshot.id,
+          acknowledgementQueued: validEmail,
+          managementQueued: true,
+        }
+      );
+
+      return null;
+    });
+
 exports.recoverPassword = functions.https.onCall(async (data, context) => {
   const emailLower = normalizeEmail(
     data && data.email
@@ -1965,30 +2351,18 @@ exports.loadSecurePaymentsReport =
           }
 
           /*
-           * תשלום ייחשף למאמן רק אם הוא
-           * משויך לסניף שהמאמן מורשה לראות.
+           * דמי חבר שייכים למתאמן ולא לסניף.
            *
-           * תשלום Legacy ללא branchName
-           * אינו נחשף למאמן עד לאימות שיוכו.
+           * ההרשאה למאמן נבדקה קודם לפי
+           * שיוכי הסניפים של המתאמן.
            *
-           * אדמין ממשיך לראות את כלל התשלומים.
+           * לאחר שהמתאמן אושר לצפייה,
+           * אוספים את כל מסמכי התשלום
+           * של זהותו המאוחדת.
+           *
+           * שיוך הסניף במסמך התשלום נשמר
+           * לצורכי היסטוריה ובקרה בלבד.
            */
-          if (!isAdminUser) {
-            const paymentBranch =
-              normalizeValue(
-                payment.branchName || ""
-              );
-
-            if (
-              !paymentBranch ||
-              !authorizedBranchKeys.has(
-                paymentBranch
-              )
-            ) {
-              return;
-            }
-          }
-
           keys.forEach((key) => {
             const linkedPayments =
               paymentByIdentity.get(key) || [];
@@ -1998,20 +2372,126 @@ exports.loadSecurePaymentsReport =
               payment,
             });
 
-            paymentByIdentity.set(
-              key,
-              linkedPayments
-            );
-          });
-        });
+                    paymentByIdentity.set(
+                      key,
+                      linkedPayments
+                    );
+                  });
+                });
 
- const groupedUsers =
-   allowedIdentityGroups;
+              /*
+               * היסטוריית תשלומים לפי מסמך מקור.
+               *
+               * כל מסמך נקרא פעם אחת בלבד,
+               * גם אם הוא משויך לכמה מזהי משתמש.
+               *
+               * בשלב הבא נחשב מתוכה את
+               * התשלום השנתי של המתאמן המאוחד.
+               */
+              const paymentHistoryById =
+                new Map();
 
-      const items = [];
+              const paymentIds =
+                new Set();
 
-     groupedUsers.forEach(
-       (entries) => {
+              for (
+                const candidates
+                of paymentByIdentity.values()
+              ) {
+                for (const candidate of candidates) {
+                  paymentIds.add(candidate.id);
+                }
+              }
+
+              await Promise.all(
+                Array.from(paymentIds).map(
+                  async (paymentId) => {
+
+                    const historySnapshot =
+                      await db
+                        .collection("membershipPayments")
+                        .doc(paymentId)
+                        .collection("history")
+                        .get();
+
+                             paymentHistoryById.set(
+                               paymentId,
+                               historySnapshot.docs.map(
+                                 (document) => ({
+                                   ...document.data(),
+                                   requestId: document.id,
+                                 })
+                               )
+                             );
+                  }
+                )
+              );
+
+         const groupedUsers =
+           allowedIdentityGroups;
+
+         /*
+          * טעינת חשבון שנתי אחד לכל זהות מאוחדת.
+          * מזהה החשבון תואם למסלול הכתיבה.
+          */
+         const reportPaymentYear =
+           Number(
+             new Intl.DateTimeFormat(
+               "en",
+               {
+                 timeZone: "Asia/Jerusalem",
+                 year: "numeric",
+               }
+             ).format(new Date())
+           );
+
+         const annualPaymentByCanonicalUserId =
+           new Map();
+
+         await Promise.all(
+           groupedUsers.map(async (entries) => {
+             const canonicalUserDocId =
+               entries
+                 .map((entry) =>
+                   String(entry.id || "").trim()
+                 )
+                 .filter(Boolean)
+                 .sort()[0] || "";
+
+             if (!canonicalUserDocId) {
+               return;
+             }
+
+             const annualPaymentKey =
+               crypto
+                 .createHash("sha256")
+                 .update(
+                   JSON.stringify([
+                     canonicalUserDocId,
+                     reportPaymentYear,
+                   ])
+                 )
+                 .digest("hex");
+
+             const annualSnapshot =
+               await db
+                 .collection("membershipAnnualAccounts")
+                 .doc(annualPaymentKey)
+                 .get();
+
+             if (annualSnapshot.exists) {
+               annualPaymentByCanonicalUserId.set(
+                 canonicalUserDocId,
+                 annualSnapshot.data() || {}
+               );
+             }
+           })
+         );
+
+             const items = [];
+
+            groupedUsers.forEach(
+              (entries) => {
 
           const primary =
             entries
@@ -2186,21 +2666,16 @@ exports.loadSecurePaymentsReport =
             });
 
           /*
-           * אין להסיק שיוך לסניף רק ממסמך
-           * תשלום של זהות מאוחדת.
+           * שיוכי הסניפים נקבעים מתוך
+           * רשומות המשתמש המאוחדות בלבד.
+           *
+           * מסמך תשלום אינו מעניק
+           * הרשאת צפייה בסניף נוסף.
+           *
+           * דמי החבר שייכים למתאמן,
+           * ולכן מסמך תשלום מסניף אחר
+           * אינו סיבה לדחות את הדוח.
            */
-          for (
-            const branchKey
-            of paymentsByBranch.keys()
-          ) {
-            if (!visibleBranchMap.has(branchKey)) {
-              throw new functions.https.HttpsError(
-                "failed-precondition",
-                "Payment branch requires identity reconciliation."
-              );
-            }
-          }
-
           const visibleBranches =
             Array.from(
               visibleBranchMap.values()
@@ -2224,30 +2699,197 @@ exports.loadSecurePaymentsReport =
               normalizeValue(branchName)
             )?.payment || null;
 
-          const requiredAmountRaw =
-            Number(
-              payment &&
-              payment.requiredAmount ||
-              primaryUser.requiredAmount ||
-              primaryUser.membershipRequiredAmount ||
-              primaryUser.membershipFee ||
-              primaryUser.annualMembershipFee ||
-              primaryUser.feeAmount ||
-              150
-            );
-
-          const requiredAmount =
-            Number.isFinite(
-              requiredAmountRaw
-            ) &&
-            requiredAmountRaw > 0
-              ? requiredAmountRaw
-              : 150;
+          /*
+           * דמי חבר שנתיים אחידים למתאמן.
+           *
+           * מספר הסניפים אינו משפיע
+           * על סכום החיוב.
+           */
+          const requiredAmount = 150;
 
           /*
-           * פירוט כספי נפרד לכל סניף.
-           * גם סניף ללא תשלום קיים מוחזר
-           * עם סכום ששולם 0.
+           * דמי החבר מחושבים לפי זהות
+           * מתאמן מאוחדת ושנת תשלום.
+           *
+           * מספר הסניפים אינו משפיע
+           * על גובה החיוב.
+           */
+          const currentPaymentYear =
+            Number(
+              new Intl.DateTimeFormat(
+                "en",
+                {
+                  timeZone: "Asia/Jerusalem",
+                  year: "numeric",
+                }
+              ).format(new Date())
+            );
+
+          const annualOperations =
+            new Map();
+
+          for (
+            const [paymentId, paymentData]
+            of identityPayments
+          ) {
+            const history =
+              paymentHistoryById.get(paymentId) || [];
+
+            /*
+             * אימות יתרת מסמך התשלום
+             * מול היסטוריית הפעולות שלו.
+             *
+             * יתרה שאינה תואמת להיסטוריה
+             * מחייבת בירור ולא תיקון אוטומטי.
+             */
+            const recordedPaidAmount =
+              Number(paymentData.paidAmount ?? 0);
+
+            const historyPaidAmount =
+              history.reduce(
+                (total, operation) =>
+                  total + Number(operation.amount),
+                0
+              );
+
+            if (
+              !Number.isFinite(recordedPaidAmount) ||
+              recordedPaidAmount < 0 ||
+              !Number.isFinite(historyPaidAmount) ||
+              Math.abs(
+                recordedPaidAmount - historyPaidAmount
+              ) > 0.001
+            ) {
+              throw new functions.https.HttpsError(
+                "failed-precondition",
+                "Payment balance requires history reconciliation."
+              );
+            }
+
+            for (const operation of history) {
+              const requestId =
+                String(operation.requestId || "").trim();
+
+              const operationYear =
+                Number(operation.paymentYear);
+
+              const amount =
+                Number(operation.amount);
+
+              if (
+                !requestId ||
+                !Number.isInteger(operationYear) ||
+                !Number.isFinite(amount) ||
+                amount <= 0
+              ) {
+                throw new functions.https.HttpsError(
+                  "failed-precondition",
+                  "Payment history requires reconciliation."
+                );
+              }
+
+              if (annualOperations.has(requestId)) {
+                throw new functions.https.HttpsError(
+                  "failed-precondition",
+                  "Duplicate payment operation requires reconciliation."
+                );
+              }
+
+              annualOperations.set(requestId, {
+                paymentYear: operationYear,
+                amount,
+              });
+            }
+          }
+
+          const historicalPaidAmount =
+            Array.from(annualOperations.values())
+              .filter(
+                (operation) =>
+                  operation.paymentYear === currentPaymentYear
+              )
+              .reduce(
+                (total, operation) =>
+                  total + operation.amount,
+                0
+              );
+
+          const canonicalUserDocId =
+            entries
+              .map((entry) =>
+                String(entry.id || "").trim()
+              )
+              .filter(Boolean)
+              .sort()[0] || "";
+
+          const annualAccount =
+            annualPaymentByCanonicalUserId.get(
+              canonicalUserDocId
+            ) || null;
+
+          if (
+            annualAccount &&
+            (
+              annualAccount.canonicalUserDocId !==
+                canonicalUserDocId ||
+              Number(annualAccount.paymentYear) !==
+                currentPaymentYear
+            )
+          ) {
+            throw new functions.https.HttpsError(
+              "failed-precondition",
+              "Annual payment identity requires reconciliation."
+            );
+          }
+
+          /*
+           * חשבון שנתי קיים הוא מקור האמת.
+           * ההיסטוריה משמשת לתאימות
+           * לתשלומים שנרשמו לפני המעבר.
+           */
+          const paidAmount =
+            annualAccount
+              ? Number(annualAccount.paidAmount)
+              : historicalPaidAmount;
+
+          /*
+           * אימות החשבון השנתי מול
+           * היסטוריית התשלומים המאוחדת.
+           *
+           * אין להציג יתרה שאינה מגובה
+           * בפעולות התשלום של אותה שנה.
+           */
+          if (
+            !Number.isFinite(paidAmount) ||
+            paidAmount < 0 ||
+            paidAmount > requiredAmount ||
+            (
+              annualAccount &&
+              Math.abs(
+                paidAmount - historicalPaidAmount
+              ) > 0.001
+            )
+          ) {
+            throw new functions.https.HttpsError(
+              "failed-precondition",
+              "Annual payment balance requires reconciliation."
+            );
+          }
+
+          const status =
+            paidAmount <= 0
+              ? "UNPAID"
+              : paidAmount < requiredAmount
+                ? "PARTIAL"
+                : "PAID";
+
+          /*
+           * התשלום הוא שנתי ולפי מתאמן.
+           * כל הסניפים מציגים את אותו
+           * סכום מצטבר ואותו סטטוס.
+           *
+           * מזהה התשלום המקורי של הסניף
+           * נשמר לתאימות ולבקרה בלבד.
            */
           const branchPayments =
             visibleBranches.map((branch) => {
@@ -2257,95 +2899,36 @@ exports.loadSecurePaymentsReport =
                   normalizeValue(branch)
                 ) || null;
 
-              const branchPayment =
-                existing?.payment || {};
-
-              const requiredRaw =
-                Number(
-                  branchPayment.requiredAmount ||
-                  requiredAmount
-                );
-
-              const branchRequired =
-                Number.isFinite(requiredRaw) &&
-                requiredRaw > 0
-                  ? requiredRaw
-                  : 150;
-
-              const paidRaw =
-                Number(
-                  branchPayment.paidAmount || 0
-                );
-
-              const branchPaid =
-                Number.isFinite(paidRaw)
-                  ? Math.max(0, paidRaw)
-                  : 0;
-
-              const branchStatus =
-                branchPaid <= 0
-                  ? "UNPAID"
-                  : branchPaid < branchRequired
-                    ? "PARTIAL"
-                    : "PAID";
-
               return {
                 branchName: branch,
+
                 paymentId:
                   existing?.paymentId || "",
 
-                requiredAmount: branchRequired,
-                paidAmount: branchPaid,
-                status: branchStatus,
+                requiredAmount,
+                paidAmount,
+                status,
 
                 paymentMethod:
                   cleanText(
-                    branchPayment.paymentMethod ||
+                    payment &&
+                    payment.paymentMethod ||
                     "MANUAL"
                   ),
 
                 paymentDate:
                   cleanText(
-                    branchPayment.paymentDate
+                    payment &&
+                    payment.paymentDate
                   ),
 
                 notes:
                   cleanText(
-                    branchPayment.notes
+                    payment &&
+                    payment.notes
                   ),
               };
             });
-
-          const paidAmountRaw =
-            Number(
-              payment &&
-              payment.paidAmount ||
-              0
-            );
-
-          const paidAmount =
-            Number.isFinite(
-              paidAmountRaw
-            )
-              ? Math.max(
-                  0,
-                  paidAmountRaw
-                )
-              : 0;
-
-          let status =
-            "PAID";
-
-          if (paidAmount <= 0) {
-            status =
-              "UNPAID";
-          } else if (
-            paidAmount <
-            requiredAmount
-          ) {
-            status =
-              "PARTIAL";
-          }
 
           const fullName =
             cleanText(
@@ -2535,12 +3118,24 @@ exports.updateSecureMembershipPayment =
           .trim()
           .slice(0, 3000);
 
+      /*
+       * סכומי תשלום נמדדים באגורות.
+       * אין לאפשר יותר משתי ספרות
+       * אחרי הנקודה העשרונית.
+       */
+      const amountInAgorot =
+        Math.round(amountToAdd * 100);
+
       if (
         !traineeId ||
         traineeId.length > 200 ||
         !Number.isFinite(amountToAdd) ||
         amountToAdd <= 0 ||
-        amountToAdd > 100000
+        amountToAdd > 150 ||
+        !Number.isSafeInteger(amountInAgorot) ||
+        Math.abs(
+          amountToAdd * 100 - amountInAgorot
+        ) > 0.000001
       ) {
         throw new functions.https.HttpsError(
           "invalid-argument",
@@ -3335,6 +3930,128 @@ if (
             )
         );
 
+      /*
+       * חשבון דמי חבר שנתי משותף.
+       *
+       * המזהה נגזר מזהות המתאמן
+       * ומהשנה בלבד, ללא תלות בסניף.
+       *
+       * בשלב זה מדובר בהכנת מקור
+       * החשבון בלבד, ללא כתיבה.
+       */
+      const annualPaymentKey =
+        crypto
+          .createHash("sha256")
+          .update(
+            JSON.stringify([
+              canonicalUserDocId,
+              paymentYear,
+            ])
+          )
+          .digest("hex");
+
+      const annualPaymentRef =
+        db
+          .collection("membershipAnnualAccounts")
+          .doc(annualPaymentKey);
+
+      /*
+       * איסוף היסטוריה קיימת לפני Transaction.
+       * יתרות ישנות אינן נחשבות אוטומטית
+       * לתשלומים של השנה הנוכחית.
+       */
+      const historicalOperations = new Map();
+
+      const legacyPaymentMap = new Map(
+        existingPayments.map(
+          (snapshot) => [snapshot.id, snapshot]
+        )
+      );
+
+      if (fallbackPaymentSnapshot.exists) {
+        legacyPaymentMap.set(
+          fallbackPaymentSnapshot.id,
+          fallbackPaymentSnapshot
+        );
+      }
+
+      for (const snapshot of legacyPaymentMap.values()) {
+        const legacyData = snapshot.data() || {};
+
+        const historySnapshot =
+          await snapshot.ref
+            .collection("history")
+            .get();
+
+        let historicalTotal = 0;
+
+        for (const historyDocument of historySnapshot.docs) {
+          const operation = historyDocument.data() || {};
+          const operationId = historyDocument.id;
+          const operationYear = Number(operation.paymentYear);
+          const amount = Number(operation.amount);
+
+          if (
+            !Number.isInteger(operationYear) ||
+            !Number.isFinite(amount) ||
+            amount <= 0 ||
+            historicalOperations.has(operationId)
+          ) {
+            throw new functions.https.HttpsError(
+              "failed-precondition",
+              "Payment history requires reconciliation."
+            );
+          }
+
+          historicalOperations.set(operationId, {
+            year: operationYear,
+            amount,
+          });
+
+          historicalTotal += amount;
+        }
+
+        const recordedTotal =
+          Number(legacyData.paidAmount || 0);
+
+        if (
+          !Number.isFinite(recordedTotal) ||
+          Math.abs(recordedTotal - historicalTotal) > 0.001
+        ) {
+          throw new functions.https.HttpsError(
+            "failed-precondition",
+            "Legacy payment balance requires reconciliation."
+          );
+        }
+      }
+
+      const historicalPaidThisYear =
+        Array.from(historicalOperations.values())
+          .filter((operation) =>
+            operation.year === paymentYear
+          )
+          .reduce(
+            (total, operation) =>
+              total + operation.amount,
+            0
+          );
+
+      /*
+       * נעילות זהות: מונעות יצירת חשבון
+       * נוסף כאשר מאחדים רשומות משתמש.
+       */
+      const annualIdentityLockRefs =
+        paymentIdentityIds.map((identityId) => {
+          const identityHash = crypto
+            .createHash("sha256")
+            .update(identityId)
+            .digest("hex");
+
+          return db
+            .collection("membershipAnnualIdentityLocks")
+            .doc(identityHash);
+        });
+
       const transactionResult =
         await db.runTransaction(
           async (transaction) => {
@@ -3362,6 +4079,58 @@ if (
               await transaction.get(
                 paymentOperationRef
               );
+
+            /*
+             * קריאת החשבון השנתי המשותף.
+             *
+             * כל פעולות התשלום לאותה
+             * זהות ושנה יפנו למסמך זה.
+             */
+            const annualPaymentSnapshot =
+              await transaction.get(
+                annualPaymentRef
+              );
+
+            const annualIdentityLockSnapshots = [];
+
+            for (const lockRef of annualIdentityLockRefs) {
+              annualIdentityLockSnapshots.push(
+                await transaction.get(lockRef)
+              );
+            }
+
+            for (const lockSnapshot of annualIdentityLockSnapshots) {
+              if (!lockSnapshot.exists) {
+                continue;
+              }
+
+              const lockedIdentity =
+                String(
+                  lockSnapshot.data()?.canonicalUserDocId || ""
+                );
+
+              if (lockedIdentity !== canonicalUserDocId) {
+                throw new functions.https.HttpsError(
+                  "failed-precondition",
+                  "Annual payment identity requires reconciliation."
+                );
+              }
+            }
+
+            if (annualPaymentSnapshot.exists) {
+              const annualData =
+                annualPaymentSnapshot.data() || {};
+
+              if (
+                annualData.canonicalUserDocId !== canonicalUserDocId ||
+                Number(annualData.paymentYear) !== paymentYear
+              ) {
+                throw new functions.https.HttpsError(
+                  "failed-precondition",
+                  "Annual payment account requires reconciliation."
+                );
+              }
+            }
 
             /*
              * אותו requestId אינו רשאי
@@ -3508,14 +4277,29 @@ if (
                 phone:
                   String(currentPayment.phone || ""),
 
-                requiredAmount:
-                  Number(currentPayment.requiredAmount || 0),
+                requiredAmount: 150,
 
                 paidAmount:
-                  Number(currentPayment.paidAmount || 0),
+                  annualPaymentSnapshot.exists
+                    ? Number(
+                        annualPaymentSnapshot.data()?.paidAmount || 0
+                      )
+                    : historicalPaidThisYear,
 
-                status:
-                  String(currentPayment.status || "UNPAID"),
+                status: (() => {
+                  const annualPaid =
+                    annualPaymentSnapshot.exists
+                      ? Number(
+                          annualPaymentSnapshot.data()?.paidAmount || 0
+                        )
+                      : historicalPaidThisYear;
+
+                  return annualPaid <= 0
+                    ? "UNPAID"
+                    : annualPaid < 150
+                      ? "PARTIAL"
+                      : "PAID";
+                })(),
 
                 paymentMethod:
                   String(currentPayment.paymentMethod || "MANUAL"),
@@ -3600,46 +4384,102 @@ if (
                   )
                 : 0;
 
-         const identityRequiredAmount =
-           matchedIdentityEntries
-             .map((entry) => {
+            /*
+             * דמי חבר שנתיים:
+             * 150 ש"ח למתאמן אחד.
+             *
+             * מספר הסניפים אינו משפיע
+             * על גובה דמי החבר.
+             */
+            const requiredAmount = 150;
 
-               const user =
-                 entry.user || {};
+            /*
+             * החשבון השנתי הוא מקור האמת.
+             * במעבר ראשון משתמשים בהיסטוריה
+             * המאומתת של כל סניפי המתאמן.
+             */
+            const annualAccount =
+              annualPaymentSnapshot.exists
+                ? annualPaymentSnapshot.data() || {}
+                : null;
 
-               return Number(
-                 user.requiredAmount ||
-                 user.membershipRequiredAmount ||
-                 user.membershipFee ||
-                 user.annualMembershipFee ||
-                 user.feeAmount ||
-                 0
-               );
-             })
-             .find(
-               (value) =>
-                 Number.isFinite(value) &&
-                 value > 0
-             );
+            const existingAnnualPaidAmount =
+              annualAccount
+                ? Number(annualAccount.paidAmount)
+                : historicalPaidThisYear;
 
-         const requiredAmountRaw =
-           Number(
-             existingPayment.requiredAmount ||
-             identityRequiredAmount ||
-             150
-           );
+            /*
+             * אין להמשיך בעדכון אם
+             * החשבון השנתי אינו תקין.
+             *
+             * הנתונים נבדקים בתוך
+             * ה-Transaction כדי למנוע
+             * הסתמכות על יתרה לא תקינה.
+             */
+            if (
+              !Number.isFinite(existingAnnualPaidAmount) ||
+              existingAnnualPaidAmount < 0 ||
+              existingAnnualPaidAmount > requiredAmount ||
+              (
+                annualAccount &&
+                (
+                  Number(annualAccount.requiredAmount) !== requiredAmount ||
+                  annualAccount.status !== (
+                    existingAnnualPaidAmount <= 0
+                      ? "UNPAID"
+                      : existingAnnualPaidAmount < requiredAmount
+                        ? "PARTIAL"
+                        : "PAID"
+                  )
+                )
+              )
+            ) {
+              throw new functions.https.HttpsError(
+                "failed-precondition",
+                "Annual payment account requires reconciliation."
+              );
+            }
 
-            const requiredAmount =
-              Number.isFinite(
-                requiredAmountRaw
-              ) &&
-              requiredAmountRaw > 0
-                ? requiredAmountRaw
-                : 150;
+            /*
+             * צבירה באגורות שלמות,
+             * ללא סטיות נקודה צפה.
+             */
+            const annualPaidAgorot =
+              Math.round(
+                existingAnnualPaidAmount * 100
+              );
+
+            const documentPaidAgorot =
+              Math.round(
+                existingPaidAmount * 100
+              );
+
+            if (
+              !Number.isSafeInteger(annualPaidAgorot) ||
+              !Number.isSafeInteger(documentPaidAgorot)
+            ) {
+              throw new functions.https.HttpsError(
+                "failed-precondition",
+                "Payment amount requires reconciliation."
+              );
+            }
 
             const newPaidAmount =
-              existingPaidAmount +
-              amountToAdd;
+              (annualPaidAgorot + amountInAgorot) / 100;
+
+            /*
+             * יתרת מסמך הסניף נשמרת
+             * בנפרד לצורכי היסטוריה.
+             */
+            const newDocumentPaidAmount =
+              (documentPaidAgorot + amountInAgorot) / 100;
+
+            if (newPaidAmount > requiredAmount) {
+              throw new functions.https.HttpsError(
+                "failed-precondition",
+                "Payment exceeds the annual membership fee."
+              );
+            }
 
             let status =
               "PAID";
@@ -3807,6 +4647,42 @@ if (
              *
              * הפעולה נוצרת פעם אחת בלבד.
              */
+            for (
+              let index = 0;
+              index < annualIdentityLockRefs.length;
+              index++
+            ) {
+              if (!annualIdentityLockSnapshots[index].exists) {
+                transaction.create(
+                  annualIdentityLockRefs[index],
+                  {
+                    canonicalUserDocId,
+                    createdAt:
+                      FieldValue.serverTimestamp(),
+                  }
+                );
+              }
+            }
+
+            transaction.set(
+              annualPaymentRef,
+              {
+                canonicalUserDocId,
+                paymentYear,
+                requiredAmount,
+                paidAmount: newPaidAmount,
+                status,
+                lastPaymentAmount: amountToAdd,
+                updatedAt:
+                  FieldValue.serverTimestamp(),
+                updatedAtMillis: nowMillis,
+                updatedByUid: uid,
+              },
+              {
+                merge: true,
+              }
+            );
+
             transaction.create(
               paymentOperationRef,
               operationData
@@ -3814,7 +4690,10 @@ if (
 
             transaction.set(
               paymentRef,
-              paymentData,
+              {
+                ...paymentData,
+                paidAmount: newDocumentPaidAmount,
+              },
               {
                 merge: true,
               }

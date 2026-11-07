@@ -10,6 +10,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -73,7 +74,7 @@ import il.kmi.app.privacy.DemoPrivacy
 import il.kmi.app.privacy.TraineeDisplayNameMapper
 import il.kmi.shared.localization.AppLanguageManager
 import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.firestore.FieldValue
+import com.google.firebase.functions.FirebaseFunctions
 import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
@@ -82,97 +83,62 @@ import java.io.FileOutputStream
 
 //===================================================================
 
+private const val CONTACT_MANAGEMENT_EMAIL = "management@kami.org.il"
+
 private suspend fun persistContactRequestToFirestore(
     fullName: String,
     phone: String,
     email: String,
     subject: String,
-    message: String
+    message: String,
+    isEnglish: Boolean
 ) {
-    val authUser = FirebaseAuth.getInstance().currentUser
-    val db = FirebaseFirestore.getInstance()
-
     val cleanFullName = fullName.trim()
     val cleanPhone = phone.trim()
     val cleanEmail = email.trim()
     val cleanSubject = subject.trim()
     val cleanMessage = message.trim()
 
-    if (cleanFullName.isBlank()) error("Missing full name")
-    if (cleanPhone.isBlank()) error("Missing phone")
-    if (cleanSubject.isBlank()) error("Missing subject")
-    if (cleanMessage.isBlank()) error("Missing message")
+    require(cleanFullName.isNotBlank()) {
+        "Missing full name"
+    }
+    require(cleanPhone.isNotBlank()) {
+        "Missing phone"
+    }
+    require(cleanEmail.isNotBlank()) {
+        "Missing email"
+    }
+    require(cleanSubject.isNotBlank()) {
+        "Missing subject"
+    }
+    require(cleanMessage.isNotBlank()) {
+        "Missing message"
+    }
 
-    val nowMillis = System.currentTimeMillis()
-
-    val contactRef = db.collection("contactRequests").document()
-    val notificationRef = db.collection("appNotificationQueue").document()
-
-    val contactData = mapOf(
-        "requestId" to contactRef.id,
+    val payload = mapOf(
         "fullName" to cleanFullName,
         "phone" to cleanPhone,
         "email" to cleanEmail,
         "subject" to cleanSubject,
         "message" to cleanMessage,
-        "userUid" to authUser?.uid.orEmpty(),
-        "userEmail" to authUser?.email.orEmpty(),
-        "status" to "open",
-        "source" to "android_contact_us",
-
-        // הכנה להתראה עתידית לנציג העמותה
-        "notifyEnabled" to true,
-        "notifyStatus" to "pending",
-        "notifyTargetType" to "association_contact_manager",
-        "notifyTargetUid" to "",
-        "notifyTargetEmail" to "",
-        "notifyTargetPhone" to "",
-        "notifyCreatedAtMillis" to nowMillis,
-
-        "createdAt" to FieldValue.serverTimestamp(),
-        "createdAtMillis" to nowMillis
+        "appLanguage" to if (isEnglish) "en" else "he"
     )
 
-    val notificationData = mapOf(
-        "notificationId" to notificationRef.id,
-        "type" to "contact_request",
-        "status" to "pending",
-        "source" to "android_contact_us",
+    val response = FirebaseFunctions
+        .getInstance("europe-west1")
+        .getHttpsCallable("submitKamiContactRequest")
+        .call(payload)
+        .await()
 
-        // מי אמור לקבל בעתיד — יוגדר בהמשך
-        "targetType" to "association_contact_manager",
-        "targetUid" to "",
-        "targetEmail" to "",
-        "targetPhone" to "",
+    val result = response.data as? Map<*, *>
 
-        // קישור לפנייה
-        "contactRequestId" to contactRef.id,
-        "relatedCollection" to "contactRequests",
-        "relatedDocumentId" to contactRef.id,
-
-        // תוכן ההתראה
-        "titleHe" to "פנייה חדשה מהאפליקציה",
-        "titleEn" to "New contact request from the app",
-        "bodyHe" to "התקבלה פנייה חדשה מאת $cleanFullName בנושא: $cleanSubject",
-        "bodyEn" to "A new contact request was received from $cleanFullName regarding: $cleanSubject",
-
-        // Snapshot קצר לצפייה מהירה
-        "fullName" to cleanFullName,
-        "phone" to cleanPhone,
-        "email" to cleanEmail,
-        "subject" to cleanSubject,
-        "messagePreview" to cleanMessage.take(180),
-        "userUid" to authUser?.uid.orEmpty(),
-        "userEmail" to authUser?.email.orEmpty(),
-
-        "createdAt" to FieldValue.serverTimestamp(),
-        "createdAtMillis" to nowMillis
-    )
-
-    val batch = db.batch()
-    batch.set(contactRef, contactData)
-    batch.set(notificationRef, notificationData)
-    batch.commit().await()
+    check(
+        result?.get("accepted") == true &&
+                (result["requestId"] as? String)
+                    ?.isNotBlank() == true
+    ) {
+        "Contact request response could not be confirmed"
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -297,11 +263,6 @@ fun ContactUsScreen(
                         ?: doc.getString("mobilePhone")
                         ?: ""
 
-                val serverEmail =
-                    doc.getString("email")
-                        ?: authUser.email
-                        ?: ""
-
                 if (
                     realFullName.isBlank() &&
                     serverFullName.isNotBlank()
@@ -329,9 +290,6 @@ fun ContactUsScreen(
                     phone = serverPhone
                 }
 
-                if (email.isBlank() && serverEmail.isNotBlank()) {
-                    email = serverEmail
-                }
             }.onFailure {
                 // Prefill is optional. The user can still fill the form manually.
             }
@@ -356,6 +314,10 @@ fun ContactUsScreen(
     val isFormValid =
         fullName.isNotBlank() &&
                 phone.isNotBlank() &&
+                email.isNotBlank() &&
+                android.util.Patterns.EMAIL_ADDRESS
+                    .matcher(email.trim())
+                    .matches() &&
                 subject.isNotBlank() &&
                 message.isNotBlank()
 
@@ -548,8 +510,9 @@ fun ContactUsScreen(
 
                                     OutlinedTextField(
                                         value = email,
-                                        onValueChange = { email = it },
+                                        onValueChange = {},
                                         modifier = Modifier.fillMaxWidth(),
+                                        readOnly = true,
                                         singleLine = true,
                                         label = { ContactFieldLabel(if (effectiveEnglish) "Email" else "אימייל") },
                                         leadingIcon = {
@@ -655,22 +618,32 @@ fun ContactUsScreen(
                                                         phone = cleanPhone,
                                                         email = cleanEmail,
                                                         subject = cleanSubject,
-                                                        message = cleanMessage
+                                                        message = cleanMessage,
+                                                        isEnglish = effectiveEnglish
                                                     )
                                                 }.onSuccess {
-                                                    onSubmit(
-                                                        cleanFullName,
-                                                        cleanPhone,
-                                                        cleanEmail,
-                                                        cleanSubject,
-                                                        cleanMessage
-                                                    )
+                                                    runCatching {
+                                                        onSubmit(
+                                                            cleanFullName,
+                                                            cleanPhone,
+                                                            cleanEmail,
+                                                            cleanSubject,
+                                                            cleanMessage
+                                                        )
+                                                    }.onFailure { error ->
+                                                        android.util.Log.w(
+                                                            "KMI_CONTACT",
+                                                            "Contact callback failed after saving request",
+                                                            error
+                                                        )
+                                                    }
 
                                                     snackbarHostState.showSnackbar(
-                                                        if (effectiveEnglish)
-                                                            "Your request was sent successfully"
-                                                        else
-                                                            "הפנייה נשלחה בהצלחה"
+                                                        if (effectiveEnglish) {
+                                                            "Your request has been received and forwarded for further handling."
+                                                        } else {
+                                                            "הפנייה התקבלה ונוצרה בהצלחה והועברה להמשך טיפול."
+                                                        }
                                                     )
 
                                                     fullName = ""
@@ -678,12 +651,19 @@ fun ContactUsScreen(
                                                     email = ""
                                                     subject = ""
                                                     message = ""
-                                                }.onFailure {
+                                                }.onFailure { error ->
+                                                    android.util.Log.e(
+                                                        "KMI_CONTACT",
+                                                        "Contact request could not be confirmed",
+                                                        error
+                                                    )
+
                                                     snackbarHostState.showSnackbar(
-                                                        if (effectiveEnglish)
-                                                            "Sending failed. Please try again."
-                                                        else
-                                                            "שליחת הפנייה נכשלה. נסה שוב."
+                                                        if (effectiveEnglish) {
+                                                            "Could not confirm your request. Please check its status before sending again."
+                                                        } else {
+                                                            "לא ניתן לאשר את קליטת הפנייה. יש לבדוק את מצבה לפני שליחה חוזרת."
+                                                        }
                                                     )
                                                 }
 
@@ -730,6 +710,31 @@ fun ContactUsScreen(
                                             )
                                         }
                                     }
+
+                                    Text(
+                                        text = if (effectiveEnglish) {
+                                            "Contact email: $CONTACT_MANAGEMENT_EMAIL"
+                                        } else {
+                                            "מייל ליצירת קשר: $CONTACT_MANAGEMENT_EMAIL"
+                                        },
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clickable {
+                                                val intent = Intent(
+                                                    Intent.ACTION_SENDTO,
+                                                    android.net.Uri.parse(
+                                                        "mailto:$CONTACT_MANAGEMENT_EMAIL"
+                                                    )
+                                                )
+
+                                                runCatching {
+                                                    ctx.startActivity(intent)
+                                                }
+                                            },
+                                        style = KmiTypography.secondary,
+                                        color = MaterialTheme.colorScheme.primary,
+                                        textAlign = TextAlign.Center
+                                    )
                                 }
                             }
                         } // סוף כרטיס הטופס
