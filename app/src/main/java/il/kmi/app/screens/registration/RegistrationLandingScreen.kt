@@ -78,6 +78,9 @@ import il.kmi.shared.localization.AppLanguage
 import il.kmi.shared.localization.AppLanguageManager
 import il.yuval.ui.theme.kmiScreenBackgroundBrush
 import com.google.firebase.auth.FirebaseAuth
+import il.kmi.app.FcmTokenManager
+import kotlinx.coroutines.withTimeoutOrNull
+import android.util.Log
 import il.yuval.ui.theme.kmiSectionHeaderBrush
 
 //======================================================================
@@ -370,10 +373,23 @@ fun RegistrationLandingScreen(
 
             /*
              * המשתמש לא ביקש לשמור את הכניסה.
-             * Firebase שומר session אוטומטית באנדרואיד,
-             * ולכן מנתקים אותו כאשר חוזרים למסך הכניסה.
+             * מנקים תחילה את טוקן המכשיר ורק אז
+             * מנתקים את Firebase Authentication.
              */
             if (hasValidSession) {
+                val tokenRemoved =
+                    withTimeoutOrNull(5000L) {
+                        FcmTokenManager
+                            .removeCurrentDeviceTokenBeforeSignOut()
+                    } == true
+
+                if (!tokenRemoved) {
+                    Log.w(
+                        "KMI_FCM_LOGOUT",
+                        "FCM token cleanup not confirmed before automatic sign-out"
+                    )
+                }
+
                 auth.signOut()
             }
 

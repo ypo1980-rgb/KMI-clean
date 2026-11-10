@@ -12,6 +12,7 @@ import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import il.kmi.app.FcmTokenManager
 import il.kmi.app.KmiViewModel
 import il.kmi.app.Route
 import il.kmi.app.screens.IntroScreen
@@ -1076,26 +1077,41 @@ fun MainNavHost(
             return@LaunchedEffect
         }
 
-        val coachDoc =
-            runCatching {
-                com.google.firebase.firestore
-                    .FirebaseFirestore
-                    .getInstance()
-                    .collection(
-                        "authorizedCoaches"
-                    )
-                    .document(ownerUid)
-                    .get()
-                    .await()
-            }
-                .getOrNull()
+        val coachDoc = try {
+            com.google.firebase.firestore
+                .FirebaseFirestore
+                .getInstance()
+                .collection(
+                    "authorizedCoaches"
+                )
+                .document(ownerUid)
+                .get()
+                .await()
+        } catch (cancelled: kotlinx.coroutines.CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            Log.e(
+                "KMI_COACH_AUTH",
+                "MainNavHost authorization read failed",
+                error
+            )
+            null
+        }
 
-        if (coachDoc != null) {
+        Log.d(
+            "KMI_COACH_AUTH",
+            "MainNavHost authorization: " +
+                    "exists=${coachDoc?.exists()} " +
+                    "active=${coachDoc?.getBoolean("active")} " +
+                    "role=${coachDoc?.getString("role")} " +
+                    "fromCache=${coachDoc?.metadata?.isFromCache}"
+        )
+
+        if (coachDoc?.exists() == true) {
             val verifiedCoach =
-                coachDoc.exists() &&
-                        coachDoc.getBoolean(
-                            "active"
-                        ) == true &&
+                coachDoc.getBoolean(
+                    "active"
+                ) == true &&
                         coachDoc.getString(
                             "role"
                         )
@@ -1355,6 +1371,19 @@ fun MainNavHost(
                                         "stage=splash_device_check, decision=sign_out, uid=$uid"
                                     )
 
+                                    val tokenRemoved =
+                                        withTimeoutOrNull(5000L) {
+                                            FcmTokenManager
+                                                .removeCurrentDeviceTokenBeforeSignOut()
+                                        } == true
+
+                                    if (!tokenRemoved) {
+                                        Log.w(
+                                            TAG_NAV,
+                                            "FCM token cleanup not confirmed before device sign-out"
+                                        )
+                                    }
+
                                     FirebaseAuth
                                         .getInstance()
                                         .signOut()
@@ -1479,6 +1508,19 @@ fun MainNavHost(
                                     TAG_NAV,
                                     "stage=splash_remote_device_check, decision=sign_out, uid=$uid"
                                 )
+
+                                val tokenRemoved =
+                                    withTimeoutOrNull(5000L) {
+                                        FcmTokenManager
+                                            .removeCurrentDeviceTokenBeforeSignOut()
+                                    } == true
+
+                                if (!tokenRemoved) {
+                                    Log.w(
+                                        TAG_NAV,
+                                        "FCM token cleanup not confirmed before remote device sign-out"
+                                    )
+                                }
 
                                 FirebaseAuth
                                     .getInstance()
@@ -1823,15 +1865,34 @@ fun MainNavHost(
                         return@LaunchedEffect
                     }
 
-                    val coachDoc =
-                        runCatching {
-                            com.google.firebase.firestore.FirebaseFirestore
-                                .getInstance()
-                                .collection("authorizedCoaches")
-                                .document(uid)
-                                .get()
-                                .await()
-                        }.getOrNull()
+                    val coachDoc = try {
+                        com.google.firebase.firestore.FirebaseFirestore
+                            .getInstance()
+                            .collection("authorizedCoaches")
+                            .document(uid)
+                            .get()
+                            .await()
+                    } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                        throw cancelled
+                    } catch (error: Exception) {
+                        Log.e(
+                            "KMI_COACH_AUTH",
+                            "Coach trainees authorization read failed",
+                            error
+                        )
+                        null
+                    }
+
+                    Log.d(
+                        "KMI_COACH_AUTH",
+                        "Coach trainees: " +
+                                "exists=${coachDoc?.exists()} " +
+                                "active=${coachDoc?.getBoolean("active")} " +
+                                "role=${coachDoc?.getString("role")} " +
+                                "canViewTrainees=${coachDoc?.getBoolean("canViewTrainees")} " +
+                                "canManageTrainees=${coachDoc?.getBoolean("canManageTrainees")} " +
+                                "fromCache=${coachDoc?.metadata?.isFromCache}"
+                    )
 
                     val isActiveCoach =
                         coachDoc?.exists() == true &&
@@ -2580,15 +2641,34 @@ fun MainNavHost(
                         return@LaunchedEffect
                     }
 
-                    val coachDoc =
-                        runCatching {
-                            com.google.firebase.firestore.FirebaseFirestore
-                                .getInstance()
-                                .collection("authorizedCoaches")
-                                .document(uid)
-                                .get()
-                                .await()
-                        }.getOrNull()
+                    val coachDoc = try {
+                        com.google.firebase.firestore.FirebaseFirestore
+                            .getInstance()
+                            .collection("authorizedCoaches")
+                            .document(uid)
+                            .get()
+                            .await()
+                    } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                        throw cancelled
+                    } catch (error: Exception) {
+                        Log.e(
+                            "KMI_COACH_AUTH",
+                            "Payments report authorization read failed",
+                            error
+                        )
+                        null
+                    }
+
+                    Log.d(
+                        "KMI_COACH_AUTH",
+                        "Payments report: " +
+                                "exists=${coachDoc?.exists()} " +
+                                "active=${coachDoc?.getBoolean("active")} " +
+                                "role=${coachDoc?.getString("role")} " +
+                                "canViewPaymentReports=${coachDoc?.getBoolean("canViewPaymentReports")} " +
+                                "canManagePayments=${coachDoc?.getBoolean("canManagePayments")} " +
+                                "fromCache=${coachDoc?.metadata?.isFromCache}"
+                    )
 
                     paymentsReportAuthorized =
                         coachDoc?.exists() == true &&

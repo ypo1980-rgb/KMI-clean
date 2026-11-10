@@ -1,9 +1,23 @@
 package il.kmi.app.attendance.ui
 
 import android.content.Intent
+import android.content.Context
 import android.graphics.Paint
 import android.graphics.Typeface
+import android.graphics.RectF
 import android.graphics.pdf.PdfDocument
+import android.os.Bundle
+import android.os.CancellationSignal
+import android.os.ParcelFileDescriptor
+import android.print.PrintAttributes
+import android.print.PrintDocumentAdapter
+import android.print.PrintDocumentInfo
+import android.print.PrintManager
+import android.print.PageRange
+import android.print.pdf.PrintedPdfDocument
+import android.text.Layout
+import android.text.StaticLayout
+import android.text.TextPaint
 import androidx.core.content.FileProvider
 import java.io.File
 import java.io.FileOutputStream
@@ -32,6 +46,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Assessment
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.QrCode2
+import androidx.compose.material.icons.filled.Print
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -86,6 +102,253 @@ import il.kmi.app.privacy.TraineeDisplayNameMapper
 import il.kmi.shared.localization.AppLanguage
 import il.kmi.shared.localization.AppLanguageManager
 import il.yuval.ui.theme.kmiSectionHeaderBackground
+import android.graphics.Bitmap
+import androidx.compose.foundation.Image
+import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.graphics.asImageBitmap
+import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.FirebaseFirestoreException
+import com.google.firebase.functions.FirebaseFunctions
+import com.google.firebase.functions.FirebaseFunctionsException
+import com.google.zxing.BarcodeFormat
+import com.google.zxing.MultiFormatWriter
+import kotlinx.coroutines.tasks.await
+import org.json.JSONObject
+import java.time.Instant
+import java.time.ZoneId
+
+private fun printAttendanceQr(
+    context: Context,
+    bitmap: Bitmap,
+    branch: String,
+    group: String,
+    date: LocalDate,
+    isEnglish: Boolean
+) {
+    val printManager =
+        context.getSystemService(Context.PRINT_SERVICE)
+                as PrintManager
+
+    val attributes = PrintAttributes.Builder()
+        .setMediaSize(PrintAttributes.MediaSize.ISO_A4)
+        .setColorMode(PrintAttributes.COLOR_MODE_MONOCHROME)
+        .build()
+
+    val documentName =
+        if (isEnglish) {
+            "KMI_Attendance_QR"
+        } else {
+            "KMI_נוכחות_QR"
+        }
+
+    val adapter = object : PrintDocumentAdapter() {
+
+        private var currentAttributes = attributes
+
+        override fun onLayout(
+            oldAttributes: PrintAttributes?,
+            newAttributes: PrintAttributes,
+            cancellationSignal: CancellationSignal,
+            callback: LayoutResultCallback,
+            extras: Bundle?
+        ) {
+            if (cancellationSignal.isCanceled) {
+                callback.onLayoutCancelled()
+                return
+            }
+
+            currentAttributes = newAttributes
+
+            val info = PrintDocumentInfo.Builder(
+                "$documentName.pdf"
+            )
+                .setContentType(
+                    PrintDocumentInfo.CONTENT_TYPE_DOCUMENT
+                )
+                .setPageCount(1)
+                .build()
+
+            callback.onLayoutFinished(
+                info,
+                oldAttributes != newAttributes
+            )
+        }
+
+        override fun onWrite(
+            pages: Array<out PageRange>,
+            destination: ParcelFileDescriptor,
+            cancellationSignal: CancellationSignal,
+            callback: WriteResultCallback
+        ) {
+            if (cancellationSignal.isCanceled) {
+                callback.onWriteCancelled()
+                return
+            }
+
+            val document = PrintedPdfDocument(
+                context,
+                currentAttributes
+            )
+
+            try {
+                val page = document.startPage(1)
+                val canvas = page.canvas
+                val rect = page.info.contentRect
+
+                canvas.drawColor(
+                    android.graphics.Color.WHITE
+                )
+
+                fun drawCentered(
+                    value: String,
+                    y: Float,
+                    textSize: Float
+                ) {
+                    val paint = TextPaint(
+                        Paint.ANTI_ALIAS_FLAG
+                    ).apply {
+                        color = android.graphics.Color.BLACK
+                        this.textSize = textSize
+                        typeface = Typeface.DEFAULT_BOLD
+                    }
+
+                    val width = rect.width() - 24
+
+                    val layout = StaticLayout.Builder.obtain(
+                        value,
+                        0,
+                        value.length,
+                        paint,
+                        width
+                    )
+                        .setAlignment(Layout.Alignment.ALIGN_CENTER)
+                        .setIncludePad(false)
+                        .build()
+
+                    canvas.save()
+                    canvas.translate(
+                        rect.left + 12f,
+                        y
+                    )
+                    layout.draw(canvas)
+                    canvas.restore()
+                }
+
+                drawCentered(
+                    "K.M.I",
+                    rect.top + 18f,
+                    26f
+                )
+
+                drawCentered(
+                    if (isEnglish) {
+                        "Training attendance QR"
+                    } else {
+                        "QR לנוכחות באימון"
+                    },
+                    rect.top + 57f,
+                    18f
+                )
+
+                drawCentered(
+                    "$branch | $group",
+                    rect.top + 90f,
+                    13f
+                )
+
+                val qrTop = rect.top + 150f
+
+                val availableQrHeight =
+                    rect.bottom - qrTop - 110f
+
+                val qrSize = minOf(
+                    390f,
+                    rect.width() - 36f,
+                    availableQrHeight
+                ).coerceAtLeast(80f)
+
+                val qrLeft =
+                    rect.left + (rect.width() - qrSize) / 2f
+
+                canvas.drawBitmap(
+                    bitmap,
+                    null,
+                    RectF(
+                        qrLeft,
+                        qrTop,
+                        qrLeft + qrSize,
+                        qrTop + qrSize
+                    ),
+                    Paint(Paint.FILTER_BITMAP_FLAG)
+                )
+
+                val printedDate = date.format(
+                    DateTimeFormatter.ofPattern(
+                        "dd.MM.yyyy",
+                        if (isEnglish) {
+                            Locale.ENGLISH
+                        } else {
+                            Locale.forLanguageTag("he-IL")
+                        }
+                    )
+                )
+
+                drawCentered(
+                    printedDate,
+                    qrTop + qrSize + 22f,
+                    16f
+                )
+
+                drawCentered(
+                    if (isEnglish) {
+                        "Valid only during the authorized training window."
+                    } else {
+                        "תקף רק בחלון הזמן המאושר של האימון."
+                    },
+                    qrTop + qrSize + 53f,
+                    12f
+                )
+
+                drawCentered(
+                    if (isEnglish) {
+                        "This QR is specific to this training and may be invalidated by a new QR."
+                    } else {
+                        "הקוד מיועד לאימון זה בלבד ועלול להתבטל בהפקת קוד חדש."
+                    },
+                    qrTop + qrSize + 75f,
+                    10f
+                )
+
+                document.finishPage(page)
+
+                if (cancellationSignal.isCanceled) {
+                    callback.onWriteCancelled()
+                    return
+                }
+
+                ParcelFileDescriptor.AutoCloseOutputStream(
+                    destination
+                ).use { output ->
+                    document.writeTo(output)
+                }
+
+                callback.onWriteFinished(
+                    arrayOf(PageRange.ALL_PAGES)
+                )
+            } catch (_: Exception) {
+                callback.onWriteFailed(null)
+            } finally {
+                document.close()
+            }
+        }
+    }
+
+    printManager.print(
+        documentName,
+        adapter,
+        attributes
+    )
+}
 
 //========================================================================
 
@@ -304,6 +567,329 @@ fun AttendanceScreen(
     var name by remember { mutableStateOf("") }
     var pendingDelete by remember { mutableStateOf<Pair<Long, String>?>(null) } // (memberId, displayName)
 
+    var showAttendanceQrDialog by rememberSaveable {
+        mutableStateOf(false)
+    }
+
+    var attendanceQrPayload by remember {
+        mutableStateOf<String?>(null)
+    }
+
+    var attendanceQrLoading by remember {
+        mutableStateOf(false)
+    }
+
+    var attendanceQrError by remember {
+        mutableStateOf<String?>(null)
+    }
+
+
+    LaunchedEffect(
+        showAttendanceQrDialog,
+        effectiveBranchRaw,
+        effectiveGroupRaw,
+        state.date
+    ) {
+        attendanceQrPayload = null
+        attendanceQrError = null
+        attendanceQrLoading = false
+
+        if (!showAttendanceQrDialog) {
+            return@LaunchedEffect
+        }
+
+        attendanceQrLoading = true
+
+        try {
+            val selectedBranch = effectiveBranchRaw.trim()
+            val selectedGroup = effectiveGroupRaw.trim()
+            val sessionDate = state.date.toString()
+
+            require(
+                selectedBranch.isNotBlank() &&
+                        selectedGroup.isNotBlank()
+            )
+
+            /*
+             * חיפוש מופעי אימון לפי התאריך בלבד.
+             *
+             * השוואת הסניף והקבוצה מתבצעת לאחר
+             * נרמול מקפים ורווחים, כדי למנוע
+             * כשל בגלל הבדלי כתיב טכניים.
+             *
+             * אין התאמה חלקית ואין בחירה שרירותית.
+             */
+            fun normalizeTrainingIdentity(value: String): String =
+                value
+                    .trim()
+                    .replace('־', '-')
+                    .replace('–', '-')
+                    .replace('—', '-')
+                    .replace('\u00A0', ' ')
+                    .replace(Regex("\\s+"), " ")
+                    .lowercase(Locale.ROOT)
+
+            val normalizedBranch =
+                normalizeTrainingIdentity(selectedBranch)
+
+            val normalizedGroup =
+                normalizeTrainingIdentity(selectedGroup)
+
+            val occurrences = FirebaseFirestore
+                .getInstance()
+                .collection("trainingOccurrences")
+                .whereEqualTo("sessionDate", sessionDate)
+                .get()
+                .await()
+                .documents
+                .filter { document ->
+
+                    val occurrenceBranch =
+                        document.getString("branch").orEmpty()
+
+                    val occurrenceGroup =
+                        document.getString("group").orEmpty()
+
+                    normalizeTrainingIdentity(occurrenceBranch) ==
+                            normalizedBranch &&
+                            normalizeTrainingIdentity(occurrenceGroup) ==
+                            normalizedGroup
+                }
+
+            when (occurrences.size) {
+                0 -> {
+                    attendanceQrError = tr(
+                        "לא נמצא אימון מתאים לתאריך ולקבוצה שנבחרו.",
+                        "No matching training was found."
+                    )
+                }
+
+                1 -> {
+                    val occurrenceId =
+                        occurrences.first().id
+
+                    val result = FirebaseFunctions
+                        .getInstance("europe-west1")
+                        .getHttpsCallable("createKamiAttendanceQr")
+                        .call(
+                            mapOf(
+                                "occurrenceId" to occurrenceId
+                            )
+                        )
+                        .await()
+
+                    val response = result.data as? Map<*, *>
+
+                    val accepted =
+                        response?.get("accepted") == true
+
+                    val token =
+                        response?.get("token") as? String
+
+                    val returnedOccurrenceId =
+                        response?.get("occurrenceId") as? String
+
+                    if (
+                        !accepted ||
+                        token.isNullOrBlank() ||
+                        returnedOccurrenceId != occurrenceId
+                    ) {
+                        attendanceQrError = tr(
+                            "לא ניתן להפיק QR לאימון.",
+                            "Could not generate the training QR."
+                        )
+                    } else {
+                        attendanceQrPayload = JSONObject()
+                            .put("type", "kami_attendance_qr")
+                            .put("occurrenceId", occurrenceId)
+                            .put("token", token)
+                            .toString()
+                    }
+                }
+
+                else -> {
+                    attendanceQrError = tr(
+                        "נמצאו מספר אימונים לקבוצה בתאריך זה. לא ניתן לבחור אימון אוטומטית.",
+                        "Multiple trainings were found. Automatic selection is unavailable."
+                    )
+                }
+            }
+        } catch (error: Exception) {
+
+            attendanceQrError = when (error) {
+
+                is FirebaseFunctionsException -> {
+                    when (error.code) {
+
+                        FirebaseFunctionsException.Code.NOT_FOUND ->
+                            tr(
+                                "שירות ה־QR עדיין אינו זמין בשרת.",
+                                "The QR service is not available on the server yet."
+                            )
+
+                        FirebaseFunctionsException.Code.PERMISSION_DENIED,
+                        FirebaseFunctionsException.Code.UNAUTHENTICATED ->
+                            tr(
+                                "אין הרשאה להפיק QR לאימון זה.",
+                                "You are not authorized to generate a QR for this training."
+                            )
+
+                        FirebaseFunctionsException.Code.FAILED_PRECONDITION -> {
+                            val serverMessage = error.message.orEmpty()
+
+                            when {
+                                serverMessage.contains(
+                                    "outside its active window",
+                                    ignoreCase = true
+                                ) ||
+                                        serverMessage.contains(
+                                            "QR window has changed",
+                                            ignoreCase = true
+                                        ) -> {
+                                    val details =
+                                        error.details as? Map<*, *>
+
+                                    val windowStartMillis =
+                                        (details?.get("windowStartMillis") as? Number)
+                                            ?.toLong()
+
+                                    val windowEndMillis =
+                                        (details?.get("windowEndMillis") as? Number)
+                                            ?.toLong()
+
+                                    val timeRange =
+                                        if (
+                                            windowStartMillis != null &&
+                                            windowEndMillis != null &&
+                                            windowStartMillis > 0L &&
+                                            windowEndMillis > windowStartMillis
+                                        ) {
+                                            runCatching {
+                                                val formatter =
+                                                    DateTimeFormatter
+                                                        .ofPattern("HH:mm")
+                                                        .withZone(
+                                                            ZoneId.of("Asia/Jerusalem")
+                                                        )
+
+                                                val startTime =
+                                                    formatter.format(
+                                                        Instant.ofEpochMilli(
+                                                            windowStartMillis
+                                                        )
+                                                    )
+
+                                                val endTime =
+                                                    formatter.format(
+                                                        Instant.ofEpochMilli(
+                                                            windowEndMillis
+                                                        )
+                                                    )
+
+                                                "$startTime–$endTime"
+                                            }.getOrNull()
+                                        } else {
+                                            null
+                                        }
+
+                                    if (timeRange != null) {
+                                        tr(
+                                            "ניתן להפיק QR לאימון זה בין השעות $timeRange.",
+                                            "QR can be generated for this training between $timeRange."
+                                        )
+                                    } else {
+                                        tr(
+                                            "ניתן להפיק QR רק מ־30 דקות לפני תחילת האימון ועד 30 דקות לאחר סיומו.",
+                                            "QR can be generated from 30 minutes before training starts until 30 minutes after it ends."
+                                        )
+                                    }
+                                }
+
+                                serverMessage.contains(
+                                    "Training has been cancelled",
+                                    ignoreCase = true
+                                ) ->
+                                    tr(
+                                        "האימון בוטל. לא ניתן להפיק עבורו QR.",
+                                        "This training was cancelled. A QR cannot be generated."
+                                    )
+
+                                serverMessage.contains(
+                                    "already saved",
+                                    ignoreCase = true
+                                ) ->
+                                    tr(
+                                        "דוח הנוכחות לאימון זה כבר נשמר. לא ניתן להפיק QR נוסף.",
+                                        "The attendance report has already been saved. A new QR cannot be generated."
+                                    )
+
+                                serverMessage.contains(
+                                    "identity",
+                                    ignoreCase = true
+                                ) ->
+                                    tr(
+                                        "פרטי האימון אינם תואמים לנתוני השרת. יש לבדוק את התאריך, הסניף והקבוצה.",
+                                        "The training details do not match the server. Check the date, branch and group."
+                                    )
+
+                                serverMessage.contains(
+                                    "schedule",
+                                    ignoreCase = true
+                                ) ->
+                                    tr(
+                                        "שעות האימון אינן תקינות או השתנו. יש לבדוק את לוח האימונים.",
+                                        "The training schedule is invalid or has changed. Check the training calendar."
+                                    )
+
+                                serverMessage.contains(
+                                    "Training no longer exists",
+                                    ignoreCase = true
+                                ) ->
+                                    tr(
+                                        "האימון אינו קיים עוד בשרת.",
+                                        "This training no longer exists on the server."
+                                    )
+
+                                else ->
+                                    tr(
+                                        "לא ניתן להפיק QR לאימון זה. יש לבדוק את פרטי האימון ולנסות שוב.",
+                                        "Unable to generate a QR for this training. Check the training details and try again."
+                                    )
+                            }
+                        }
+
+                        FirebaseFunctionsException.Code.UNAVAILABLE,
+                        FirebaseFunctionsException.Code.DEADLINE_EXCEEDED ->
+                            tr(
+                                "לא ניתן להתחבר לשירות ה־QR. בדוק את החיבור לשרת.",
+                                "Cannot connect to the QR service. Check the server connection."
+                            )
+
+                        else ->
+                            tr(
+                                "אירעה שגיאה בהפקת ה־QR.",
+                                "An error occurred while generating the QR."
+                            )
+                    }
+                }
+
+                is FirebaseFirestoreException ->
+                    tr(
+                        "לא ניתן לטעון את נתוני האימון מ־Firestore.",
+                        "Unable to load training data from Firestore."
+                    )
+
+                else ->
+                    tr(
+                        "לא ניתן להפיק QR כרגע.",
+                        "Unable to generate a QR right now."
+                    )
+            }
+
+        } finally {
+            attendanceQrLoading = false
+        }
+    }
 
     // ✅ מקור אמת: הסטטוסים מגיעים מה-ViewModel (Live from Firestore)
     // נדרש שב-UiState יהיה Map<Long, AttendanceStatus> בשם statusByMemberId (או דומה)
@@ -973,6 +1559,47 @@ fun AttendanceScreen(
                     }
 
                     if (!isReportSaved) {
+
+                        item {
+                            OutlinedButton(
+                                onClick = {
+                                    showAttendanceQrDialog = true
+                                },
+                                enabled =
+                                    effectiveBranchRaw.isNotBlank() &&
+                                            effectiveGroupRaw.isNotBlank() &&
+                                            state.hasScheduledTraining,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(min = 48.dp),
+                                shape = RoundedCornerShape(16.dp),
+                                border = BorderStroke(
+                                    1.dp,
+                                    MaterialTheme.colorScheme.primary
+                                )
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Filled.QrCode2,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(
+                                        KmiIconSize.medium
+                                    )
+                                )
+
+                                Spacer(Modifier.width(8.dp))
+
+                                Text(
+                                    text = tr(
+                                        "QR לנוכחות באימון",
+                                        "Training attendance QR"
+                                    ),
+                                    style = KmiTypography.action,
+                                    maxLines = 2,
+                                    textAlign = TextAlign.Center
+                                )
+                            }
+                        }
+
                         item {
                             Column(
                                 modifier = Modifier.fillMaxWidth(),
@@ -1451,6 +2078,203 @@ fun AttendanceScreen(
                         }
                     }
                 }
+            }
+
+            // ===== חלון QR לנוכחות באימון =====
+            if (showAttendanceQrDialog) {
+                AlertDialog(
+                    onDismissRequest = {
+                        showAttendanceQrDialog = false
+                    },
+                    icon = {
+                        Icon(
+                            imageVector = Icons.Filled.QrCode2,
+                            contentDescription = null,
+                            modifier = Modifier.size(
+                                KmiIconSize.large
+                            )
+                        )
+                    },
+                    title = {
+                        Text(
+                            text = tr(
+                                "QR לנוכחות באימון",
+                                "Training attendance QR"
+                            ),
+                            style = KmiTypography.sectionTitle,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    },
+                    text = {
+                        Column(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            Text(
+                                text = effectiveBranchRaw,
+                                style = KmiTypography.cardTitle,
+                                textAlign = TextAlign.Center
+                            )
+
+                            Text(
+                                text = effectiveGroupRaw,
+                                style = KmiTypography.secondary,
+                                textAlign = TextAlign.Center
+                            )
+
+                            when {
+                                attendanceQrLoading -> {
+                                    Text(
+                                        text = tr(
+                                            "מפיק קוד QR מאובטח...",
+                                            "Generating secure QR..."
+                                        ),
+                                        style = KmiTypography.secondary,
+                                        textAlign = TextAlign.Center
+                                    )
+                                }
+
+                                attendanceQrError != null -> {
+                                    Text(
+                                        text = attendanceQrError.orEmpty(),
+                                        style = KmiTypography.secondary,
+                                        color = MaterialTheme.colorScheme.error,
+                                        textAlign = TextAlign.Center
+                                    )
+                                }
+
+                                attendanceQrPayload != null -> {
+                                    val qrBitmap = remember(
+                                        attendanceQrPayload
+                                    ) {
+                                        runCatching {
+                                            val matrix = MultiFormatWriter()
+                                                .encode(
+                                                    attendanceQrPayload,
+                                                    BarcodeFormat.QR_CODE,
+                                                    840,
+                                                    840
+                                                )
+
+                                            val width = matrix.width
+                                            val height = matrix.height
+
+                                            val pixels = IntArray(
+                                                width * height
+                                            )
+
+                                            for (y in 0 until height) {
+                                                for (x in 0 until width) {
+                                                    pixels[y * width + x] =
+                                                        if (matrix[x, y]) {
+                                                            android.graphics.Color.BLACK
+                                                        } else {
+                                                            android.graphics.Color.WHITE
+                                                        }
+                                                }
+                                            }
+
+                                            Bitmap.createBitmap(
+                                                width,
+                                                height,
+                                                Bitmap.Config.ARGB_8888
+                                            ).apply {
+                                                setPixels(
+                                                    pixels,
+                                                    0,
+                                                    width,
+                                                    0,
+                                                    0,
+                                                    width,
+                                                    height
+                                                )
+                                            }.asImageBitmap()
+                                        }.getOrNull()
+                                    }
+
+                                    if (qrBitmap != null) {
+                                        Image(
+                                            bitmap = qrBitmap,
+                                            contentDescription = tr(
+                                                "קוד QR לנוכחות באימון",
+                                                "Training attendance QR code"
+                                            ),
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .heightIn(max = 280.dp)
+                                                .aspectRatio(1f)
+                                                .background(Color.White)
+                                                .padding(8.dp)
+                                        )
+
+                                        TextButton(
+                                            onClick = {
+                                                printAttendanceQr(
+                                                    context = context,
+                                                    bitmap = qrBitmap.asAndroidBitmap(),
+                                                    branch = effectiveBranchRaw,
+                                                    group = effectiveGroupRaw,
+                                                    date = state.date,
+                                                    isEnglish = isEnglish
+                                                )
+                                            }
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Filled.Print,
+                                                contentDescription = null,
+                                                modifier = Modifier.size(
+                                                    KmiIconSize.medium
+                                                )
+                                            )
+
+                                            Spacer(Modifier.width(8.dp))
+
+                                            Text(
+                                                text = tr(
+                                                    "הדפס QR",
+                                                    "Print QR"
+                                                ),
+                                                style = KmiTypography.action
+                                            )
+                                        }
+
+                                        Text(
+                                            text = tr(
+                                                "סריקת הקוד מתאפשרת רק בחלון הזמן המאושר של האימון.",
+                                                "Scanning is allowed only during the approved training window."
+                                            ),
+                                            style = KmiTypography.caption,
+                                            textAlign = TextAlign.Center
+                                        )
+                                    } else {
+                                        Text(
+                                            text = tr(
+                                                "אירעה שגיאה ביצירת תמונת QR.",
+                                                "Could not render the QR image."
+                                            ),
+                                            style = KmiTypography.caption,
+                                            color = MaterialTheme.colorScheme.error,
+                                            textAlign = TextAlign.Center
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    confirmButton = {
+                        TextButton(
+                            onClick = {
+                                showAttendanceQrDialog = false
+                            }
+                        ) {
+                            Text(
+                                tr("סגור", "Close")
+                            )
+                        }
+                    }
+                )
             }
 
             // ===== דיאלוג תרגיל שנבחר מהחיפוש =====

@@ -40,6 +40,10 @@ import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.runtime.CompositionLocalProvider
 import il.kmi.app.messages.model.MessageCenterItem
 import il.kmi.app.ui.KmiTopBar
+import il.kmi.app.ui.KmiTypography
+import il.kmi.app.ui.loading.KmiLoadingRings
+import il.yuval.ui.theme.kmiScreenBackgroundBrush
+import il.yuval.ui.theme.kmiSectionHeaderContentColor
 import androidx.compose.runtime.LaunchedEffect
 import java.time.Instant
 import java.time.ZoneId
@@ -147,7 +151,7 @@ fun MessageCenterScreen(
     ) {
         Scaffold(
             modifier = modifier.fillMaxSize(),
-            containerColor = MaterialTheme.colorScheme.background,
+            containerColor = Color.Transparent,
             topBar = {
                 KmiTopBar(
                     title =
@@ -168,6 +172,7 @@ fun MessageCenterScreen(
                     Modifier
                         .fillMaxSize()
                         .padding(paddingValues)
+                        .background(kmiScreenBackgroundBrush())
             ) {
 
                 MessageCenterTabs(
@@ -182,29 +187,65 @@ fun MessageCenterScreen(
                     }
                 )
 
-                if (isLoading) {
+                if (
+                    errorMessage != null &&
+                    messages.isNotEmpty()
+                ) {
+                    Text(
+                        text = when (errorMessage) {
+                            "MESSAGE_CENTER_MARK_READ_FAILED" ->
+                                if (isEnglish) {
+                                    "Could not mark the message as read."
+                                } else {
+                                    "לא ניתן לסמן את ההודעה כנקראה."
+                                }
+
+                            "MESSAGE_CENTER_DELETE_FAILED" ->
+                                if (isEnglish) {
+                                    "Could not delete the message."
+                                } else {
+                                    "לא ניתן למחוק את ההודעה."
+                                }
+
+                            else ->
+                                if (isEnglish) {
+                                    "Unable to refresh messages. Showing available data."
+                                } else {
+                                    "לא ניתן לרענן הודעות. מוצגים הנתונים הזמינים."
+                                }
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(
+                                horizontal = 16.dp,
+                                vertical = 6.dp
+                            ),
+                        color = MaterialTheme.colorScheme.error,
+                        style = KmiTypography.caption,
+                        textAlign = textAlign
+                    )
+                }
+
+                if (isLoading && messages.isEmpty()) {
                     Box(
-                        modifier =
-                            Modifier
-                                .fillMaxSize()
-                                .padding(24.dp),
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(24.dp),
                         contentAlignment = Alignment.Center
                     ) {
-                        Text(
-                            text =
-                                if (isEnglish) {
-                                    "Loading messages..."
-                                } else {
-                                    "טוען הודעות..."
-                                },
-                            color =
-                                MaterialTheme
-                                    .colorScheme
-                                    .onSurfaceVariant,
-                            textAlign = TextAlign.Center
+                        KmiLoadingRings(
+                            text = if (isEnglish) {
+                                "Loading messages..."
+                            } else {
+                                "טוען הודעות..."
+                            },
+                            size = 82.dp
                         )
                     }
-                } else if (errorMessage != null) {
+                } else if (
+                    errorMessage != null &&
+                    messages.isEmpty()
+                ) {
                     Box(
                         modifier =
                             Modifier
@@ -234,17 +275,38 @@ fun MessageCenterScreen(
                             )
 
                             Text(
-                                text =
-                                    errorMessage.orEmpty(),
-                                color =
-                                    MaterialTheme
-                                        .colorScheme
-                                        .onSurfaceVariant,
+                                text = when (errorMessage) {
+                                    "MESSAGE_CENTER_MARK_READ_FAILED" ->
+                                        if (isEnglish) {
+                                            "Unable to mark the message as read."
+                                        } else {
+                                            "לא ניתן לסמן את ההודעה כנקראה."
+                                        }
+
+                                    "MESSAGE_CENTER_DELETE_FAILED" ->
+                                        if (isEnglish) {
+                                            "Unable to delete the message."
+                                        } else {
+                                            "לא ניתן למחוק את ההודעה."
+                                        }
+
+                                    "No logged-in user" ->
+                                        if (isEnglish) {
+                                            "Please sign in to view your messages."
+                                        } else {
+                                            "יש להתחבר כדי לצפות בהודעות."
+                                        }
+
+                                    else ->
+                                        if (isEnglish) {
+                                            "Please check your connection and try again."
+                                        } else {
+                                            "בדוק את החיבור לאינטרנט ונסה שוב."
+                                        }
+                                },
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 textAlign = TextAlign.Center,
-                                style =
-                                    MaterialTheme
-                                        .typography
-                                        .bodySmall
+                                style = KmiTypography.body
                             )
                         }
                     }
@@ -544,14 +606,13 @@ fun MessageCenterScreen(
 
                                     Text(
                                         text = item.message,
-                                        modifier =
-                                            Modifier.fillMaxWidth(),
-                                        color =
-                                            MaterialTheme
-                                                .colorScheme
-                                                .onSurfaceVariant,
+                                        modifier = Modifier.fillMaxWidth(),
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        style = KmiTypography.body,
                                         textAlign = textAlign,
-                                        maxLines = 3
+                                        maxLines = 3,
+                                        overflow =
+                                            androidx.compose.ui.text.style.TextOverflow.Ellipsis
                                     )
                                 }
                             }
@@ -699,7 +760,7 @@ private fun MessageCenterTabs(
                     containerColor =
                         Color.Transparent,
                     contentColor =
-                        Color.White,
+                        kmiSectionHeaderContentColor(),
                     divider = {},
                     indicator = {},
                     modifier =
@@ -728,7 +789,7 @@ private fun MessageCenterTabs(
                                             "כל ההודעות"
                                         },
                                     color =
-                                        Color.White,
+                                        kmiSectionHeaderContentColor(),
                                     fontWeight =
                                         if (
                                             selectedIndex == 0

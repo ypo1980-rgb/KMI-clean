@@ -179,6 +179,20 @@ dependencies {
     implementation("androidx.compose.material:material-icons-extended")
     implementation("com.android.billingclient:billing-ktx:8.0.0")
 
+    // QR Code — יצירה ופענוח של קודי QR
+    implementation("com.google.zxing:core:3.5.4")
+
+    // CameraX — מצלמה לסריקת QR מתוך האפליקציה
+    val cameraXVersion = "1.6.2"
+
+    implementation("androidx.camera:camera-core:$cameraXVersion")
+    implementation("androidx.camera:camera-camera2:$cameraXVersion")
+    implementation("androidx.camera:camera-lifecycle:$cameraXVersion")
+    implementation("androidx.camera:camera-view:$cameraXVersion")
+
+    // ML Kit — זיהוי QR בזמן אמת, גם ללא אינטרנט
+    implementation("com.google.mlkit:barcode-scanning:17.3.0")
+
     // Navigation / DataStore
     implementation("androidx.navigation:navigation-compose:2.8.0")
     implementation("androidx.datastore:datastore-preferences:1.1.1")

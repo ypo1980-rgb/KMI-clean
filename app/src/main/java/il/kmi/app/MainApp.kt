@@ -16,10 +16,25 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.windowInsetsPadding
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
-import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.material3.DrawerValue
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalDrawerSheet
+import androidx.compose.material3.ModalNavigationDrawer
+import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.lightColorScheme
+import androidx.compose.material3.rememberDrawerState
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
@@ -27,16 +42,138 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Density
 import androidx.navigation.NavGraph.Companion.findStartDestination
-import il.kmi.app.ui.AppFontSize
-import il.kmi.app.ui.LocalAppIconScale
-import androidx.navigation.compose.rememberNavController
 import androidx.navigation.compose.currentBackStackEntryAsState
+import androidx.navigation.compose.rememberNavController
 import il.kmi.app.analytics.KmiDiagnostics
 import il.kmi.app.screens.admin.AdminAccess
+import il.kmi.app.ui.AppFontSize
 import il.kmi.app.ui.DrawerBridge
+import il.kmi.app.ui.LocalAppIconScale
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.withTimeoutOrNull
 
+
+internal suspend fun verifyKmiCoachViaRest(
+    uid: String,
+    idToken: String,
+    projectId: String
+): Boolean {
+    if (
+        uid.isBlank() ||
+        idToken.isBlank() ||
+        projectId.isBlank()
+    ) {
+        return false
+    }
+
+    return try {
+        kotlinx.coroutines.withContext(
+            kotlinx.coroutines.Dispatchers.IO
+        ) {
+            val url = java.net.URL(
+                "https://firestore.googleapis.com/v1/" +
+                        "projects/$projectId/" +
+                        "databases/(default)/documents/" +
+                        "authorizedCoaches/$uid"
+            )
+
+            val connection =
+                url.openConnection() as java.net.HttpURLConnection
+
+            try {
+                connection.requestMethod = "GET"
+                connection.connectTimeout = 10000
+                connection.readTimeout = 10000
+
+                connection.setRequestProperty(
+                    "Authorization",
+                    "Bearer $idToken"
+                )
+
+                connection.setRequestProperty(
+                    "Accept",
+                    "application/json"
+                )
+
+                val status = connection.responseCode
+
+                if (status != 200) {
+                    android.util.Log.w(
+                        "KMI_COACH_AUTH",
+                        "Coach REST fallback: HTTP $status"
+                    )
+                    false
+                } else {
+                    val response =
+                        connection.inputStream
+                            .bufferedReader(Charsets.UTF_8)
+                            .use { it.readText() }
+
+                    val document =
+                        org.json.JSONObject(response)
+
+                    val expectedName =
+                        "projects/$projectId/" +
+                                "databases/(default)/documents/" +
+                                "authorizedCoaches/$uid"
+
+                    val fields =
+                        document.optJSONObject("fields")
+
+                    val active =
+                        fields
+                            ?.optJSONObject("active")
+                            ?.optBoolean(
+                                "booleanValue",
+                                false
+                            ) == true
+
+                    val role =
+                        fields
+                            ?.optJSONObject("role")
+                            ?.optString("stringValue")
+                            .orEmpty()
+
+                    val canOpenDrawer =
+                        fields
+                            ?.optJSONObject("canOpenCoachDrawer")
+                            ?.optBoolean(
+                                "booleanValue",
+                                false
+                            ) == true
+
+                    val authorized =
+                        document.optString("name") == expectedName &&
+                                active &&
+                                role.equals(
+                                    "coach",
+                                    ignoreCase = true
+                                ) &&
+                                canOpenDrawer
+
+                    android.util.Log.d(
+                        "KMI_COACH_AUTH",
+                        "Coach REST verified: authorized=$authorized"
+                    )
+
+                    authorized
+                }
+            } finally {
+                connection.disconnect()
+            }
+        }
+    } catch (cancelled: kotlinx.coroutines.CancellationException) {
+        throw cancelled
+    } catch (error: Exception) {
+        android.util.Log.e(
+            "KMI_COACH_AUTH",
+            "Coach REST fallback failed",
+            error
+        )
+        false
+    }
+}
 
 @Composable
 fun MainApp(
@@ -268,17 +405,74 @@ fun MainApp(
             return@LaunchedEffect
         }
 
-        val coachDoc =
-            runCatching {
+        val firebaseApp =
+            com.google.firebase.FirebaseApp.getInstance()
+
+        val firebaseAuth =
+            com.google.firebase.auth.FirebaseAuth.getInstance()
+
+        val firestore =
+            com.google.firebase.firestore.FirebaseFirestore.getInstance()
+
+        val authTokenResult = try {
+            firebaseAuth.currentUser
+                ?.getIdToken(false)
+                ?.await()
+        } catch (cancelled: kotlinx.coroutines.CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            android.util.Log.e(
+                "KMI_COACH_AUTH",
+                "Firebase Auth token inspection failed",
+                error
+            )
+            null
+        }
+
+        val coachResult = try {
+            Result.success(
                 com.google.firebase.firestore.FirebaseFirestore
                     .getInstance()
                     .collection("authorizedCoaches")
                     .document(uid)
-                    .get()
+                    .get(
+                        com.google.firebase.firestore.Source.SERVER
+                    )
                     .await()
-            }.getOrNull()
+            )
+        } catch (cancelled: kotlinx.coroutines.CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            android.util.Log.e(
+                "KMI_COACH_AUTH",
+                "MainApp coach authorization read failed",
+                error
+            )
+            Result.failure(error)
+        }
 
-        isCoachAuthorized =
+        val coachDoc = coachResult.getOrNull()
+
+        // אימות REST משותף:
+        // מופעל רק כאשר SDK אינו מחזיר מסמך תקין.
+        val restCoachAuthorized =
+            if (coachDoc?.exists() == true) {
+                false
+            } else {
+                val idToken =
+                    authTokenResult?.token.orEmpty()
+
+                val projectId =
+                    firebaseApp.options.projectId.orEmpty()
+
+                verifyKmiCoachViaRest(
+                    uid = uid,
+                    idToken = idToken,
+                    projectId = projectId
+                )
+            }
+
+        val sdkCoachAuthorized =
             coachDoc?.exists() == true &&
                     coachDoc.getBoolean("active") == true &&
                     coachDoc.getString("role")
@@ -290,6 +484,22 @@ fun MainApp(
                     coachDoc.getBoolean(
                         "canOpenCoachDrawer"
                     ) == true
+
+        // מונע שימוש בתשובת בדיקה שהסתיימה לאחר החלפת משתמש.
+        val sameAuthenticatedUser =
+            firebaseAuth.currentUser?.uid == uid
+
+        isCoachAuthorized =
+            sameAuthenticatedUser &&
+                    (sdkCoachAuthorized || restCoachAuthorized)
+
+        android.util.Log.d(
+            "KMI_COACH_AUTH",
+            "Drawer authorization: " +
+                    "sdk=$sdkCoachAuthorized " +
+                    "rest=$restCoachAuthorized " +
+                    "authorized=$isCoachAuthorized"
+        )
     }
 
     val ctxForDiagnostics = LocalContext.current.applicationContext
@@ -307,25 +517,60 @@ fun MainApp(
     }
 
     val ctxForForumPush = LocalContext.current.applicationContext
+
     val forumPushSp = remember(ctxForForumPush) {
-        ctxForForumPush.getSharedPreferences("kmi_forum_push", Context.MODE_PRIVATE)
+        ctxForForumPush.getSharedPreferences(
+            "kmi_forum_push",
+            Context.MODE_PRIVATE
+        )
+    }
+
+    val coachPushSp = remember(ctxForForumPush) {
+        ctxForForumPush.getSharedPreferences(
+            "kmi_settings",
+            Context.MODE_PRIVATE
+        )
     }
 
     var forumPushTick by remember {
         mutableStateOf(0)
     }
 
-    DisposableEffect(forumPushSp) {
-        val listener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
-            if (key == "has_pending_forum_push") {
-                forumPushTick++
-            }
-        }
+    var coachPushTick by remember {
+        mutableStateOf(0)
+    }
 
-        forumPushSp.registerOnSharedPreferenceChangeListener(listener)
+    DisposableEffect(forumPushSp, coachPushSp) {
+        val forumListener =
+            SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+                if (key == "has_pending_forum_push") {
+                    forumPushTick++
+                }
+            }
+
+        val coachListener =
+            SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+                if (key == "coach_broadcast_open_on_tap") {
+                    coachPushTick++
+                }
+            }
+
+        forumPushSp.registerOnSharedPreferenceChangeListener(
+            forumListener
+        )
+
+        coachPushSp.registerOnSharedPreferenceChangeListener(
+            coachListener
+        )
 
         onDispose {
-            forumPushSp.unregisterOnSharedPreferenceChangeListener(listener)
+            forumPushSp.unregisterOnSharedPreferenceChangeListener(
+                forumListener
+            )
+
+            coachPushSp.unregisterOnSharedPreferenceChangeListener(
+                coachListener
+            )
         }
     }
 
@@ -370,6 +615,71 @@ fun MainApp(
 
         nav.navigate(Route.Forum.route) {
             launchSingleTop = true
+        }
+    }
+
+    // פתיחת מרכז ההודעות רק בעקבות לחיצה על Push.
+    LaunchedEffect(
+        currentRoute,
+        coachPushTick,
+        isRegistrationRouteForDrawer,
+        forumPushTick
+    ) {
+        if (currentRoute == null) {
+            return@LaunchedEffect
+        }
+
+        val shouldOpenMessages =
+            coachPushSp.getBoolean(
+                "coach_broadcast_open_on_tap",
+                false
+            )
+
+        if (!shouldOpenMessages) {
+            return@LaunchedEffect
+        }
+
+        // אין לעקוף מסכי התחברות או רישום.
+        if (isRegistrationRouteForDrawer) {
+            return@LaunchedEffect
+        }
+
+        val currentUser =
+            com.google.firebase.auth.FirebaseAuth
+                .getInstance()
+                .currentUser
+
+        if (
+            currentUser == null ||
+            currentUser.isAnonymous ||
+            currentUser.uid.isBlank()
+        ) {
+            return@LaunchedEffect
+        }
+
+        // משאירים עדיפות לניווט פורום שכבר קיים.
+        if (
+            forumPushSp.getBoolean(
+                "has_pending_forum_push",
+                false
+            )
+        ) {
+            return@LaunchedEffect
+        }
+
+        // מנקים את הבקשה לפני הניווט למניעת פתיחה חוזרת.
+        coachPushSp.edit()
+            .putBoolean(
+                "coach_broadcast_open_on_tap",
+                false
+            )
+            .apply()
+
+        if (currentRoute != Route.MessageCenter.route) {
+            nav.navigate(Route.MessageCenter.route) {
+                launchSingleTop = true
+                restoreState = false
+            }
         }
     }
 
@@ -764,11 +1074,24 @@ fun MainApp(
 
                                         onLogout = {
                                             scope.launch {
-                                                runCatching {
-                                                    com.google.firebase.auth.FirebaseAuth
-                                                        .getInstance()
-                                                        .signOut()
+                                                val tokenRemoved =
+                                                    runCatching {
+                                                        withTimeoutOrNull(5000L) {
+                                                            FcmTokenManager
+                                                                .removeCurrentDeviceTokenBeforeSignOut()
+                                                        } == true
+                                                    }.getOrDefault(false)
+
+                                                if (!tokenRemoved) {
+                                                    android.util.Log.w(
+                                                        "KMI_AUTH",
+                                                        "FCM token cleanup was not confirmed before sign-out"
+                                                    )
                                                 }
+
+                                                com.google.firebase.auth.FirebaseAuth
+                                                    .getInstance()
+                                                    .signOut()
 
                                                 // ✅ לא עושים clear מלא.
                                                 // clear() מוחק גם שפה, שם, חגורה ופרטי פרופיל,

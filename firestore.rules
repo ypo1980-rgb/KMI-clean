@@ -863,6 +863,15 @@ match /trainingOccurrences/{occurrenceId} {
                 isSelf(uid)
                 && request.resource.data.uid == uid
 
+                // שדות מכשיר והתראות מנוהלים בשרת בלבד.
+                && !request.resource.data.keys().hasAny([
+                     "activeDeviceId",
+                     "activeDeviceUpdatedAt",
+                     "fcmToken",
+                     "fcmTokenUpdatedAt",
+                     "fcmTokens"
+                   ])
+
                 // רישום עצמי אינו מעניק תפקיד מאמן.
                 && request.resource.data.role == "trainee"
 
@@ -890,11 +899,41 @@ match /trainingOccurrences/{occurrenceId} {
                    ])
               );
 
-         // עדכון:
-      // המשתמש עצמו או אדמין יכולים לעדכן הכל.
-      // מאמן יכול לעדכן רק שדות מקצועיים של מתאמן:
-      // תאריכי חגורות, השתלמויות, מחנות, הסמכות והערות מאמן.
+      // עדכון:
+      // המשתמש רשאי לעדכן שדות פרופיל מותרים בלבד.
+      // שדות זהות, הרשאות, מכשיר ו-FCM מוגנים.
+      // שינויי מכשיר ו-FCM מתבצעים דרך Cloud Functions.
+      // אדמין רשאי לבצע עדכונים בהתאם להרשאתו.
    allow update: if (
+
+       /*
+        * שדות רגישים מנוהלים דרך
+        * Cloud Functions בלבד.
+        *
+        * החסימה חלה על כל מסלולי
+        * העדכון העצמי, כולל מסלול
+        * שיוך המכשיר הייעודי.
+        *
+        * Admin SDK עוקף Firestore Rules.
+        */
+       (
+         isAdmin()
+         ||
+         !request.resource.data
+           .diff(resource.data)
+           .affectedKeys()
+           .hasAny([
+             "activeDeviceId",
+             "activeDeviceUpdatedAt",
+             "fcmToken",
+             "fcmTokenUpdatedAt",
+             "fcmTokens"
+           ])
+       )
+
+       &&
+
+       (
 
        // =========================================
        // עדכון עצמי רגיל:
@@ -923,6 +962,10 @@ match /trainingOccurrences/{occurrenceId} {
              "isActive",
              "archived",
 
+             // שיוך מכשיר משתנה רק במסלול הייעודי.
+             "activeDeviceId",
+             "activeDeviceUpdatedAt",
+
              // הרשאות מאמן מנוהלות רק במקור המאובטח
              "canManagePayments",
              "canViewPaymentReports",
@@ -939,6 +982,10 @@ match /trainingOccurrences/{occurrenceId} {
     // =========================================
     // השלמת טופס רישום ראשונית.
     //
+    // שיוך והעברת מכשיר מתבצעים
+    // באמצעות Cloud Functions בלבד.
+    // =========================================
+    //
     // מאפשרת למשתמש להשלים את הפרופיל שלו,
     // כולל role / branch / groups,
     // אבל אך ורק כמתאמן.
@@ -954,9 +1001,18 @@ match /trainingOccurrences/{occurrenceId} {
       && request.resource.data.user_role == "trainee"
 
       // חייב להיות רישום מהסכמה החדשה.
-      && request.resource.data.registrationFormCompleted == true
-      && request.resource.data.registrationSchemaVersion is int
-      && request.resource.data.registrationSchemaVersion >= 3
+      // שדות חסרים אינם גורמים לשגיאת הערכה.
+      && request.resource.data.get(
+           "registrationFormCompleted", false
+         ) == true
+
+      && request.resource.data.get(
+           "registrationSchemaVersion", 0
+         ) is int
+
+      && request.resource.data.get(
+           "registrationSchemaVersion", 0
+         ) >= 3
 
       /*
        * משתמש מחובר רשאי להשלים או לרענן
@@ -1030,6 +1086,8 @@ match /trainingOccurrences/{occurrenceId} {
     ||
 
     isAdmin()
+
+       )
 );
 
       // מחיקה: רק המשתמש עצמו או אדמין
@@ -1160,6 +1218,8 @@ match /coachBroadcasts/{broadcastId} {
      * - המאמן שיצר את השידור
      */
     allow read: if isSignedIn()
+      && resource.data.uid == uid
+      && resource.data.broadcastId == broadcastId
       && (
         request.auth.uid == uid
 
@@ -1236,29 +1296,10 @@ match /coachBroadcasts/{broadcastId} {
     allow read: if isSignedIn()
               && resource.data.uid == request.auth.uid;
 
-    // הכתיבה ממשיכה להיות מנוהלת
-    // על ידי ה-rule הספציפי של coachBroadcasts.
-    allow create, delete: if false;
-
-    // המשתמש רשאי לשנות רק את מצב ההודעה שלו.
-    allow update: if isSignedIn()
-               && request.auth.uid == uid
-
-               && resource.data.uid == uid
-               && request.resource.data.uid == uid
-
-               && request.resource.data
-                    .diff(resource.data)
-                    .affectedKeys()
-                    .hasOnly([
-                      "read",
-                      "readAt",
-                      "deleted",
-                      "deletedAt"
-                    ])
-
-               && request.resource.data.read is bool
-               && request.resource.data.deleted is bool;
+    // Collection Group משמש לקריאה בלבד.
+    // עדכון הודעות מותר רק לפי הכלל הספציפי
+    // coachBroadcasts/{broadcastId}/recipients/{uid}.
+    allow create, update, delete: if false;
   }
 
     // =========================
@@ -1321,14 +1362,24 @@ match /used_numbers/{phone} {
  // Free Sessions Participants
  // כל הגישה מתבצעת דרך Cloud Functions מאובטחות.
  // =========================
- match /branches/{branch}/groups/{groupKey}/free_sessions/{sessionId}/participants/{uid} {
+   match /branches/{branch}/groups/{groupKey}/free_sessions/{sessionId}/participants/{uid} {
 
-   // אין קריאה או כתיבה ישירה מהאפליקציה.
-   allow read, create, update, delete: if false;
- }
+     // אין קריאה או כתיבה ישירה מהאפליקציה.
+     allow read, create, update, delete: if false;
+  }
 
-      // =========================
-    // Attendance – נוכחות קבוצות
+   // =========================
+   // Attendance QR Tokens
+   //
+   // יצירה ואימות דרך Cloud Functions בלבד.
+   // אין לחשוף אסימונים או גיבובים ללקוחות.
+   // =========================
+   match /attendanceQrTokens/{occurrenceId} {
+     allow read, create, update, delete: if false;
+   }
+
+       // =========================
+     // Attendance – נוכחות קבוצות
     // פתוח למשתמשים מחוברים בשלב בדיקות,
     // כי הגישה למסכי נוכחות מוגבלת באפליקציה למאמנים בלבד.
     //
@@ -1490,18 +1541,21 @@ function isValidTraineeAttendanceData() {
       "id",
       "sessionId",
       "memberId",
-      "status",
+      "traineeStatus",
       "traineeUid",
-      "markedBy",
       "trainingStartMillis",
       "occurrenceKey",
       "occurrenceId",
-      "markedAtMillis",
+      "traineeMarkedAtMillis",
       "updatedAtMillis",
       "updatedAt"
     ])
 
-    && request.resource.data.status in [
+    && request.resource.data.id is int
+    && request.resource.data.sessionId is int
+    && request.resource.data.memberId is int
+
+    && request.resource.data.traineeStatus in [
       "PRESENT",
       "ABSENT"
     ]
@@ -1509,8 +1563,9 @@ function isValidTraineeAttendanceData() {
     && request.resource.data.traineeUid ==
        request.auth.uid
 
-    && request.resource.data.markedBy ==
-       "trainee"
+    && request.resource.data.traineeMarkedAtMillis is int
+    && request.resource.data.updatedAtMillis is int
+    && request.resource.data.updatedAt == request.time
 
     /*
      * trainingStartMillis נשאר לצורכי תאימות בלבד.
@@ -1644,30 +1699,77 @@ function isValidTraineeAttendanceData() {
               /databases/$(database)/documents/attendanceGroups/$(groupId)/members/$(recordId)
             ).data.id
 
-         // התאמת מזהה הרשומה למסמך הנוכחי
-         && request.resource.data.id == recordId
-
-         // התאמת השיעור לנתיב הרשומה
-         && request.resource.data.sessionId == sessionId
+         /*
+          * id ו-sessionId הם מזהים מספריים.
+          * recordId ו-sessionId בנתיב הם מחרוזות.
+          *
+          * זהות המתאמן נבדקת באמצעות
+          * מסמך members/{recordId}.
+          *
+          * תאריך האימון נבדק מול
+          * trainingOccurrences.sessionDate.
+          */
+         && request.resource.data.id is int
+         && request.resource.data.sessionId is int
 
          && request.resource.data.traineeUid ==
             request.auth.uid
 
-       && request.resource.data.markedBy ==
-          "trainee"
+         && request.resource.data.markedBy ==
+            "trainee"
 
-       && request.resource.data.status in [
-         "PRESENT",
-         "ABSENT"
-       ]
+         && request.resource.data.keys().hasOnly([
+           "id",
+           "sessionId",
+           "memberId",
+           "traineeStatus",
+           "traineeUid",
+           "markedBy",
+           "trainingStartMillis",
+           "occurrenceKey",
+           "occurrenceId",
+           "markedAtMillis",
+           "traineeMarkedAtMillis",
+           "updatedAtMillis",
+           "updatedAt"
+         ])
 
-       && request.resource.data.traineeStatus in [
-         "PRESENT",
-         "ABSENT"
-       ]
+              /*
+               * מסלול יצירה עצמית אינו רשאי ליצור
+               * אישור QR או סימון נוכחות של מאמן.
+               *
+               * שדות אלו נכתבים רק במסלול מהימן.
+               */
+              && !request.resource.data.keys().hasAny([
+                "coachStatus",
+                "coachUid",
+                "coachEmail",
+                "qrVerified",
+                "qrVerifiedOccurrenceId",
+                "qrVerifiedTraineeUid",
+                "qrVerifiedAtMillis"
+              ])
 
-       && request.resource.data.occurrenceId is string
-       && request.resource.data.occurrenceKey is string
+            /*
+             * דיווח עצמי אינו נוכחות מאומתת.
+             * מתאמן אינו יכול ליצור status,
+             * coachStatus או שדות אימות QR.
+             */
+            && !request.resource.data.keys().hasAny([
+              "status",
+              "coachStatus",
+              "qrVerified"
+            ])
+
+            && request.resource.data.traineeStatus in [
+              "PRESENT",
+              "ABSENT"
+            ]
+
+            && request.resource.data.traineeMarkedAtMillis is int
+
+            && request.resource.data.occurrenceId is string
+            && request.resource.data.occurrenceKey is string
 
             && exists(
               /databases/$(database)/documents/trainingOccurrences/$(request.resource.data.occurrenceId)
@@ -1735,23 +1837,64 @@ function isValidTraineeAttendanceData() {
     (
       isOwnAttendanceRecord()
 
+      /*
+       * ניתן לשנות צפי הגעה לפני תחילת
+       * האימון גם כאשר נוכחות כבר אומתה.
+       *
+       * שדות הנוכחות המאומתת אינם ניתנים
+       * לשינוי דרך מסלול המתאמן.
+       */
       && isValidTraineeAttendanceData()
 
       && request.resource.data
           .diff(resource.data)
           .affectedKeys()
-              .hasOnly([
-          "status",
-          "traineeStatus",
-          "traineeUid",
-          "markedBy",
-          "trainingStartMillis",
-          "occurrenceKey",
-          "occurrenceId",
-          "markedAtMillis",
-          "updatedAtMillis",
-          "updatedAt"
-        ])
+          .hasOnly([
+            "traineeStatus",
+            "traineeUid",
+            "markedBy",
+            "trainingStartMillis",
+            "occurrenceKey",
+            "occurrenceId",
+            "traineeMarkedAtMillis",
+            "updatedAtMillis",
+            "updatedAt"
+          ])
+
+      /*
+       * אין להעביר דיווח לאימון אחר.
+       * ברשומות ישנות מותר להשלים
+       * מזהי אימון שחסרים.
+       */
+      && (
+        !("occurrenceId" in resource.data)
+        || request.resource.data.occurrenceId ==
+           resource.data.occurrenceId
+      )
+
+      && (
+        !("occurrenceKey" in resource.data)
+        || request.resource.data.occurrenceKey ==
+           resource.data.occurrenceKey
+      )
+
+      /*
+       * אסור לשנות את מקור הסימון
+       * כאשר כבר קיימת נוכחות מאומתת.
+       */
+      && (
+        !request.resource.data
+          .diff(resource.data)
+          .affectedKeys()
+          .hasAny(["markedBy"])
+        ||
+        (
+          resource.data.get("qrVerified", false) != true
+          && resource.data.get("coachStatus", "") == ""
+          && resource.data.get("markedBy", "") != "coach"
+          && request.resource.data.markedBy == "trainee"
+        )
+      )
 
       /*
        * אסור למתאמן להעביר את הרשומה

@@ -1,14 +1,17 @@
 package il.kmi.app.fcm
 
+import android.Manifest
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
+import android.content.pm.PackageManager
 import android.content.Intent
 import android.graphics.BitmapFactory
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
+import androidx.core.content.ContextCompat
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
 import il.kmi.app.FcmTokenManager
@@ -95,16 +98,17 @@ class KmiFirebaseMessagingService : FirebaseMessagingService() {
 
         // כותרת + טקסט – קודם מ-notification, אם אין אז מה-data, ואם אין אז ברירת מחדל
         val titleFromPayload =
-            message.notification?.title
-                ?: if (isEnglish) {
-                    data["titleEn"]
-                        ?: data["senderNameEn"]
-                        ?: data["title"]
-                } else {
-                    data["titleHe"]
-                        ?: data["senderNameHe"]
-                        ?: data["title"]
-                }
+            if (isEnglish) {
+                data["titleEn"]
+                    ?: data["senderNameEn"]
+                    ?: message.notification?.title
+                    ?: data["title"]
+            } else {
+                data["titleHe"]
+                    ?: data["senderNameHe"]
+                    ?: message.notification?.title
+                    ?: data["title"]
+            }
 
         val bodyFromPayload = message.notification?.body
             ?: data["body"]
@@ -192,6 +196,16 @@ class KmiFirebaseMessagingService : FirebaseMessagingService() {
         // יצירת ערוץ התראות (נדרש מ-Android 8+)
         createChannelIfNeeded()
 
+        val notificationKey =
+            if (type == "coach_broadcast" && broadcastId.isNotBlank()) {
+                "coach_broadcast:$broadcastId"
+            } else {
+                "$type:${System.nanoTime()}"
+            }
+
+        val requestCode =
+            notificationKey.hashCode() and Int.MAX_VALUE
+
         // Intent שייפתח בלחיצה על ההתראה
         val intent = Intent(context, MainActivity::class.java).apply {
             // ✅ פתיחה אמינה גם כשהאפליקציה סגורה, ברקע או כבר פתוחה.
@@ -201,20 +215,20 @@ class KmiFirebaseMessagingService : FirebaseMessagingService() {
                         Intent.FLAG_ACTIVITY_CLEAR_TOP or
                         Intent.FLAG_ACTIVITY_SINGLE_TOP
 
-            action = "il.kmi.app.OPEN_FROM_PUSH_${System.currentTimeMillis()}"
+            action = "il.kmi.app.OPEN_FROM_PUSH_$notificationKey"
             setPackage(context.packageName)
 
+            // העברת הנתונים המקוריים לצורך תאימות למנגנון הקיים.
+            data.forEach { (key, value) ->
+                putExtra(key, value)
+            }
+
+            // ערכי הניתוב שנקבעו באפליקציה מקבלים עדיפות.
             putExtra("open_from_push", true)
             putExtra("fcm_type", type)
             putExtra("type", type)
             putExtra("push_title", title)
             putExtra("push_body", body)
-
-            // שומרים גם את כל שדות ה-data המקוריים, כדי ש-MainActivity תוכל לקלוט
-            // גם אם Cloud Function שינתה שם שדה.
-            data.forEach { (key, value) ->
-                putExtra(key, value)
-            }
 
             if (broadcastId.isNotBlank()) {
                 putExtra("broadcastId", broadcastId)
@@ -237,7 +251,8 @@ class KmiFirebaseMessagingService : FirebaseMessagingService() {
             data["messageId"]?.let { putExtra("forumMessageId", it) }
             data["senderId"]?.let { putExtra("forumSenderId", it) }
 
-            // ✅ אם זו הודעת מאמן – שומרים גם Intent וגם SharedPreferences
+            // הודעת מאמן: העברת נתוני ניווט באמצעות Intent בלבד.
+            // תוכן ההודעה הקבוע ייטען מ-Firestore במרכז ההודעות.
             val isCoachBroadcast =
                 type == "coach_broadcast" || broadcastId.isNotBlank()
 
@@ -248,72 +263,15 @@ class KmiFirebaseMessagingService : FirebaseMessagingService() {
                     putExtra(CoachGate.EXTRA_BROADCAST_ID, broadcastId)
                 }
 
-                val gateText =
-                    firstDataString("text", "body", "message", "content", "push_body")
-                        .ifBlank { body }
+                // מזהה השידור מועבר דרך EXTRA_BROADCAST_ID
+                // שהוגדר לעיל. אין צורך להעביר תוכן
+                // הודעה לדיאלוג הישן.
 
-                putExtra(CoachGate.EXTRA_TEXT, gateText)
-
-                val gateFrom =
-                    if (isEnglish) {
-                        firstDataString(
-                            "senderNameEn",
-                            "sender_name_en",
-                            "senderName",
-                            "sender_name",
-                            "coachName",
-                            "coach_name",
-                            "from"
-                        )
-                            .ifBlank {
-                                "K.M.I Team"
-                            }
-                    } else {
-                        firstDataString(
-                            "senderNameHe",
-                            "sender_name_he",
-                            "senderName",
-                            "sender_name",
-                            "coachName",
-                            "coach_name",
-                            "from"
-                        )
-                            .ifBlank {
-                                "צוות ק.מ.י"
-                            }
-                    }
-
-                putExtra(CoachGate.EXTRA_FROM, gateFrom)
-
-                val sentAtMillis =
-                    firstDataString("sentAt", "createdAt", "createdAtMillis", "sentAtMillis")
-                        .toLongOrNull()
-                        ?: System.currentTimeMillis()
-
-                putExtra(CoachGate.EXTRA_SENT_AT, sentAtMillis)
-
-                // ✅ שכבת ביטחון:
-                // גם אם ה־Intent לא ייקלט מסיבה כלשהי, האפליקציה כבר תדע שיש הודעת מאמן ממתינה.
-                context.getSharedPreferences(CoachGate.SP_NAME, Context.MODE_PRIVATE)
-                    .edit()
-                    .putBoolean(CoachGate.SP_HAS_PENDING, true)
-                    .putString(CoachGate.SP_TEXT, gateText)
-                    .putString(CoachGate.SP_FROM, gateFrom)
-                    .putLong(CoachGate.SP_SENT_AT, sentAtMillis)
-                    .putString(CoachGate.SP_BROADCAST_ID, broadcastId)
-                    .apply()
-
-                context.getSharedPreferences("kmi_settings", Context.MODE_PRIVATE)
-                    .edit()
-                    .putBoolean("coach_broadcast_open_from_push", true)
-                    .putBoolean("coach_broadcast_open_dialog", true)
-                    .putString("coach_broadcast_push_id", broadcastId)
-                    .putLong("coach_broadcast_push_received_at", System.currentTimeMillis())
-                    .apply()
+                // שומרים את נתוני הניווט ב-Intent בלבד.
+                // אין לסמן הודעה כממתינה בעת קבלת Push.
+                // MainActivity תטפל בניווט רק לאחר לחיצה על ההתראה.
             }
         }
-
-        val requestCode = (System.currentTimeMillis() and 0xFFFFFFF).toInt()
 
         val pendingIntent = PendingIntent.getActivity(
             context,
@@ -321,6 +279,16 @@ class KmiFirebaseMessagingService : FirebaseMessagingService() {
             intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
+
+        if (
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.POST_NOTIFICATIONS
+            ) != PackageManager.PERMISSION_GRANTED
+        ) {
+            return
+        }
 
         val kmiLogo =
             BitmapFactory.decodeResource(

@@ -2,7 +2,6 @@ package il.kmi.app.navigation
 
 import android.content.Intent
 import android.content.SharedPreferences
-import android.net.Uri
 import androidx.compose.ui.platform.LocalContext
 import androidx.navigation.NavGraphBuilder
 import androidx.navigation.NavHostController
@@ -110,22 +109,10 @@ fun NavGraphBuilder.coachNavGraph(
                         }
                     },
 
-            // פתיחת אפליקציית SMS עם כל המספרים המסומנים
-            onOpenSms = { numbers, message ->
-                if (numbers.isEmpty()) return@CoachBroadcastScreen
+                    // הודעות מאמן נשמרות ב-Firestore ונשלחות באמצעות Push.
+                    // אין פתיחה של אפליקציית SMS.
 
-                val uri = "smsto:" + numbers.joinToString(";")
-                val intent = Intent(Intent.ACTION_SENDTO).apply {
-                    data = Uri.parse(uri)
-                    putExtra("sms_body", message)
-                }
-
-                runCatching {
-                    ctx.startActivity(intent)
-                }
-            },
-
-            // שיתוף טקסט כללי: וואטסאפ / מייל / טלגרם וכו'
+                    // שיתוף טקסט כללי: וואטסאפ / מייל / טלגרם וכו'
                     onShareText = { message ->
                         if (message.isBlank()) {
                             return@CoachBroadcastScreen

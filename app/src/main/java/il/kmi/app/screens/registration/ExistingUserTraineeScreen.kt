@@ -7,60 +7,109 @@ package il.kmi.app.screens.registration
 
 import android.content.Context
 import android.content.SharedPreferences
+import android.security.keystore.KeyGenParameterSpec
+import android.security.keystore.KeyProperties
+import android.util.Base64
+import android.util.Log
 import android.util.Patterns
+import android.widget.Toast
 import android.view.HapticFeedbackConstants
 import android.view.SoundEffectConstants
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.defaultMinSize
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.systemBars
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.relocation.BringIntoViewRequester
 import androidx.compose.foundation.relocation.bringIntoViewRequester
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.CheckboxDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Tab
+import androidx.compose.material3.TabRow
+import androidx.compose.material3.TabRowDefaults
+import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.content.edit
+import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.Source
+import com.google.firebase.functions.FirebaseFunctions
+import il.kmi.app.FcmTokenManager
 import il.kmi.app.ui.KmiIconSize
 import il.kmi.app.ui.KmiTopBar
 import il.kmi.app.ui.KmiTypography
-import il.yuval.ui.theme.kmiScreenBackgroundBrush
-import il.yuval.ui.theme.kmiSectionHeaderBrush
-import il.kmi.shared.prefs.KmiPrefs
-import kotlinx.coroutines.launch
-import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
-import il.kmi.app.FcmTokenManager
 import il.kmi.shared.localization.AppLanguage
 import il.kmi.shared.localization.AppLanguageManager
-import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.firestore.FirebaseFirestore
-import com.google.firebase.functions.FirebaseFunctions
+import il.kmi.shared.prefs.KmiPrefs
+import il.yuval.ui.theme.kmiScreenBackgroundBrush
+import il.yuval.ui.theme.kmiSectionHeaderBrush
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
-import android.security.keystore.KeyGenParameterSpec
-import android.security.keystore.KeyProperties
-import android.util.Base64
+import kotlinx.coroutines.withTimeoutOrNull
+import kotlin.time.Duration.Companion.seconds
 import java.security.KeyStore
 import java.util.UUID
 import javax.crypto.Cipher
@@ -242,10 +291,9 @@ private object SecureLoginPasswordStore {
         context.getSharedPreferences(
             PREFS_NAME,
             Context.MODE_PRIVATE
-        )
-            .edit()
-            .clear()
-            .apply()
+        ).edit {
+            clear()
+        }
     }
 }
 
@@ -285,12 +333,12 @@ private object KmiDeviceIdentity {
             UUID.randomUUID()
                 .toString()
 
-        prefs.edit()
-            .putString(
+        prefs.edit(commit = true) {
+            putString(
                 KEY_DEVICE_ID,
                 newDeviceId
             )
-            .commit()
+        }
 
         return newDeviceId
     }
@@ -301,13 +349,18 @@ private enum class DeviceBindingResult {
     TRANSFER_REQUIRED
 }
 
+private data class DeviceBindingCheck(
+    val result: DeviceBindingResult,
+    val activeDeviceId: String
+)
+
 private suspend fun checkCurrentDevice(
     context: Context,
     uid: String
-): DeviceBindingResult {
+): DeviceBindingCheck {
 
     if (uid.isBlank()) {
-        return DeviceBindingResult.ALLOWED
+        throw IllegalArgumentException("Missing user UID")
     }
 
     val deviceId =
@@ -321,47 +374,73 @@ private suspend fun checkCurrentDevice(
             .collection("users")
             .document(uid)
 
+    if (
+        FirebaseAuth.getInstance().currentUser?.uid != uid
+    ) {
+        throw IllegalStateException(
+            "Authenticated user does not match"
+        )
+    }
+
     val snapshot =
-        userRef
-            .get()
-            .await()
+        userRef.get(Source.SERVER).await()
+
+    if (!snapshot.exists()) {
+        throw IllegalStateException(
+            "User profile does not exist"
+        )
+    }
 
     val activeDeviceId =
-        snapshot
-            .getString("activeDeviceId")
+        snapshot.getString("activeDeviceId")
             .orEmpty()
             .trim()
 
-    /*
-     * אין עדיין מכשיר רשום:
-     * זה המכשיר הראשון ולכן רושמים אותו.
-     */
-    if (activeDeviceId.isBlank()) {
-
-        userRef.set(
-            mapOf(
-                "activeDeviceId" to deviceId,
-                "activeDeviceUpdatedAt" to
-                        com.google.firebase.firestore.FieldValue.serverTimestamp()
-            ),
-            com.google.firebase.firestore.SetOptions.merge()
-        ).await()
-
-        return DeviceBindingResult.ALLOWED
-    }
-
-    /*
-     * אותו מכשיר שכבר רשום לחשבון.
-     */
     if (activeDeviceId == deviceId) {
-        return DeviceBindingResult.ALLOWED
+        return DeviceBindingCheck(
+            result = DeviceBindingResult.ALLOWED,
+            activeDeviceId = deviceId
+        )
+    }
+
+    if (activeDeviceId.isNotBlank()) {
+        return DeviceBindingCheck(
+            result = DeviceBindingResult.TRANSFER_REQUIRED,
+            activeDeviceId = activeDeviceId
+        )
     }
 
     /*
-     * קיים מכשיר אחר.
-     * לא משנים עדיין שום דבר ב־Firestore.
+     * שיוך ראשוני בלבד:
+     * אין מכשיר פעיל ולכן מבקשים
+     * מהשרת לבצע את השיוך האטומי.
      */
-    return DeviceBindingResult.TRANSFER_REQUIRED
+    val result =
+        FirebaseFunctions
+            .getInstance("europe-west1")
+            .getHttpsCallable("transferKmiActiveDevice")
+            .call(
+                mapOf(
+                    "deviceId" to deviceId,
+                    "expectedActiveDeviceId" to ""
+                )
+            )
+            .await()
+
+    val accepted =
+        (result.data as? Map<*, *>)
+            ?.get("accepted") == true
+
+    if (!accepted) {
+        throw IllegalStateException(
+            "Initial device binding not confirmed"
+        )
+    }
+
+    return DeviceBindingCheck(
+        result = DeviceBindingResult.ALLOWED,
+        activeDeviceId = deviceId
+    )
 }
 
 internal suspend fun isCurrentDeviceStillActive(
@@ -378,12 +457,18 @@ internal suspend fun isCurrentDeviceStillActive(
             context
         )
 
+    if (
+        FirebaseAuth.getInstance().currentUser?.uid != uid
+    ) {
+        return false
+    }
+
     val snapshot =
         FirebaseFirestore
             .getInstance()
             .collection("users")
             .document(uid)
-            .get()
+            .get(Source.SERVER)
             .await()
 
     val activeDeviceId =
@@ -408,30 +493,50 @@ internal suspend fun isCurrentDeviceStillActive(
 
 private suspend fun transferCurrentDevice(
     context: Context,
-    uid: String
+    uid: String,
+    expectedActiveDeviceId: String
 ) {
-    if (uid.isBlank()) {
-        return
+    require(uid.isNotBlank())
+    require(expectedActiveDeviceId.isNotBlank())
+
+    val user =
+        FirebaseAuth.getInstance().currentUser
+
+    if (
+        user == null ||
+        user.isAnonymous ||
+        user.uid != uid
+    ) {
+        throw IllegalStateException(
+            "Authenticated user changed"
+        )
     }
 
     val deviceId =
-        KmiDeviceIdentity.getOrCreate(
-            context
-        )
+        KmiDeviceIdentity.getOrCreate(context)
 
-    FirebaseFirestore
-        .getInstance()
-        .collection("users")
-        .document(uid)
-        .set(
-            mapOf(
-                "activeDeviceId" to deviceId,
-                "activeDeviceUpdatedAt" to
-                        com.google.firebase.firestore.FieldValue.serverTimestamp()
-            ),
-            com.google.firebase.firestore.SetOptions.merge()
+    val result =
+        FirebaseFunctions
+            .getInstance("europe-west1")
+            .getHttpsCallable("transferKmiActiveDevice")
+            .call(
+                mapOf(
+                    "deviceId" to deviceId,
+                    "expectedActiveDeviceId" to
+                            expectedActiveDeviceId
+                )
+            )
+            .await()
+
+    val accepted =
+        (result.data as? Map<*, *>)
+            ?.get("accepted") == true
+
+    if (!accepted) {
+        throw IllegalStateException(
+            "Device transfer not confirmed"
         )
-        .await()
+    }
 }
 
 @Composable
@@ -600,6 +705,10 @@ fun ExistingUserTraineeScreen(
         mutableStateOf("")
     }
 
+    var pendingTransferPreviousDeviceId by rememberSaveable {
+        mutableStateOf("")
+    }
+
     var deviceTransferInProgress by rememberSaveable {
         mutableStateOf(false)
     }
@@ -608,12 +717,52 @@ fun ExistingUserTraineeScreen(
         mutableStateOf(false)
     }
 
+    fun cancelDeviceTransfer() {
+        if (deviceTransferInProgress) return
+
+        deviceTransferInProgress = true
+
+        scope.launch {
+            val tokenRemoved =
+                withTimeoutOrNull(5.seconds) {
+                    FcmTokenManager
+                        .removeCurrentDeviceTokenBeforeSignOut()
+                } == true
+
+            if (!tokenRemoved) {
+                Log.w(
+                    "KMI_FCM_LOGOUT",
+                    "FCM token cleanup not confirmed before device transfer cancellation"
+                )
+            }
+
+            FirebaseAuth.getInstance().signOut()
+
+            sp.edit {
+                putBoolean("is_logged_in", false)
+            }
+
+            appCtx.getSharedPreferences(
+                "kmi_user",
+                Context.MODE_PRIVATE
+            ).edit {
+                putBoolean("is_logged_in", false)
+            }
+
+            pendingTransferUid = ""
+            pendingTransferPreviousDeviceId = ""
+            deviceTransferError = false
+            deviceTransferInProgress = false
+            showDeviceTransferDialog = false
+        }
+    }
+
     LaunchedEffect(loginSucceeded) {
         if (loginSucceeded && !navigated) {
             navigated = true
 
-            // 👇 שמירת FCM token למשתמש שנכנס
-            FcmTokenManager.refreshTokenForCurrentUser()
+            // רענון FCM רק לאחר התחברות ואישור שיוך המכשיר.
+            FcmTokenManager.refreshTokenAfterAuthorizedLogin()
 
             onLoginComplete()
         }
@@ -632,35 +781,7 @@ fun ExistingUserTraineeScreen(
 
         AlertDialog(
             onDismissRequest = {
-                if (!deviceTransferInProgress) {
-
-                    FirebaseAuth
-                        .getInstance()
-                        .signOut()
-
-                    sp.edit {
-                        putBoolean(
-                            "is_logged_in",
-                            false
-                        )
-                    }
-
-                    appCtx
-                        .getSharedPreferences(
-                            "kmi_user",
-                            Context.MODE_PRIVATE
-                        )
-                        .edit {
-                            putBoolean(
-                                "is_logged_in",
-                                false
-                            )
-                        }
-
-                    pendingTransferUid = ""
-                    deviceTransferError = false
-                    showDeviceTransferDialog = false
-                }
+                cancelDeviceTransfer()
             },
             title = {
                 Text(
@@ -737,9 +858,28 @@ fun ExistingUserTraineeScreen(
                             runCatching {
                                 transferCurrentDevice(
                                     context = appCtx,
-                                    uid = pendingTransferUid
+                                    uid = pendingTransferUid,
+                                    expectedActiveDeviceId =
+                                        pendingTransferPreviousDeviceId
                                 )
                             }.onSuccess {
+
+                                sp.edit {
+                                    putBoolean(
+                                        "is_logged_in",
+                                        true
+                                    )
+                                }
+
+                                appCtx.getSharedPreferences(
+                                    "kmi_user",
+                                    Context.MODE_PRIVATE
+                                ).edit {
+                                    putBoolean(
+                                        "is_logged_in",
+                                        true
+                                    )
+                                }
 
                                 deviceTransferInProgress =
                                     false
@@ -748,6 +888,9 @@ fun ExistingUserTraineeScreen(
                                     false
 
                                 pendingTransferUid =
+                                    ""
+
+                                pendingTransferPreviousDeviceId =
                                     ""
 
                                 loginSucceeded =
@@ -796,33 +939,7 @@ fun ExistingUserTraineeScreen(
                     enabled =
                         !deviceTransferInProgress,
                     onClick = {
-
-                        FirebaseAuth
-                            .getInstance()
-                            .signOut()
-
-                        sp.edit {
-                            putBoolean(
-                                "is_logged_in",
-                                false
-                            )
-                        }
-
-                        appCtx
-                            .getSharedPreferences(
-                                "kmi_user",
-                                Context.MODE_PRIVATE
-                            )
-                            .edit {
-                                putBoolean(
-                                    "is_logged_in",
-                                    false
-                                )
-                            }
-
-                        pendingTransferUid = ""
-                        deviceTransferError = false
-                        showDeviceTransferDialog = false
+                        cancelDeviceTransfer()
                     }
                 ) {
                     Text(
@@ -1339,14 +1456,52 @@ fun ExistingUserTraineeScreen(
                                     firebaseUser.uid
 
                                 val deviceBindingResult =
-                                    runCatching {
+                                    try {
                                         checkCurrentDevice(
                                             context = appCtx,
                                             uid = resolvedLoginUid
                                         )
-                                    }.getOrDefault(
-                                        DeviceBindingResult.ALLOWED
-                                    )
+                                    } catch (e: kotlinx.coroutines.CancellationException) {
+                                        throw e
+                                    } catch (e: Exception) {
+                                        Log.w(
+                                            "KMI_DEVICE_AUTH",
+                                            "Device authorization check failed",
+                                            e
+                                        )
+
+                                        sp.edit {
+                                            putBoolean(
+                                                "is_logged_in",
+                                                false
+                                            )
+                                        }
+
+                                        appCtx.getSharedPreferences(
+                                            "kmi_user",
+                                            Context.MODE_PRIVATE
+                                        ).edit {
+                                            putBoolean(
+                                                "is_logged_in",
+                                                false
+                                            )
+                                        }
+
+                                        FirebaseAuth
+                                            .getInstance()
+                                            .signOut()
+
+                                        Toast.makeText(
+                                            appCtx,
+                                            tr(
+                                                "לא ניתן לאמת את המכשיר כרגע. בדוק את החיבור לאינטרנט ונסה שוב.",
+                                                "Unable to verify this device. Check your internet connection and try again."
+                                            ),
+                                            Toast.LENGTH_LONG
+                                        ).show()
+
+                                        return@launch
+                                    }
 
                                 var resolvedCoachRole: String
                                 var resolvedCoachActive: Boolean
@@ -1363,17 +1518,14 @@ fun ExistingUserTraineeScreen(
 
                                 val coachOk =
                                     if (isCoach) {
-                                        val uid =
-                                            resolvedLoginUid
-
-                                        if (uid.isBlank()) {
+                                        if (resolvedLoginUid.isBlank()) {
                                             false
                                         } else {
                                             val coachDoc =
                                                 runCatching {
                                                     FirebaseFirestore.getInstance()
                                                         .collection("authorizedCoaches")
-                                                        .document(uid)
+                                                        .document(resolvedLoginUid)
                                                         .get()
                                                         .await()
                                                 }.getOrNull()
@@ -1431,9 +1583,22 @@ fun ExistingUserTraineeScreen(
                                 if (!coachOk) {
                                     loginError = true
 
-                                    // ניסיון כניסה כמאמן נכשל.
-                                    // לא מוחקים הרשאת מאמן קיימת ולא שומרים trainee,
-                                    // כדי לא לפגוע במאמן מורשה בגלל כשל זמני בזיהוי UID / רשת / Firebase.
+                                    // אין להשאיר סשן Firebase פעיל
+                                    // לאחר שניסיון כניסה כמאמן נדחה.
+                                    sp.edit {
+                                        putBoolean("is_logged_in", false)
+                                    }
+
+                                    appCtx.getSharedPreferences(
+                                        "kmi_user",
+                                        Context.MODE_PRIVATE
+                                    ).edit {
+                                        putBoolean("is_logged_in", false)
+                                    }
+
+                                    FirebaseAuth.getInstance().signOut()
+
+                                    // לא משנים הרשאות מאמן שמורות.
                                     return@launch
                                 }
 
@@ -1573,7 +1738,8 @@ fun ExistingUserTraineeScreen(
                                     )
                                     putBoolean(
                                         "is_logged_in",
-                                        true
+                                        deviceBindingResult.result ==
+                                                DeviceBindingResult.ALLOWED
                                     )
                                 }
 
@@ -1652,18 +1818,22 @@ fun ExistingUserTraineeScreen(
                                     )
                                     putBoolean(
                                         "is_logged_in",
-                                        true
+                                        deviceBindingResult.result ==
+                                                DeviceBindingResult.ALLOWED
                                     )
                                 }
 
                                 kmiPrefs.username = username
 
                                 if (
-                                    deviceBindingResult ==
+                                    deviceBindingResult.result ==
                                     DeviceBindingResult.TRANSFER_REQUIRED
                                 ) {
                                     pendingTransferUid =
                                         resolvedLoginUid
+
+                                    pendingTransferPreviousDeviceId =
+                                        deviceBindingResult.activeDeviceId
 
                                     deviceTransferError =
                                         false

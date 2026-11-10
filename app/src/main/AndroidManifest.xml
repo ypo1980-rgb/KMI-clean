@@ -19,6 +19,14 @@
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
 
+    <!-- מצלמה לסריקת QR לנוכחות באימון -->
+    <uses-permission android:name="android.permission.CAMERA" />
+
+    <!-- האפליקציה פועלת גם במכשירים ללא מצלמה -->
+    <uses-feature
+        android:name="android.hardware.camera"
+        android:required="false" />
+
     <application
         android:name=".KmiApp"
         android:allowBackup="true"

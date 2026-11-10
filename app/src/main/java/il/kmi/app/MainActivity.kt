@@ -1,5 +1,10 @@
 package il.kmi.app
 
+// Firebase
+
+// Screens / App
+
+// 👇 חדש: מיגרציית העדפות ל-KMP (חוצה-פלטפורמות)
 import android.Manifest
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -10,42 +15,41 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
 import android.util.Log
-import androidx.core.app.ActivityCompat
-import androidx.core.content.ContextCompat
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.isSystemInDarkTheme
-import androidx.compose.runtime.*
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.lifecycle.lifecycleScope
-import il.kmi.shared.localization.AppLanguageManager
-import il.kmi.app.subscription.BillingRepository
-import il.kmi.app.database.KmiDatabaseProvider
-import il.kmi.app.screens.BeltQuestions.ByTopic.HardSubjectResolverMemoryCache
-import il.kmi.app.screens.BeltQuestions.ByTopic.SubjectTopicsEngine
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-
-// Firebase
 import com.google.firebase.Timestamp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.SetOptions
-import com.google.firebase.messaging.FirebaseMessaging
+import il.kmi.app.database.KmiDatabaseProvider
 import il.kmi.app.notifications.CoachGate
-import il.kmi.app.screens.CoachMessageGateScreen
-
-// Screens / App
-import il.kmi.app.screens.IntroScreen
-import il.kmi.app.ui.loading.KmiStartupLoadingScreen
-import il.kmi.app.ui.KmiTtsManager
-import il.kmi.app.reminders.TrainingReminderScheduler
 import il.kmi.app.privacy.DemoPrivacy
+import il.kmi.app.reminders.TrainingReminderScheduler
+import il.kmi.app.screens.BeltQuestions.ByTopic.HardSubjectResolverMemoryCache
+import il.kmi.app.screens.BeltQuestions.ByTopic.SubjectTopicsEngine
+import il.kmi.app.screens.IntroScreen
 import il.kmi.app.search.GlobalExerciseSearchEngine
-import il.yuval.ui.theme.AppTheme
-
-// 👇 חדש: מיגרציית העדפות ל-KMP (חוצה-פלטפורמות)
+import il.kmi.app.subscription.BillingRepository
+import il.kmi.app.ui.KmiTtsManager
+import il.kmi.app.ui.loading.KmiStartupLoadingScreen
+import il.kmi.shared.localization.AppLanguageManager
 import il.kmi.shared.prefs.LegacyPrefsMigration
+import il.yuval.ui.theme.AppTheme
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
 // --------------------------------------------------------------
 
@@ -61,6 +65,9 @@ private const val SUPPRESS_NEXT_DRAWER_OPEN_KEY = "kmi_suppress_next_drawer_open
 class MainActivity : androidx.fragment.app.FragmentActivity() {
 
     private var billingRepository: BillingRepository? = null
+
+    private var fcmAuthStateListener:
+            FirebaseAuth.AuthStateListener? = null
 
     // מונע ספירה כפולה של אותה פתיחת אפליקציה.
     // אם onCreate רץ לפני שהמשתמש מזוהה,
@@ -383,6 +390,17 @@ class MainActivity : androidx.fragment.app.FragmentActivity() {
         }
     }
 
+    override fun onDestroy() {
+        fcmAuthStateListener?.let { listener ->
+            FirebaseAuth.getInstance()
+                .removeAuthStateListener(listener)
+        }
+
+        fcmAuthStateListener = null
+
+        super.onDestroy()
+    }
+
     // 👇 חדש: כשהאפליקציה כבר פתוחה/ברקע ולוחצים על ההתראה
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
@@ -420,10 +438,8 @@ class MainActivity : androidx.fragment.app.FragmentActivity() {
             "coach_broadcast_id"
         )
 
-        val shouldOpenCoachGate =
-            intent.getBooleanExtra(CoachGate.EXTRA_OPEN, false) ||
-                    intent.getBooleanExtra("open_from_push", false) ||
-                    rawType in setOf(
+        val isCoachPushType =
+            rawType in setOf(
                 "coach_broadcast",
                 "coachbroadcast",
                 "coach_message",
@@ -431,56 +447,62 @@ class MainActivity : androidx.fragment.app.FragmentActivity() {
                 "broadcast",
                 "trainer_message",
                 "trainer_broadcast"
-            ) ||
-                    broadcastId.isNotBlank()
+            )
+
+        val isForumPushType =
+            rawType in setOf(
+                "forum_message",
+                "forummessage",
+                "forum"
+            )
+
+        val shouldOpenCoachGate =
+            !isForumPushType &&
+                    (
+                            intent.getBooleanExtra(
+                                CoachGate.EXTRA_OPEN,
+                                false
+                            ) ||
+                                    isCoachPushType ||
+                                    broadcastId.isNotBlank()
+                            )
 
         if (!shouldOpenCoachGate) {
             return
         }
 
-        val gateSp = getSharedPreferences(CoachGate.SP_NAME, Context.MODE_PRIVATE)
-        val settingsSp = getSharedPreferences("kmi_settings", Context.MODE_PRIVATE)
+        // פונקציה זו מופעלת כאשר MainActivity נפתחת
+        // בעקבות Intent של התראה, ולא בעת קבלתה ברקע.
+        val settingsSp =
+            getSharedPreferences(
+                "kmi_settings",
+                Context.MODE_PRIVATE
+            )
 
         settingsSp.edit()
-            .putBoolean("coach_broadcast_open_from_push", true)
-            .putBoolean("coach_broadcast_open_dialog", true)
-            .putString("coach_broadcast_push_id", broadcastId)
-            .putLong("coach_broadcast_push_received_at", System.currentTimeMillis())
+            .putBoolean(
+                "coach_broadcast_open_on_tap",
+                true
+            )
+            .putString(
+                "coach_broadcast_push_id",
+                broadcastId
+            )
+            .remove("coach_broadcast_open_from_push")
+            .remove("coach_broadcast_open_dialog")
             .apply()
 
-        val text = firstStringExtra(
-            CoachGate.EXTRA_TEXT,
-            "text",
-            "body",
-            "message",
-            "content",
-            "push_body"
-        )
-
-        val from = firstStringExtra(
-            CoachGate.EXTRA_FROM,
-            "coachName",
-            "coach_name",
-            "from",
-            "senderName",
-            "sender_name"
-        ).ifBlank {
-            "המאמן"
-        }
-
-        val sentAt =
-            intent.getLongExtra(CoachGate.EXTRA_SENT_AT, 0L)
-                .takeIf { it > 0L }
-                ?: firstStringExtra("sentAt", "createdAt", "createdAtMillis", "sentAtMillis")
-                    .toLongOrNull()
-                ?: System.currentTimeMillis()
-
-        gateSp.edit()
-            .putBoolean(CoachGate.SP_HAS_PENDING, true)
-            .putString(CoachGate.SP_TEXT, text)
-            .putString(CoachGate.SP_FROM, from)
-            .putLong(CoachGate.SP_SENT_AT, sentAt)
-            .putString(CoachGate.SP_BROADCAST_ID, broadcastId)
+        // ניקוי מצב ישן של דיאלוג הודעות מאמן.
+        // תוכן ההודעה ייקרא מ-Firestore לאחר התחברות.
+        getSharedPreferences(
+            CoachGate.SP_NAME,
+            Context.MODE_PRIVATE
+        ).edit()
+            .remove(CoachGate.SP_HAS_PENDING)
+            .remove(CoachGate.SP_TEXT)
+            .remove(CoachGate.SP_FROM)
+            .remove(CoachGate.SP_SENT_AT)
+            .remove(CoachGate.SP_BROADCAST_ID)
             .apply()
     }
 
@@ -545,15 +567,31 @@ class MainActivity : androidx.fragment.app.FragmentActivity() {
             "forum_sender_id"
         )
 
-        val shouldOpenForum =
-            intent.getBooleanExtra("open_from_push", false) ||
-                    rawType in setOf(
+        val isForumPushType =
+            rawType in setOf(
                 "forum_message",
                 "forummessage",
                 "forum"
-            ) ||
-                    roomId.isNotBlank() ||
-                    messageId.isNotBlank()
+            )
+
+        val isCoachPushType =
+            rawType in setOf(
+                "coach_broadcast",
+                "coachbroadcast",
+                "coach_message",
+                "coachmessage",
+                "broadcast",
+                "trainer_message",
+                "trainer_broadcast"
+            )
+
+        val shouldOpenForum =
+            !isCoachPushType &&
+                    (
+                            isForumPushType ||
+                                    roomId.isNotBlank() ||
+                                    messageId.isNotBlank()
+                            )
 
         if (!shouldOpenForum) {
             return
@@ -670,97 +708,12 @@ class MainActivity : androidx.fragment.app.FragmentActivity() {
 
     private fun setupFcmTokenSync() {
         val auth = FirebaseAuth.getInstance()
-        val db = FirebaseFirestore.getInstance()
 
-        fun saveTokenToUserDoc(
-            userDocId: String,
-            token: String,
-            reason: String
-        ) {
-            val cleanUserDocId = userDocId.trim()
-            val cleanToken = token.trim()
+        // מנהל הטוקנים הגלובלי הוא מקור האמת.
+        // AuthStateListener מופעל גם עם רישומו.
+        val listener = FirebaseAuth.AuthStateListener { firebaseAuth ->
 
-            if (cleanUserDocId.isBlank()) {
-                return
-            }
-
-            if (cleanToken.isBlank()) {
-                return
-            }
-
-            val now = Timestamp.now()
-
-            db.collection("users")
-                .document(cleanUserDocId)
-                .set(
-                    mapOf(
-                        "uid" to cleanUserDocId,
-
-                        // תאימות אחורה / טוקן אחרון
-                        "fcmToken" to cleanToken,
-                        "fcmTokenUpdatedAt" to now,
-
-                        // מבנה מרובה טוקנים עבור Cloud Function
-                        "fcmTokens.$cleanToken" to mapOf(
-                            "token" to cleanToken,
-                            "platform" to "android",
-                            "updatedAt" to now,
-                            "reason" to reason
-                        )
-                    ),
-                    SetOptions.merge()
-                )
-                .addOnSuccessListener {
-                }
-                .addOnFailureListener {
-                }
-        }
-
-        fun syncForCurrentProfile() {
-            FirebaseMessaging.getInstance().token
-                .addOnSuccessListener { token ->
-
-                    val cleanToken =
-                        token
-                            ?.trim()
-                            .orEmpty()
-
-                    if (cleanToken.isBlank()) {
-                        return@addOnSuccessListener
-                    }
-
-                    val firebaseUser =
-                        auth.currentUser
-                            ?: return@addOnSuccessListener
-
-                    if (firebaseUser.isAnonymous) {
-                        return@addOnSuccessListener
-                    }
-
-                    val authUid =
-                        firebaseUser.uid
-                            .trim()
-
-                    if (authUid.isBlank()) {
-                        return@addOnSuccessListener
-                    }
-
-                    saveTokenToUserDoc(
-                        userDocId = authUid,
-                        token = cleanToken,
-                        reason = "firebase_auth_uid"
-                    )
-                }
-                .addOnFailureListener {
-                    // FCM token refresh is non-blocking.
-                }
-        }
-
-        syncForCurrentProfile()
-
-        auth.addAuthStateListener { firebaseAuth ->
-
-            syncForCurrentProfile()
+            FcmTokenManager.refreshTokenForCurrentUser()
 
             trackAppOpenForCurrentUser()
 
@@ -782,6 +735,9 @@ class MainActivity : androidx.fragment.app.FragmentActivity() {
                 }
             }
         }
+
+        fcmAuthStateListener = listener
+        auth.addAuthStateListener(listener)
     }
 
     private fun trackAppOpenForCurrentUser() {
@@ -932,18 +888,12 @@ private fun AndroidAppRoot(
             )
         }
     }
-    val gateSp = remember { ctx.getSharedPreferences(CoachGate.SP_NAME, Context.MODE_PRIVATE) }
-
     val forumPushSp = remember {
         ctx.getSharedPreferences("kmi_forum_push", Context.MODE_PRIVATE)
     }
 
     val settingsPushSp = remember {
         ctx.getSharedPreferences("kmi_settings", Context.MODE_PRIVATE)
-    }
-
-    var hasPendingGate by remember {
-        mutableStateOf(gateSp.getBoolean(CoachGate.SP_HAS_PENDING, false))
     }
 
     var hasPendingForumPush by remember {
@@ -955,18 +905,11 @@ private fun AndroidAppRoot(
 
     var hasPendingCoachBroadcastPush by remember {
         mutableStateOf(
-            settingsPushSp.getBoolean("coach_broadcast_open_from_push", false)
+            settingsPushSp.getBoolean(
+                "coach_broadcast_open_on_tap",
+                false
+            )
         )
-    }
-
-    DisposableEffect(gateSp) {
-        val l = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
-            if (key == CoachGate.SP_HAS_PENDING) {
-                hasPendingGate = gateSp.getBoolean(CoachGate.SP_HAS_PENDING, false)
-            }
-        }
-        gateSp.registerOnSharedPreferenceChangeListener(l)
-        onDispose { gateSp.unregisterOnSharedPreferenceChangeListener(l) }
     }
 
     DisposableEffect(forumPushSp, settingsPushSp) {
@@ -983,12 +926,13 @@ private fun AndroidAppRoot(
             }
 
             if (
-                key == "coach_broadcast_open_from_push" ||
-                key == "coach_broadcast_open_dialog" ||
-                key == "coach_broadcast_push_id"
+                key == "coach_broadcast_open_on_tap"
             ) {
                 hasPendingCoachBroadcastPush =
-                    settingsPushSp.getBoolean("coach_broadcast_open_from_push", false)
+                    settingsPushSp.getBoolean(
+                        "coach_broadcast_open_on_tap",
+                        false
+                    )
             }
         }
 
@@ -999,22 +943,6 @@ private fun AndroidAppRoot(
             forumPushSp.unregisterOnSharedPreferenceChangeListener(l)
             settingsPushSp.unregisterOnSharedPreferenceChangeListener(l)
         }
-    }
-
-    // ✅ אם יש הודעה ממתינה — מציגים כרטיס לפני Intro/Login
-    if (hasPendingGate) {
-        CoachMessageGateScreen(
-            onApprove = {
-                gateSp.edit()
-                    .putBoolean(CoachGate.SP_HAS_PENDING, false)
-                    .remove(CoachGate.SP_TEXT)
-                    .remove(CoachGate.SP_FROM)
-                    .remove(CoachGate.SP_SENT_AT)
-                    .remove(CoachGate.SP_BROADCAST_ID)
-                    .apply()
-            }
-        )
-        return
     }
 
     val isEnglish = remember(ctx) {
@@ -1108,10 +1036,20 @@ private fun AndroidAppRoot(
                 phone.length >= 9
     }
 
-// מסלול פתיחה חד-פעמי ל־MainApp
+    // מסלול פתיחה חד-פעמי ל־MainApp
     var startRoute by remember {
         mutableStateOf<String?>(
-            if (hasPendingForumPush) Route.Splash.route else null
+            when {
+                hasPendingCoachBroadcastPush &&
+                        firebaseUserAtEntry != null &&
+                        !firebaseUserAtEntry.isAnonymous ->
+                    Route.Home.route
+
+                hasPendingForumPush ->
+                    Route.Splash.route
+
+                else -> null
+            }
         )
     }
 
@@ -1121,8 +1059,14 @@ private fun AndroidAppRoot(
             when {
                 !initialLanguageSelected -> "language"
 
-                // לחיצה על התראת פורום / הודעת מאמן נכנסת ישירות ליעד המבוקש.
-                hasPendingForumPush || hasPendingCoachBroadcastPush -> "main"
+                // Push של מאמן פותח את האפליקציה ישירות
+                // רק כאשר המשתמש כבר מחובר ל-Firebase.
+                hasPendingCoachBroadcastPush &&
+                        firebaseUserAtEntry != null &&
+                        !firebaseUserAtEntry.isAnonymous -> "main"
+
+                // שומרים בשלב זה על התנהגות הפורום הקיימת.
+                hasPendingForumPush -> "main"
 
                 // בכל פתיחה רגילה מציגים תחילה את המסך הראשוני,
                 // גם כאשר המשתמש כבר מוכר ומחובר.
@@ -1137,8 +1081,16 @@ private fun AndroidAppRoot(
         initialLanguageSelected,
         currentScreen
     ) {
+        val firebaseUser =
+            FirebaseAuth.getInstance().currentUser
+
+        val canOpenCoachMessages =
+            hasPendingCoachBroadcastPush &&
+                    firebaseUser != null &&
+                    !firebaseUser.isAnonymous
+
         if (
-            (hasPendingForumPush || hasPendingCoachBroadcastPush) &&
+            (hasPendingForumPush || canOpenCoachMessages) &&
             initialLanguageSelected &&
             currentScreen != "main"
         ) {

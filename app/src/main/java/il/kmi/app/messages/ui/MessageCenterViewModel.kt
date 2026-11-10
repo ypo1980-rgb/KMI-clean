@@ -48,6 +48,15 @@ class MessageCenterViewModel : ViewModel() {
 
     private var listeningUid: String? = null
 
+    private val authStateListener =
+        FirebaseAuth.AuthStateListener {
+            startListening()
+        }
+
+    init {
+        auth.addAuthStateListener(authStateListener)
+    }
+
     fun startListening() {
         val uid =
             auth.currentUser
@@ -74,7 +83,15 @@ class MessageCenterViewModel : ViewModel() {
             return
         }
 
+        val userChanged =
+            listeningUid != uid
+
         stopListening()
+
+        if (userChanged) {
+            _messages.value = emptyList()
+            _unreadCount.value = 0
+        }
 
         listeningUid = uid
 
@@ -96,9 +113,12 @@ class MessageCenterViewModel : ViewModel() {
 
                     if (error != null) {
                         _isLoading.value = false
+
                         _errorMessage.value =
-                            error.message
-                                ?: error.javaClass.simpleName
+                            "MESSAGE_CENTER_LOAD_FAILED"
+
+                        // הנתונים האחרונים נשמרים אם קיימים.
+                        // תקלה ברשת אינה שקולה לרשימה ריקה.
                         return@addSnapshotListener
                     }
 
@@ -137,9 +157,9 @@ class MessageCenterViewModel : ViewModel() {
                                         .orEmpty()
 
                                 val id =
-                                    storedBroadcastId
+                                    parentBroadcastId
                                         .ifBlank {
-                                            parentBroadcastId
+                                            storedBroadcastId
                                         }
 
                                 if (id.isBlank()) {
@@ -321,10 +341,9 @@ class MessageCenterViewModel : ViewModel() {
                                 .serverTimestamp()
                 )
             )
-            .addOnFailureListener { error ->
+            .addOnFailureListener {
                 _errorMessage.value =
-                    error.message
-                        ?: error.javaClass.simpleName
+                    "MESSAGE_CENTER_MARK_READ_FAILED"
             }
     }
 
@@ -361,10 +380,9 @@ class MessageCenterViewModel : ViewModel() {
                                 .serverTimestamp()
                 )
             )
-            .addOnFailureListener { error ->
+            .addOnFailureListener {
                 _errorMessage.value =
-                    error.message
-                        ?: error.javaClass.simpleName
+                    "MESSAGE_CENTER_DELETE_FAILED"
             }
     }
 
@@ -377,6 +395,7 @@ class MessageCenterViewModel : ViewModel() {
     }
 
     override fun onCleared() {
+        auth.removeAuthStateListener(authStateListener)
         stopListening()
         super.onCleared()
     }

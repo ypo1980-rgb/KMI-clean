@@ -1422,6 +1422,932 @@ exports.onKamiContactRequestCreated =
       return null;
     });
 
+/*
+ * KAMI — Secure Attendance QR Creation
+ *
+ * Only an authorized coach or admin may create
+ * a QR token for a specific training occurrence.
+ *
+ * The token is random. Only its SHA-256 hash
+ * is stored in Firestore.
+ */
+exports.createKamiAttendanceQr =
+  functions
+    .region("europe-west1")
+    .https.onCall(async (data, context) => {
+
+      const uid =
+        String(context.auth?.uid || "").trim();
+
+      if (!uid) {
+        throw new functions.https.HttpsError(
+          "unauthenticated",
+          "User must be signed in."
+        );
+      }
+
+      const occurrenceId =
+        String(data?.occurrenceId || "").trim();
+
+      if (
+        !/^[a-f0-9]{64}$/.test(occurrenceId)
+      ) {
+        throw new functions.https.HttpsError(
+          "invalid-argument",
+          "Invalid training occurrence."
+        );
+      }
+
+      const [
+        adminSnapshot,
+        coachSnapshot,
+        occurrenceSnapshot,
+        overrideSnapshot,
+      ] = await Promise.all([
+        db.collection("admins").doc(uid).get(),
+        db.collection("authorizedCoaches").doc(uid).get(),
+        db.collection("trainingOccurrences")
+          .doc(occurrenceId).get(),
+        db.collection("trainingOverrides")
+          .doc(occurrenceId).get(),
+      ]);
+
+      if (!occurrenceSnapshot.exists) {
+        throw new functions.https.HttpsError(
+          "not-found",
+          "Training occurrence not found."
+        );
+      }
+
+      const occurrence =
+        occurrenceSnapshot.data() || {};
+
+      const branch =
+        String(occurrence.branch || "").trim();
+
+      const group =
+        String(occurrence.group || "").trim();
+
+      const occurrenceKey =
+        String(occurrence.occurrenceKey || "").trim();
+
+      if (
+        !branch ||
+        !group ||
+        !occurrenceKey ||
+        occurrence.occurrenceId !== occurrenceId
+      ) {
+        throw new functions.https.HttpsError(
+          "failed-precondition",
+          "Training identity is incomplete."
+        );
+      }
+
+      const adminData =
+        adminSnapshot.data() || {};
+
+      const coachData =
+        coachSnapshot.data() || {};
+
+      const isAdmin =
+        adminSnapshot.exists &&
+        adminData.enabled === true;
+
+      const isCoach =
+        coachSnapshot.exists &&
+        coachData.active === true &&
+        String(coachData.role || "")
+          .trim()
+          .toLowerCase() === "coach" &&
+        coachData.canManageAttendance === true;
+
+      const requestedPair =
+        normalizeTrainingTargetText(branch) +
+        "||" +
+        normalizeTrainingTargetText(group);
+
+      const allowedPairs =
+        Array.isArray(coachData.authorizedBranchGroups)
+          ? coachData.authorizedBranchGroups
+          : [];
+
+      const hasGroupPermission =
+        allowedPairs.some((value) => {
+          const raw = String(value || "");
+          const separator = raw.indexOf("||");
+
+          if (separator <= 0) {
+            return false;
+          }
+
+          const pairBranch =
+            normalizeTrainingTargetText(
+              raw.substring(0, separator)
+            );
+
+          const pairGroup =
+            normalizeTrainingTargetText(
+              raw.substring(separator + 2)
+            );
+
+          return (
+            `${pairBranch}||${pairGroup}` ===
+            requestedPair
+          );
+        });
+
+      if (
+        !isAdmin &&
+        !(isCoach && hasGroupPermission)
+      ) {
+        throw new functions.https.HttpsError(
+          "permission-denied",
+          "Not authorized for this training."
+        );
+      }
+
+      const override =
+        overrideSnapshot.exists
+          ? overrideSnapshot.data() || {}
+          : {};
+
+      const overrideActive =
+        override.isActive === true;
+
+      if (
+        overrideSnapshot.exists &&
+        override.occurrenceKey !== occurrenceKey
+      ) {
+        throw new functions.https.HttpsError(
+          "failed-precondition",
+          "Training override identity mismatch."
+        );
+      }
+
+      const isCancelled =
+        occurrence.isCancelled === true ||
+        (
+          overrideActive &&
+          override.type === "cancelled"
+        );
+
+      if (isCancelled) {
+        throw new functions.https.HttpsError(
+          "failed-precondition",
+          "Training has been cancelled."
+        );
+      }
+
+      const timeChanged =
+        overrideActive &&
+        override.type === "time_changed";
+
+      const startMillis = Number(
+        timeChanged
+          ? override.newStartMillis
+          : occurrence.effectiveStartMillis
+      );
+
+      const endMillis = Number(
+        timeChanged
+          ? override.newEndMillis
+          : occurrence.effectiveEndMillis
+      );
+
+      if (
+        !Number.isSafeInteger(startMillis) ||
+        !Number.isSafeInteger(endMillis) ||
+        startMillis <= 0 ||
+        endMillis <= startMillis
+      ) {
+        throw new functions.https.HttpsError(
+          "failed-precondition",
+          "Training schedule is invalid."
+        );
+      }
+
+      const windowStartMillis =
+        startMillis - 30 * 60 * 1000;
+
+      const windowEndMillis =
+        endMillis + 30 * 60 * 1000;
+
+      const nowMillis = Date.now();
+
+      if (
+        nowMillis < windowStartMillis ||
+        nowMillis > windowEndMillis
+      ) {
+        throw new functions.https.HttpsError(
+          "failed-precondition",
+          "Attendance QR is outside its active window.",
+          {
+            reason: "outside_qr_window",
+            windowStartMillis,
+            windowEndMillis,
+          }
+        );
+      }
+
+      const token =
+        crypto.randomBytes(32).toString("hex");
+
+      const tokenHash =
+        crypto.createHash("sha256")
+          .update(token)
+          .digest("hex");
+
+      const qrRef =
+        db.collection("attendanceQrTokens")
+          .doc(occurrenceId);
+
+      const occurrenceRef =
+        db.collection("trainingOccurrences")
+          .doc(occurrenceId);
+
+      const overrideRef =
+        db.collection("trainingOverrides")
+          .doc(occurrenceId);
+
+      await db.runTransaction(async (transaction) => {
+        /*
+         * קוראים גם את הרשאות המשתמש בתוך
+         * אותה Transaction שבה מונפק ה-QR.
+         */
+        const [
+          currentOccurrenceSnapshot,
+          currentOverrideSnapshot,
+          currentAdminSnapshot,
+          currentCoachSnapshot,
+        ] = await Promise.all([
+          transaction.get(occurrenceRef),
+          transaction.get(overrideRef),
+          transaction.get(
+            db.collection("admins").doc(uid)
+          ),
+          transaction.get(
+            db.collection("authorizedCoaches").doc(uid)
+          ),
+        ]);
+
+        if (!currentOccurrenceSnapshot.exists) {
+          throw new functions.https.HttpsError(
+            "failed-precondition",
+            "Training no longer exists."
+          );
+        }
+
+        const currentOccurrence =
+          currentOccurrenceSnapshot.data() || {};
+
+        const currentOverride =
+          currentOverrideSnapshot.exists
+            ? currentOverrideSnapshot.data() || {}
+            : {};
+
+        /*
+         * הרשאות המאמן נבדקות מחדש.
+         * אין להסתמך על הבדיקה שבוצעה
+         * לפני הכניסה ל-Transaction.
+         */
+        const currentAdmin =
+          currentAdminSnapshot.data() || {};
+
+        const currentCoach =
+          currentCoachSnapshot.data() || {};
+
+        const currentlyAdmin =
+          currentAdminSnapshot.exists &&
+          currentAdmin.enabled === true;
+
+        const currentlyCoach =
+          currentCoachSnapshot.exists &&
+          currentCoach.active === true &&
+          String(currentCoach.role || "")
+            .trim()
+            .toLowerCase() === "coach" &&
+          currentCoach.canManageAttendance === true;
+
+        const currentAssignments =
+          Array.isArray(currentCoach.authorizedBranchGroups)
+            ? currentCoach.authorizedBranchGroups
+            : [];
+
+        const currentlyAssigned =
+          currentAssignments.some((value) => {
+            const raw = String(value || "");
+            const separator = raw.indexOf("||");
+
+            if (separator <= 0) {
+              return false;
+            }
+
+            const assignedBranch =
+              normalizeTrainingTargetText(
+                raw.substring(0, separator)
+              );
+
+            const assignedGroup =
+              normalizeTrainingTargetText(
+                raw.substring(separator + 2)
+              );
+
+            return (
+              `${assignedBranch}||${assignedGroup}` ===
+              requestedPair
+            );
+          });
+
+        if (
+          !currentlyAdmin &&
+          !(currentlyCoach && currentlyAssigned)
+        ) {
+          throw new functions.https.HttpsError(
+            "permission-denied",
+            "Attendance QR permission was revoked."
+          );
+        }
+
+        if (
+          currentOccurrence.occurrenceId !== occurrenceId ||
+          currentOccurrence.occurrenceKey !== occurrenceKey ||
+          currentOccurrence.branch !== branch ||
+          currentOccurrence.group !== group ||
+          currentOccurrence.sessionDate !==
+            occurrence.sessionDate
+        ) {
+          throw new functions.https.HttpsError(
+            "failed-precondition",
+            "Training identity has changed."
+          );
+        }
+
+        if (
+          currentOverrideSnapshot.exists &&
+          currentOverride.occurrenceKey !== occurrenceKey
+        ) {
+          throw new functions.https.HttpsError(
+            "failed-precondition",
+            "Training override identity mismatch."
+          );
+        }
+
+        if (
+          currentOccurrence.isCancelled === true ||
+          (
+            currentOverride.isActive === true &&
+            currentOverride.type === "cancelled"
+          )
+        ) {
+          throw new functions.https.HttpsError(
+            "failed-precondition",
+            "Training has been cancelled."
+          );
+        }
+
+        const currentTimeChanged =
+          currentOverride.isActive === true &&
+          currentOverride.type === "time_changed";
+
+        const currentStart = Number(
+          currentTimeChanged
+            ? currentOverride.newStartMillis
+            : currentOccurrence.effectiveStartMillis
+        );
+
+        const currentEnd = Number(
+          currentTimeChanged
+            ? currentOverride.newEndMillis
+            : currentOccurrence.effectiveEndMillis
+        );
+
+        const transactionNow = Date.now();
+
+        if (
+          !Number.isSafeInteger(currentStart) ||
+          !Number.isSafeInteger(currentEnd) ||
+          currentEnd <= currentStart ||
+          currentStart !== startMillis ||
+          currentEnd !== endMillis ||
+          transactionNow < windowStartMillis ||
+          transactionNow > windowEndMillis
+        ) {
+          throw new functions.https.HttpsError(
+            "failed-precondition",
+            "Training schedule or QR window has changed."
+          );
+        }
+
+        /*
+         * משתמשים באותו חישוב מזהה קבוצה
+         * שבו משתמש AttendanceRepository.
+         */
+        const normalizeAttendanceIdentity = (value) =>
+          String(value || "")
+            .trim()
+            .replace(/[־–—]/g, "-")
+            .replace(/\u00a0/g, " ")
+            .replace(/\s+/g, " ")
+            .toLowerCase();
+
+        const attendanceGroupId =
+          "g_" +
+          kamiAttendanceStableLong(
+            normalizeAttendanceIdentity(branch) +
+            "|" +
+            normalizeAttendanceIdentity(group)
+          ).toString();
+
+        const savedReportsQuery =
+          db.collection("attendanceGroups")
+            .doc(attendanceGroupId)
+            .collection("reports")
+            .where(
+              "date",
+              "==",
+              String(currentOccurrence.sessionDate || "")
+            )
+            .limit(1);
+
+        const savedReportsSnapshot =
+          await transaction.get(savedReportsQuery);
+
+        if (!savedReportsSnapshot.empty) {
+          throw new functions.https.HttpsError(
+            "failed-precondition",
+            "Attendance report is already saved."
+          );
+        }
+
+        transaction.set(qrRef, {
+          occurrenceId,
+          occurrenceKey,
+          branch,
+          group,
+          sessionDate: occurrence.sessionDate,
+          tokenHash,
+          createdByUid: uid,
+          createdAtMillis: transactionNow,
+          windowStartMillis,
+          windowEndMillis,
+          updatedAt:
+            admin.firestore.FieldValue.serverTimestamp(),
+        });
+      });
+
+      console.log("KAMI_ATTENDANCE_QR_CREATED", {
+        occurrenceId,
+        coachUid: uid,
+      });
+
+      return {
+        accepted: true,
+        occurrenceId,
+        token,
+        windowStartMillis,
+        windowEndMillis,
+      };
+    });
+
+/*
+ * KAMI — Secure Attendance QR Scan
+ *
+ * The authenticated trainee is resolved through
+ * attendanceGroups/{groupId}/members.authUid.
+ *
+ * All security checks and the attendance write
+ * take place inside a Firestore transaction.
+ */
+exports.scanKamiAttendanceQr =
+  functions
+    .region("europe-west1")
+    .https.onCall(async (data, context) => {
+
+      const uid =
+        String(context.auth?.uid || "").trim();
+
+      if (!uid) {
+        throw new functions.https.HttpsError(
+          "unauthenticated",
+          "User must be signed in."
+        );
+      }
+
+      const occurrenceId =
+        String(data?.occurrenceId || "").trim();
+
+      const token =
+        String(data?.token || "").trim();
+
+      if (
+        !/^[a-f0-9]{64}$/.test(occurrenceId) ||
+        !/^[a-f0-9]{64}$/.test(token)
+      ) {
+        throw new functions.https.HttpsError(
+          "invalid-argument",
+          "Invalid attendance QR."
+        );
+      }
+
+      const tokenHash =
+        crypto.createHash("sha256")
+          .update(token)
+          .digest("hex");
+
+      const qrRef =
+        db.collection("attendanceQrTokens")
+          .doc(occurrenceId);
+
+      const occurrenceRef =
+        db.collection("trainingOccurrences")
+          .doc(occurrenceId);
+
+      const overrideRef =
+        db.collection("trainingOverrides")
+          .doc(occurrenceId);
+
+      const result = await db.runTransaction(
+        async (transaction) => {
+
+          const [
+            qrSnapshot,
+            occurrenceSnapshot,
+            overrideSnapshot,
+          ] = await Promise.all([
+            transaction.get(qrRef),
+            transaction.get(occurrenceRef),
+            transaction.get(overrideRef),
+          ]);
+
+          if (
+            !qrSnapshot.exists ||
+            !occurrenceSnapshot.exists
+          ) {
+            throw new functions.https.HttpsError(
+              "not-found",
+              "Attendance QR is unavailable."
+            );
+          }
+
+          const qr = qrSnapshot.data() || {};
+          const occurrence =
+            occurrenceSnapshot.data() || {};
+
+          const storedHash =
+            String(qr.tokenHash || "");
+
+          if (
+            !/^[a-f0-9]{64}$/.test(storedHash) ||
+            !crypto.timingSafeEqual(
+              Buffer.from(tokenHash, "hex"),
+              Buffer.from(storedHash, "hex")
+            )
+          ) {
+            throw new functions.https.HttpsError(
+              "permission-denied",
+              "Invalid attendance QR token."
+            );
+          }
+
+          const branch =
+            String(occurrence.branch || "").trim();
+
+          const group =
+            String(occurrence.group || "").trim();
+
+          const occurrenceKey =
+            String(occurrence.occurrenceKey || "")
+              .trim();
+
+          const sessionDate =
+            String(occurrence.sessionDate || "")
+              .trim();
+
+          if (
+            !branch ||
+            !group ||
+            !occurrenceKey ||
+            !/^\d{4}-\d{2}-\d{2}$/.test(sessionDate) ||
+            occurrence.occurrenceId !== occurrenceId ||
+            qr.occurrenceId !== occurrenceId ||
+            qr.occurrenceKey !== occurrenceKey ||
+            qr.branch !== branch ||
+            qr.group !== group ||
+            qr.sessionDate !== sessionDate
+          ) {
+            throw new functions.https.HttpsError(
+              "failed-precondition",
+              "Training identity mismatch."
+            );
+          }
+
+          const override =
+            overrideSnapshot.exists
+              ? overrideSnapshot.data() || {}
+              : {};
+
+          if (
+            overrideSnapshot.exists &&
+            override.occurrenceKey !== occurrenceKey
+          ) {
+            throw new functions.https.HttpsError(
+              "failed-precondition",
+              "Training override identity mismatch."
+            );
+          }
+
+          if (
+            occurrence.isCancelled === true ||
+            (
+              override.isActive === true &&
+              override.type === "cancelled"
+            )
+          ) {
+            throw new functions.https.HttpsError(
+              "failed-precondition",
+              "Training has been cancelled."
+            );
+          }
+
+          const timeChanged =
+            override.isActive === true &&
+            override.type === "time_changed";
+
+          const startMillis = Number(
+            timeChanged
+              ? override.newStartMillis
+              : occurrence.effectiveStartMillis
+          );
+
+          const endMillis = Number(
+            timeChanged
+              ? override.newEndMillis
+              : occurrence.effectiveEndMillis
+          );
+
+          if (
+            !Number.isSafeInteger(startMillis) ||
+            !Number.isSafeInteger(endMillis) ||
+            startMillis <= 0 ||
+            endMillis <= startMillis
+          ) {
+            throw new functions.https.HttpsError(
+              "failed-precondition",
+              "Invalid training schedule."
+            );
+          }
+
+          const nowMillis = Date.now();
+
+          const windowStart =
+            startMillis - 30 * 60 * 1000;
+
+          const windowEnd =
+            endMillis + 30 * 60 * 1000;
+
+          if (
+            nowMillis < windowStart ||
+            nowMillis > windowEnd ||
+            nowMillis < Number(qr.windowStartMillis) ||
+            nowMillis > Number(qr.windowEndMillis)
+          ) {
+            throw new functions.https.HttpsError(
+              "failed-precondition",
+              "Attendance QR has expired or is not active."
+            );
+          }
+
+          /*
+           * Match AttendanceRepository.groupDocId:
+           * SHA-256, first 8 bytes, positive Long.
+           */
+          const normalizeIdentity = (value) =>
+            String(value || "")
+              .trim()
+              .replace(/[־–—]/g, "-")
+              .replace(/\u00a0/g, " ")
+              .replace(/\s+/g, " ")
+              .toLowerCase();
+
+          const groupIdentity =
+            normalizeIdentity(branch) +
+            "|" +
+            normalizeIdentity(group);
+
+          const groupHash =
+            crypto.createHash("sha256")
+              .update(groupIdentity)
+              .digest();
+
+          const groupNumber =
+            groupHash.readBigUInt64BE(0) &
+            BigInt("0x7fffffffffffffff");
+
+          const groupId =
+            "g_" +
+            (
+              groupNumber === 0n
+                ? 1n
+                : groupNumber
+            ).toString();
+
+          const groupRef =
+            db.collection("attendanceGroups")
+              .doc(groupId);
+
+          /*
+           * אימות שמסמך הקבוצה קיים
+           * ומתאים בדיוק לסניף ולקבוצה של האימון.
+           */
+          const groupSnapshot =
+            await transaction.get(groupRef);
+
+          if (!groupSnapshot.exists) {
+            throw new functions.https.HttpsError(
+              "failed-precondition",
+              "Attendance group is unavailable."
+            );
+          }
+
+          const groupData =
+            groupSnapshot.data() || {};
+
+          if (
+            groupData.branch !== branch ||
+            groupData.groupKey !== group
+          ) {
+            throw new functions.https.HttpsError(
+              "failed-precondition",
+              "Attendance group identity mismatch."
+            );
+          }
+
+          const sessionRef =
+            groupRef.collection("sessions")
+              .doc(sessionDate);
+
+          const membersQuery =
+            groupRef.collection("members")
+              .where("authUid", "==", uid)
+              .limit(2);
+
+          /*
+           * דוח שמור נחשב לסגירת הנוכחות.
+           * הבדיקה מתבצעת באותה Transaction
+           * שבה נרשמת הנוכחות.
+           */
+          const savedReportsQuery =
+            groupRef.collection("reports")
+              .where("date", "==", sessionDate)
+              .limit(1);
+
+          const [
+            sessionSnapshot,
+            membersSnapshot,
+            savedReportsSnapshot,
+          ] = await Promise.all([
+            transaction.get(sessionRef),
+            transaction.get(membersQuery),
+            transaction.get(savedReportsQuery),
+          ]);
+
+          if (!savedReportsSnapshot.empty) {
+            throw new functions.https.HttpsError(
+              "failed-precondition",
+              "Attendance report is already saved."
+            );
+          }
+
+          if (!sessionSnapshot.exists) {
+            throw new functions.https.HttpsError(
+              "failed-precondition",
+              "Attendance session is unavailable."
+            );
+          }
+
+          if (membersSnapshot.size !== 1) {
+            throw new functions.https.HttpsError(
+              "permission-denied",
+              "Verified group membership is required."
+            );
+          }
+
+          const memberSnapshot =
+            membersSnapshot.docs[0];
+
+          const member =
+            memberSnapshot.data() || {};
+
+          /*
+           * AttendanceRepository uses positive Kotlin Long
+           * values as Firestore document IDs.
+           *
+           * JavaScript Number cannot safely represent
+           * every 64-bit Long, so the document ID is
+           * the canonical member identity.
+           */
+          const memberIdText =
+            memberSnapshot.id;
+
+          const validMemberId =
+            /^[1-9][0-9]{0,18}$/.test(memberIdText) &&
+            BigInt(memberIdText) <=
+              9223372036854775807n;
+
+          if (
+            member.isActive === false ||
+            member.authUid !== uid ||
+            !validMemberId
+          ) {
+            throw new functions.https.HttpsError(
+              "permission-denied",
+              "Attendance member is not active or valid."
+            );
+          }
+
+          const memberId =
+            BigInt(memberIdText);
+
+          const recordRef =
+            sessionRef.collection("records")
+              .doc(memberIdText);
+
+          const recordSnapshot =
+            await transaction.get(recordRef);
+
+          const existing =
+            recordSnapshot.exists
+              ? recordSnapshot.data() || {}
+              : {};
+
+          if (
+            existing.coachStatus === "PRESENT" ||
+            (
+              existing.markedBy === "qr" &&
+              existing.occurrenceId === occurrenceId &&
+              existing.status === "PRESENT"
+            )
+          ) {
+            return {
+              accepted: true,
+              alreadyRecorded: true,
+              occurrenceId,
+            };
+          }
+
+          transaction.set(
+            recordRef,
+            {
+              memberId,
+
+              // נוכחות בפועל — מתעדכנת אצל המאמן
+              coachStatus: "PRESENT",
+              status: "PRESENT",
+
+              // מקור הפעולה האחרונה
+              markedBy: "qr",
+
+              // זהות המתאמן המאומת
+              traineeUid: uid,
+
+              // זיהוי האימון
+              occurrenceId,
+              occurrenceKey,
+              trainingStartMillis: startMillis,
+
+              // אישור QR נפרד וקבוע
+              qrVerified: true,
+              qrVerifiedOccurrenceId: occurrenceId,
+              qrVerifiedTraineeUid: uid,
+              qrVerifiedAtMillis: nowMillis,
+
+              markedAtMillis: nowMillis,
+              updatedAtMillis: nowMillis,
+              updatedAt:
+                require("firebase-admin/firestore")
+                  .FieldValue.serverTimestamp(),
+            },
+            {
+              merge: true,
+            }
+          );
+
+          return {
+            accepted: true,
+            alreadyRecorded: false,
+            occurrenceId,
+          };
+        }
+      );
+
+      console.log("KAMI_ATTENDANCE_QR_SCAN", {
+        occurrenceId,
+        alreadyRecorded: result.alreadyRecorded,
+      });
+
+      return result;
+    });
+
 exports.recoverPassword = functions.https.onCall(async (data, context) => {
   const emailLower = normalizeEmail(
     data && data.email
@@ -8530,90 +9456,24 @@ exports.createSecureCoachBroadcast =
      );
 
 
-    /*
-     * כל UID / documentId ישן או חדש
-     * ימופה למסמך קנוני אחד בלבד.
-     *
-     * חשוב:
-     * בוחרים document.id כמזהה היעד,
-     * כי טריגר ה-Push קורא אחר כך users/{uid}.
-     */
-    const allowedRecipientByIdentity =
-      new Map();
+      /*
+       * מזהה יעד חייב להיות Firebase Auth UID אמיתי.
+       *
+       * רשומות היסטוריות משמשות רק לאיתור זהויות.
+       * הן אינן קובעות בעצמן את UID היעד.
+       */
+      const allowedRecipientByIdentity =
+        new Map();
 
-    recipientIdentityGroups.forEach(
-      (entries) => {
+      const requestedIdentitySet =
+        new Set(requestedTargetUids);
 
-        if (
-          !Array.isArray(entries) ||
-          entries.length === 0
-        ) {
-          return;
-        }
+      const relevantIdentityGroups =
+        recipientIdentityGroups.filter((entries) =>
+          entries.some((entry) => {
+            const user = entry.user || {};
 
-        const primary =
-          entries
-            .slice()
-            .sort((a, b) => {
-
-              const aUser =
-                a.user || {};
-
-              const bUser =
-                b.user || {};
-
-              const aScore =
-                (globalUserEmail(aUser) ? 1 : 0) +
-                (globalUserPhone(aUser) ? 1 : 0) +
-                (
-                  String(
-                    aUser.fullName ||
-                    aUser.name ||
-                    aUser.displayName ||
-                    ""
-                  ).trim()
-                    ? 1
-                    : 0
-                );
-
-              const bScore =
-                (globalUserEmail(bUser) ? 1 : 0) +
-                (globalUserPhone(bUser) ? 1 : 0) +
-                (
-                  String(
-                    bUser.fullName ||
-                    bUser.name ||
-                    bUser.displayName ||
-                    ""
-                  ).trim()
-                    ? 1
-                    : 0
-                );
-
-              return bScore - aScore;
-            })[0];
-
-        if (!primary) {
-          return;
-        }
-
-        const canonicalTargetUid =
-          String(
-            primary.id ||
-            ""
-          ).trim();
-
-        if (!canonicalTargetUid) {
-          return;
-        }
-
-        entries.forEach(
-          (entry) => {
-
-            const user =
-              entry.user || {};
-
-            [
+            return [
               entry.id,
               user.uid,
               user.authUid,
@@ -8621,25 +9481,118 @@ exports.createSecureCoachBroadcast =
               user.traineeId,
             ]
               .map((value) =>
-                String(value || "")
-                  .trim()
+                String(value || "").trim()
               )
-              .filter(Boolean)
-              .forEach((identity) => {
-                allowedRecipientByIdentity.set(
-                  identity,
-                  canonicalTargetUid
-                );
-              });
-          }
+              .some((value) =>
+                requestedIdentitySet.has(value)
+              );
+          })
         );
-      }
-    );
 
-    /*
-     * מאמתים כל יעד שהלקוח שלח.
-     */
-    const verifiedTargetUids =
+      const candidateAuthUids =
+        Array.from(
+          new Set(
+            relevantIdentityGroups.flatMap((entries) =>
+              entries.flatMap((entry) => {
+                const user = entry.user || {};
+
+                return [
+                  entry.id,
+                  user.uid,
+                  user.authUid,
+                ]
+                  .map((value) =>
+                    String(value || "").trim()
+                  )
+                  .filter(Boolean);
+              })
+            )
+          )
+        );
+
+      const verifiedAuthUids =
+        new Set();
+
+      // Firebase Admin getUsers supports up to 100 identifiers.
+      for (
+        let offset = 0;
+        offset < candidateAuthUids.length;
+        offset += 100
+      ) {
+        const candidateBatch =
+          candidateAuthUids.slice(
+            offset,
+            offset + 100
+          );
+
+        const authResult =
+          await admin.auth().getUsers(
+            candidateBatch.map((uid) => ({ uid }))
+          );
+
+        authResult.users.forEach((userRecord) => {
+          if (!userRecord.disabled) {
+            verifiedAuthUids.add(userRecord.uid);
+          }
+        });
+      }
+
+      relevantIdentityGroups.forEach((entries) => {
+        const validUids =
+          Array.from(
+            new Set(
+              entries.flatMap((entry) => {
+                const user = entry.user || {};
+
+                return [
+                  entry.id,
+                  user.uid,
+                  user.authUid,
+                ]
+                  .map((value) =>
+                    String(value || "").trim()
+                  )
+                  .filter((uid) =>
+                    verifiedAuthUids.has(uid)
+                  );
+              })
+            )
+          );
+
+        // אין להסיק בעלות כאשר קיימים כמה חשבונות Auth.
+        if (validUids.length !== 1) {
+          return;
+        }
+
+        const targetAuthUid = validUids[0];
+
+        entries.forEach((entry) => {
+          const user = entry.user || {};
+
+          [
+            entry.id,
+            user.uid,
+            user.authUid,
+            user.userDocId,
+            user.traineeId,
+          ]
+            .map((value) =>
+              String(value || "").trim()
+            )
+            .filter(Boolean)
+            .forEach((identity) => {
+              allowedRecipientByIdentity.set(
+                identity,
+                targetAuthUid
+              );
+            });
+        });
+      });
+
+      /*
+       * מאמתים כל יעד שהלקוח שלח.
+       */
+      const verifiedTargetUids =
       requestedTargetUids
         .map((requestedUid) =>
           allowedRecipientByIdentity.get(
@@ -14665,6 +15618,355 @@ exports.onUserProgressWritten =
       }
     );
 
+/*
+ * K.M.I — Device binding and FCM registration.
+ *
+ * Staged server-side implementation.
+ * Do not deploy before updating Android, iOS
+ * and the corresponding Firestore Rules.
+ */
+
+exports.transferKmiActiveDevice =
+  functions
+    .region("europe-west1")
+    .https
+    .onCall(async (data, context) => {
+      const uid = context.auth?.uid;
+
+      if (!uid) {
+        throw new functions.https.HttpsError(
+          "unauthenticated",
+          "Authentication required"
+        );
+      }
+
+      /*
+       * העברת מכשיר מחייבת התחברות עדכנית.
+       * auth_time מתקבל מטוקן Firebase Auth
+       * ולא מנתון שהלקוח שולח בבקשה.
+       */
+      const authTime =
+        Number(context.auth?.token?.auth_time || 0);
+
+      const nowSeconds =
+        Math.floor(Date.now() / 1000);
+
+      const authAgeSeconds =
+        nowSeconds - authTime;
+
+      if (
+        !Number.isFinite(authTime) ||
+        authTime <= 0 ||
+        authAgeSeconds < 0 ||
+        authAgeSeconds > 300
+      ) {
+        throw new functions.https.HttpsError(
+          "failed-precondition",
+          "Recent authentication required"
+        );
+      }
+
+      const deviceId =
+        typeof data?.deviceId === "string"
+          ? data.deviceId.trim()
+          : "";
+
+      const expectedActiveDeviceId =
+        typeof data?.expectedActiveDeviceId === "string"
+          ? data.expectedActiveDeviceId.trim()
+          : "";
+
+      if (
+        !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+          .test(deviceId) ||
+        expectedActiveDeviceId.length > 128
+      ) {
+        throw new functions.https.HttpsError(
+          "invalid-argument",
+          "Invalid device binding request"
+        );
+      }
+
+      const userRef =
+        db.collection("users").doc(uid);
+
+      return db.runTransaction(async (transaction) => {
+        const snapshot =
+          await transaction.get(userRef);
+
+        if (!snapshot.exists) {
+          throw new functions.https.HttpsError(
+            "failed-precondition",
+            "User profile does not exist"
+          );
+        }
+
+        const activeDeviceId =
+          String(
+            snapshot.get("activeDeviceId") || ""
+          ).trim();
+
+        if (
+          activeDeviceId !== expectedActiveDeviceId
+        ) {
+          throw new functions.https.HttpsError(
+            "failed-precondition",
+            "Active device changed"
+          );
+        }
+
+        if (activeDeviceId === deviceId) {
+          return {
+            accepted: true,
+            changed: false
+          };
+        }
+
+        transaction.update(userRef, {
+          activeDeviceId: deviceId,
+          activeDeviceUpdatedAt:
+            admin.firestore.FieldValue.serverTimestamp()
+        });
+
+        return {
+          accepted: true,
+          changed: true
+        };
+      });
+    });
+
+exports.registerKmiFcmToken =
+  functions
+    .region("europe-west1")
+    .https
+    .onCall(async (data, context) => {
+      const uid = context.auth?.uid;
+
+      if (!uid) {
+        throw new functions.https.HttpsError(
+          "unauthenticated",
+          "Authentication required"
+        );
+      }
+
+      const deviceId =
+        typeof data?.deviceId === "string"
+          ? data.deviceId.trim()
+          : "";
+
+      const token =
+        typeof data?.token === "string"
+          ? data.token.trim()
+          : "";
+
+      const platform =
+        data?.platform;
+
+      if (
+        !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+          .test(deviceId) ||
+        token.length < 20 ||
+        token.length > 4096 ||
+        !["android", "ios"].includes(platform)
+      ) {
+        throw new functions.https.HttpsError(
+          "invalid-argument",
+          "Invalid FCM registration"
+        );
+      }
+
+      const userRef =
+        db.collection("users").doc(uid);
+
+      return db.runTransaction(async (transaction) => {
+        const snapshot =
+          await transaction.get(userRef);
+
+        if (!snapshot.exists) {
+          throw new functions.https.HttpsError(
+            "failed-precondition",
+            "User profile does not exist"
+          );
+        }
+
+        const activeDeviceId =
+          String(
+            snapshot.get("activeDeviceId") || ""
+          ).trim();
+
+        if (
+          !activeDeviceId ||
+          activeDeviceId !== deviceId
+        ) {
+          throw new functions.https.HttpsError(
+            "permission-denied",
+            "Device is not active"
+          );
+        }
+
+        /*
+         * חשבון פעיל במכשיר אחד בלבד.
+         * רישום חדש מחליף את מפת הטוקנים
+         * ומסיר רשומות ממכשירים קודמים.
+         *
+         * כתיבה של כל המפה מבוצעת בתוך
+         * אותה עסקת Firestore.
+         */
+        const tokens = {
+          [token]: {
+            token,
+            deviceId,
+            platform,
+            updatedAt:
+              admin.firestore.Timestamp.now()
+          }
+        };
+
+        transaction.update(userRef, {
+          fcmToken: token,
+          fcmTokenUpdatedAt:
+            admin.firestore.FieldValue.serverTimestamp(),
+          fcmTokens: tokens
+        });
+
+        return {
+          accepted: true
+        };
+      });
+    });
+
+/*
+ * K.M.I — Secure FCM token removal.
+ *
+ * Removes only the authenticated user's
+ * registered token.
+ *
+ * Does not modify another active device.
+ */
+exports.unregisterKmiFcmToken =
+  functions
+    .region("europe-west1")
+    .https
+    .onCall(async (data, context) => {
+      const uid = context.auth?.uid;
+
+      if (!uid) {
+        throw new functions.https.HttpsError(
+          "unauthenticated",
+          "Authentication required"
+        );
+      }
+
+      const deviceId =
+        typeof data?.deviceId === "string"
+          ? data.deviceId.trim()
+          : "";
+
+      const token =
+        typeof data?.token === "string"
+          ? data.token.trim()
+          : "";
+
+      if (
+        !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+          .test(deviceId) ||
+        token.length < 20 ||
+        token.length > 4096
+      ) {
+        throw new functions.https.HttpsError(
+          "invalid-argument",
+          "Invalid FCM removal request"
+        );
+      }
+
+      const userRef =
+        db.collection("users").doc(uid);
+
+      return db.runTransaction(async (transaction) => {
+        const snapshot =
+          await transaction.get(userRef);
+
+        if (!snapshot.exists) {
+          return {
+            accepted: true,
+            removed: false
+          };
+        }
+
+        const activeDeviceId =
+          String(
+            snapshot.get("activeDeviceId") || ""
+          ).trim();
+
+        if (
+          !activeDeviceId ||
+          activeDeviceId !== deviceId
+        ) {
+          return {
+            accepted: true,
+            removed: false
+          };
+        }
+
+        const rawTokens =
+          snapshot.get("fcmTokens");
+
+        const tokens =
+          rawTokens &&
+          typeof rawTokens === "object" &&
+          !Array.isArray(rawTokens)
+            ? { ...rawTokens }
+            : {};
+
+        let removed = false;
+
+        for (const [key, entry] of Object.entries(tokens)) {
+          if (
+            entry &&
+            typeof entry === "object" &&
+            entry.deviceId === deviceId &&
+            entry.token === token
+          ) {
+            delete tokens[key];
+            removed = true;
+          }
+        }
+
+        const primaryToken =
+          String(
+            snapshot.get("fcmToken") || ""
+          ).trim();
+
+        const updates = {};
+
+        if (removed) {
+          updates.fcmTokens = tokens;
+        }
+
+        if (primaryToken === token) {
+          updates.fcmToken =
+            admin.firestore.FieldValue.delete();
+
+          updates.fcmTokenUpdatedAt =
+            admin.firestore.FieldValue.delete();
+
+          removed = true;
+        }
+
+        if (removed) {
+          transaction.update(
+            userRef,
+            updates
+          );
+        }
+
+        return {
+          accepted: true,
+          removed
+        };
+      });
+    });
+
 // 🎙️ Google Cloud Text-to-Speech – קול גברי Neural
 const textToSpeech = require("@google-cloud/text-to-speech");
 const ttsClient = new textToSpeech.TextToSpeechClient();
@@ -14672,42 +15974,82 @@ const ttsClient = new textToSpeech.TextToSpeechClient();
 const KMI_TTS_VERSION = "tts-chirp3-he-v5-node22";
 
 function extractFcmTokensFromUser(user) {
+  const safeUser = user || {};
+
+  const activeDeviceId =
+    String(safeUser.activeDeviceId || "").trim();
+
+  const fcmTokens = safeUser.fcmTokens;
   const tokens = [];
 
-  const singleToken = (user.fcmToken || "").toString().trim();
+  /*
+   * כאשר קיים activeDeviceId, שולחים Push
+   * רק לטוקנים עם שיוך מפורש למכשיר הפעיל.
+   */
+  if (activeDeviceId) {
+    if (
+      fcmTokens &&
+      typeof fcmTokens === "object" &&
+      !Array.isArray(fcmTokens)
+    ) {
+      Object.values(fcmTokens).forEach((entry) => {
+        if (!entry || typeof entry !== "object") {
+          return;
+        }
+
+        const token =
+          String(entry.token || "").trim();
+
+        const deviceId =
+          String(entry.deviceId || "").trim();
+
+        if (token && deviceId === activeDeviceId) {
+          tokens.push(token);
+        }
+      });
+    }
+
+    return Array.from(new Set(tokens));
+  }
+
+  /*
+   * תאימות למשתמשים ותיקים שאין להם
+   * עדיין מנגנון שיוך מכשיר.
+   */
+  const singleToken =
+    String(safeUser.fcmToken || "").trim();
+
   if (singleToken) {
     tokens.push(singleToken);
   }
 
-  const fcmTokens = user.fcmTokens;
-
-  // תמיכה במבנה ישן: fcmTokens: ["token1", "token2"]
   if (Array.isArray(fcmTokens)) {
     fcmTokens.forEach((entry) => {
-      const clean = (entry || "").toString().trim();
-      if (clean) tokens.push(clean);
-    });
-  }
+      const token = String(entry || "").trim();
 
-// תמיכה במבנה החדש של Android:
-// fcmTokens נשמר כמפה של רשומות טוקן לפי מפתח פנימי.
-if (fcmTokens && typeof fcmTokens === "object" && !Array.isArray(fcmTokens)) {
+      if (token) {
+        tokens.push(token);
+      }
+    });
+  } else if (
+    fcmTokens &&
+    typeof fcmTokens === "object"
+  ) {
     Object.values(fcmTokens).forEach((entry) => {
-      if (typeof entry === "string") {
-        const clean = entry.trim();
-        if (clean) tokens.push(clean);
-      } else if (entry && typeof entry === "object") {
-        const clean = (entry.token || "").toString().trim();
-        if (clean) tokens.push(clean);
+      const token =
+        typeof entry === "string"
+          ? entry.trim()
+          : entry && typeof entry === "object"
+            ? String(entry.token || "").trim()
+            : "";
+
+      if (token) {
+        tokens.push(token);
       }
     });
   }
 
-return Array.from(
-  new Set(
-    tokens
-  )
-);
+  return Array.from(new Set(tokens));
 }
 
 async function sendFcmMulticastInBatches(
@@ -14846,12 +16188,25 @@ exports.onForumMessageCreated = functions.firestore
         messageId,
       });
 
-      await snap.ref.update({
-        pushStatus: "skipped_missing_path",
-        pushCheckedAt: admin.firestore.FieldValue.serverTimestamp(),
-      }).catch(() => null);
+           await snap.ref.update({
+             pushStatus: "no_tokens",
+             pushSuccessCount: 0,
+             pushFailureCount: 0,
+             pushError: "no_registered_target_tokens",
+             pushCheckedAt:
+               admin.firestore.FieldValue.serverTimestamp(),
+           }).catch((error) => {
+             console.error(
+               "KMI_COACH_NO_TOKENS_STATUS_FAILED",
+               {
+                 broadcastId,
+                 errorCode:
+                   String(error?.code || "unknown"),
+               }
+             );
+           });
 
-      return null;
+           return null;
     }
 
     if (!groupKey) {
@@ -15575,7 +16930,73 @@ const authorUid = (
     }
 
       if (targetUids.length === 0) {
-        console.log("Coach broadcast has no targetUids, skipping push", { broadcastId });
+        console.log(
+          "Coach broadcast has no targetUids, skipping push",
+          { broadcastId }
+        );
+        return null;
+      }
+
+      // מניעת כשל Batch בשל חריגה ממגבלת הכתיבות.
+      // שידורים גדולים ידרשו חלוקה למקבצים
+      // ומנגנון התאוששות נפרד.
+      if (targetUids.length > 500) {
+        console.error(
+          "KMI_COACH_RECIPIENT_LIMIT_EXCEEDED",
+          {
+            broadcastId,
+            recipientCount: targetUids.length,
+          }
+        );
+
+        await snap.ref.update({
+          pushStatus: "failed",
+          pushError: "recipient_limit_exceeded",
+          pushFailedAt:
+            admin.firestore.FieldValue.serverTimestamp(),
+        });
+
+        return null;
+      }
+
+      // נעילה אטומית: רק הפעלה אחת של הטריגר
+      // רשאית לעבד שידור מסוים.
+      const processingClaimed =
+        await db.runTransaction(async (transaction) => {
+          const currentSnapshot =
+            await transaction.get(snap.ref);
+
+          if (!currentSnapshot.exists) {
+            return false;
+          }
+
+          const currentData =
+            currentSnapshot.data() || {};
+
+          const currentStatus =
+            String(currentData.pushStatus || "pending")
+              .trim()
+              .toLowerCase();
+
+          if (currentStatus !== "pending") {
+            return false;
+          }
+
+          transaction.update(snap.ref, {
+            pushStatus: "processing",
+            pushPhase: "claimed",
+            pushProcessingStartedAt:
+              admin.firestore.FieldValue.serverTimestamp(),
+            pushProcessingStartedAtMillis: Date.now(),
+          });
+
+          return true;
+        });
+
+      if (!processingClaimed) {
+        console.log("KMI_COACH_BROADCAST_ALREADY_PROCESSING", {
+          broadcastId,
+        });
         return null;
       }
 
@@ -15619,7 +17040,7 @@ const authorUid = (
           .collection("recipients")
           .doc(uid);
 
-      recipientsBatch.set(
+      recipientsBatch.create(
         recipientRef,
         {
           uid,
@@ -15645,145 +17066,112 @@ const authorUid = (
 
           read: false,
           deleted: false,
-        },
-        {
-          merge: true,
         }
       );
     });
 
-    await recipientsBatch.commit();
+    try {
+      await recipientsBatch.commit();
+    } catch (error) {
+      const errorCode =
+        String(error?.code || "unknown");
 
-    console.log(
-      "Coach broadcast recipients created:",
-      {
-        broadcastId,
-        recipientsCount:
-          targetUids.length,
-      }
-    );
+      console.error(
+        "KMI_COACH_RECIPIENTS_CREATE_FAILED",
+        {
+          broadcastId,
+          errorCode,
+        }
+      );
 
- // ===== 2. שליפת fcmToken לפי זהות גלובלית =====
- const allUsersSnapshot =
-   await db
-     .collection("users")
-     .get();
+      await snap.ref.update({
+        pushStatus: "failed",
+        pushError: "recipients_create_failed",
+        pushFailedAt:
+          admin.firestore.FieldValue.serverTimestamp(),
+      }).catch(() => null);
 
- const allUserEntries =
-   allUsersSnapshot.docs.map(
-     (document) => ({
-       id:
-         document.id,
+      // לא שולחים Push אם מסמכי הנמענים
+      // לא נוצרו בהצלחה.
+      return null;
+    }
 
-       user:
-         document.data() || {},
-     })
-   );
-
- const userIdentityGroups =
-   groupUsersByIdentity(
-     allUserEntries
-   );
-
- const identityGroupByUid =
-   new Map();
-
- userIdentityGroups.forEach(
-   (entries) => {
-
-     entries.forEach(
-       (entry) => {
-
-         const user =
-           entry.user || {};
-
-         [
-           entry.id,
-           user.uid,
-           user.authUid,
-           user.userDocId,
-           user.traineeId,
-         ]
-           .map((value) =>
-             String(value || "")
-               .trim()
-           )
-           .filter(Boolean)
-           .forEach(
-             (identityValue) => {
-
-               identityGroupByUid.set(
-                 identityValue,
-                 entries
-               );
-             }
-           );
-       }
-     );
-   }
- );
-
- const tokenResults =
-   targetUids.map(
-     (targetUid) => {
-
-       const identityEntries =
-         identityGroupByUid.get(
-           targetUid
-         );
-
-       if (
-         !Array.isArray(
-           identityEntries
-         ) ||
-         identityEntries.length === 0
-       ) {
-        console.log(
-          "Target user identity not found"
-        );
-
-         return [];
-       }
-
-       const identityTokens =
-         [];
-
-       identityEntries.forEach(
-         (entry) => {
-
-           const user =
-             entry.user || {};
-
-           const userTokens =
-             extractFcmTokensFromUser(
-               user
-             );
-
-           userTokens.forEach(
-             (token) => {
-
-               const cleanToken =
-                 String(
-                   token || ""
-                 ).trim();
-
-               if (cleanToken) {
-                 identityTokens.push(
-                   cleanToken
-                 );
-               }
-             }
-           );
+       console.log(
+         "Coach broadcast recipients created:",
+         {
+           broadcastId,
+           recipientsCount:
+             targetUids.length,
          }
        );
 
-       return Array.from(
-         new Set(
-           identityTokens
-         )
-       );
-     }
+       // כל מסמכי הנמענים נוצרו בהצלחה.
+       // סטטוס זה אינו מעיד ש-FCM כבר נשלח.
+       await snap.ref.update({
+         recipientsStatus: "created",
+         recipientsCreatedCount: targetUids.length,
+         recipientsCreatedAt:
+           admin.firestore.FieldValue.serverTimestamp(),
+
+         pushPhase: "recipients_created",
+       }).catch((error) => {
+         console.error(
+           "KMI_COACH_RECIPIENTS_STATUS_FAILED",
+           {
+             broadcastId,
+             errorCode:
+               String(error?.code || "unknown"),
+           }
+         );
+       });
+
+    // ===== 2. שליפת fcmToken לפי זהות גלובלית =====
+ // אין לאסוף טוקנים מרשומות זהות מאוחדות.
+ const targetUserSnapshots =
+   await db.getAll(
+     ...targetUids.map((uid) =>
+       db.collection("users").doc(uid)
+     )
    );
+
+ const tokenResults =
+   targetUserSnapshots.map((userSnapshot, index) => {
+     if (!userSnapshot.exists) {
+       console.warn(
+         "KMI_COACH_TARGET_AUTH_DOCUMENT_MISSING",
+         {
+           broadcastId,
+           targetIndex: index,
+         }
+       );
+
+       return [];
+     }
+
+     const user =
+       userSnapshot.data() || {};
+
+     const storedUid =
+       String(user.uid || "").trim();
+
+     // אם קיים UID במסמך, הוא חייב להתאים לנתיב.
+     if (
+       storedUid &&
+       storedUid !== userSnapshot.id
+     ) {
+       console.warn(
+         "KMI_COACH_TARGET_UID_MISMATCH",
+         {
+           broadcastId,
+           targetIndex: index,
+         }
+       );
+
+       return [];
+     }
+
+     return extractFcmTokensFromUser(user);
+   });
 
  const tokens =
    Array.from(
@@ -15805,8 +17193,21 @@ const authorUid = (
 
       await snap.ref.update({
         pushStatus: "no_tokens",
-        pushCheckedAt: admin.firestore.FieldValue.serverTimestamp(),
-      }).catch(() => null);
+        pushSuccessCount: 0,
+        pushFailureCount: 0,
+        pushError: "no_registered_target_tokens",
+        pushCheckedAt:
+          admin.firestore.FieldValue.serverTimestamp(),
+      }).catch((error) => {
+        console.error(
+          "KMI_COACH_NO_TOKENS_STATUS_FAILED",
+          {
+            broadcastId,
+            errorCode:
+              String(error?.code || "unknown"),
+          }
+        );
+      });
 
       return null;
     }
@@ -15816,6 +17217,36 @@ const authorUid = (
    text.length > 120
      ? `${text.slice(0, 120)}…`
      : text;
+
+  /*
+   * רושמים מראש שהשליחה עומדת להתחיל.
+   * אם רישום השלב נכשל, לא שולחים FCM.
+   *
+   * לאחר רישום השלב, קריסה עלולה להשאיר
+   * תוצאה לא ידועה. אין לבצע ניסיון חוזר
+   * אוטומטי ללא בדיקה.
+   */
+  try {
+    await snap.ref.update({
+      pushStatus: "dispatching",
+      pushPhase: "dispatch_started",
+      pushDispatchStartedAt:
+        admin.firestore.FieldValue.serverTimestamp(),
+      pushDispatchStartedAtMillis: Date.now(),
+      pushDispatchTokenCount: tokens.length,
+    });
+  } catch (error) {
+    console.error(
+      "KMI_COACH_PUSH_DISPATCH_MARK_FAILED",
+      {
+        broadcastId,
+        errorCode:
+          String(error?.code || "unknown"),
+      }
+    );
+
+    return null;
+  }
 
   try {
   const coachBroadcastMessage = {
@@ -15840,11 +17271,9 @@ const authorUid = (
       sender_name_en:
         senderNameEn,
 
-      titleHe:
-        senderNameHe,
+      titleHe,
 
-      titleEn:
-        senderNameEn,
+      titleEn,
 
       body:
         text,
@@ -15869,24 +17298,13 @@ const authorUid = (
           groupKey || ""
         ),
 
-      click_action:
-        "OPEN_HOME",
     },
 
+    // Data-only FCM.
+    // Android יוצר את ההתראה והניווט דרך
+    // KmiFirebaseMessagingService.
     android: {
-      priority:
-        "high",
-
-      notification: {
-        channelId:
-          "coach_broadcasts",
-
-        sound:
-          "default",
-
-        clickAction:
-          "OPEN_HOME",
-      },
+      priority: "high",
     },
   };
 
@@ -15903,11 +17321,32 @@ const authorUid = (
         failureCount: res.failureCount,
       });
 
+      const pushStatus =
+        res.successCount === 0
+          ? "failed"
+          : res.failureCount > 0
+            ? "partial"
+            : "sent";
+
       await snap.ref.update({
-        pushStatus: "sent",
-        pushSuccessCount: res.successCount,
-        pushFailureCount: res.failureCount,
-        pushSentAt: admin.firestore.FieldValue.serverTimestamp(),
+        pushStatus,
+        pushPhase: "dispatch_completed",
+
+        pushSuccessCount:
+          res.successCount,
+
+        pushFailureCount:
+          res.failureCount,
+
+        pushCheckedAt:
+          admin.firestore.FieldValue.serverTimestamp(),
+
+        ...(res.successCount > 0
+          ? {
+              pushSentAt:
+                admin.firestore.FieldValue.serverTimestamp(),
+            }
+          : {}),
       }).catch((e) => {
        console.error(
          "Failed updating push status",
@@ -15954,18 +17393,27 @@ const authorUid = (
        }
      );
 
+     // ייתכן שחלק מהמקבצים נשלחו לפני הכשל.
+     // אין לבצע שליחה חוזרת אוטומטית.
      await snap.ref.update({
-       pushStatus:
-         "failed",
+       pushStatus: "unknown",
+       pushPhase: "dispatch_uncertain",
 
        pushError:
-         "coach_broadcast_push_failed",
+         "coach_broadcast_dispatch_uncertain",
 
-       pushFailedAt:
-         admin.firestore
-           .FieldValue
-           .serverTimestamp(),
-     }).catch(() => null);
+       pushOutcomeUnknownAt:
+         admin.firestore.FieldValue.serverTimestamp(),
+     }).catch((statusError) => {
+       console.error(
+         "KMI_COACH_PUSH_UNKNOWN_STATUS_UPDATE_FAILED",
+         {
+           broadcastId,
+           errorCode:
+             String(statusError?.code || "unknown"),
+         }
+       );
+     });
 
       return null;
     }

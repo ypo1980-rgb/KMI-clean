@@ -26,6 +26,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
 import il.kmi.app.KmiViewModel
 import il.kmi.app.Route
+import il.kmi.app.attendance.ui.AttendanceQrScannerScreen
 import il.kmi.app.favorites.FavoritesStore
 import il.kmi.app.free_sessions.ui.navigation.FreeSessionsRoute
 import il.kmi.app.stretching.ui.navigation.StretchingRoute
@@ -66,6 +67,15 @@ const val TOPICS_PICK_TOKEN = "__TOPICS_PICK__"
 
 const val TRAINING_ARCHIVE_ROUTE =
     "training_archive"
+
+/*
+ * מסלול גלובלי לסריקת QR של נוכחות באימון.
+ *
+ * מיועד למתאמן מחובר בלבד.
+ * אימות הנוכחות מתבצע בשרת.
+ */
+const val ATTENDANCE_QR_SCAN_ROUTE =
+    "attendance_qr_scan"
 
 private fun encTopicForToken(s: String): String =
     java.net.URLEncoder.encode(s, Charsets.UTF_8.name()).replace("+", "%20")
@@ -281,6 +291,15 @@ fun NavGraphBuilder.homeNavGraph(
                     }
                 },
 
+                onOpenAttendanceQrScan = {
+                    nav.navigate(
+                        ATTENDANCE_QR_SCAN_ROUTE
+                    ) {
+                        launchSingleTop = true
+                        restoreState = false
+                    }
+                },
+
                 onOpenStretching = {
                     nav.navigate(
                         StretchingRoute.ROOT
@@ -339,6 +358,25 @@ fun NavGraphBuilder.homeNavGraph(
                 )
             }
         }
+    }
+
+    // ---- סריקת QR לנוכחות באימון ----
+    composable(ATTENDANCE_QR_SCAN_ROUTE) {
+
+        AttendanceQrScannerScreen(
+            onBack = {
+                nav.popBackStack()
+            },
+            onAttendanceRegistered = {
+                nav.navigate(Route.Home.route) {
+                    popUpTo(ATTENDANCE_QR_SCAN_ROUTE) {
+                        inclusive = true
+                    }
+                    launchSingleTop = true
+                    restoreState = false
+                }
+            }
+        )
     }
 
     composable(Route.MessageCenter.route) {
@@ -839,14 +877,33 @@ fun NavGraphBuilder.homeNavGraph(
                 return@LaunchedEffect
             }
 
-            val coachDoc =
-                runCatching {
-                    FirebaseFirestore.getInstance()
-                        .collection("authorizedCoaches")
-                        .document(uid)
-                        .get()
-                        .await()
-                }.getOrNull()
+            val coachDoc = try {
+                FirebaseFirestore.getInstance()
+                    .collection("authorizedCoaches")
+                    .document(uid)
+                    .get()
+                    .await()
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                android.util.Log.e(
+                    "KMI_COACH_AUTH",
+                    "Internal exam authorization read failed",
+                    error
+                )
+                null
+            }
+
+            android.util.Log.d(
+                "KMI_COACH_AUTH",
+                "Internal exam authorization: " +
+                        "exists=${coachDoc?.exists()} " +
+                        "active=${coachDoc?.getBoolean("active")} " +
+                        "role=${coachDoc?.getString("role")} " +
+                        "canManageInternalExams=${coachDoc?.getBoolean("canManageInternalExams")} " +
+                        "canManageExams=${coachDoc?.getBoolean("canManageExams")} " +
+                        "fromCache=${coachDoc?.metadata?.isFromCache}"
+            )
 
             internalExamAuthorized =
                 coachDoc?.exists() == true &&

@@ -403,6 +403,7 @@ fun HomeScreen(
     onOpenTrainingArchive: () -> Unit,
     onOpenTrainingManagement: () -> Unit,
     onOpenMessageCenter: () -> Unit,
+    onOpenAttendanceQrScan: () -> Unit = {},
     onOpenStretching: () -> Unit = {}
 ) {
     val haptic = rememberHapticsGlobal()
@@ -2181,6 +2182,8 @@ fun HomeScreen(
                                     nowMillis = trainingStatusNowMillis,
                                     activeOverride =
                                         item.activeOverride,
+                                    onAttendanceQrScan =
+                                        onOpenAttendanceQrScan,
                                     onManageTraining = {
                                         openHomeCoachTrainingManagement(
                                             training =
@@ -3043,6 +3046,7 @@ private fun TrainingCardCompact(
     status: TrainingStatusEngine.Status,
     nowMillis: Long,
     activeOverride: TrainingOverride?,
+    onAttendanceQrScan: () -> Unit,
     onManageTraining: () -> Unit
 ) {
     val ctx = LocalContext.current
@@ -4100,6 +4104,54 @@ private fun TrainingCardCompact(
                                     )
                                 }
                             }
+                        }
+                    }
+                }
+
+                if (!isCoach && authUid.isNotBlank()) {
+                    Spacer(Modifier.height(8.dp))
+
+                    Surface(
+                        onClick = {
+                            clickSound()
+                            haptic(true)
+                            onAttendanceQrScan()
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 44.dp),
+                        shape = RoundedCornerShape(16.dp),
+                        color = MaterialTheme.colorScheme.primaryContainer,
+                        border = BorderStroke(
+                            width = 0.75.dp,
+                            color = MaterialTheme.colorScheme.primary
+                                .copy(alpha = 0.30f)
+                        ),
+                        tonalElevation = 0.dp,
+                        shadowElevation = 0.dp
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(
+                                    horizontal = 12.dp,
+                                    vertical = 10.dp
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = if (isEnglish) {
+                                    "Scan QR for attendance"
+                                } else {
+                                    "סריקת QR לנוכחות"
+                                },
+                                style = KmiTypography.secondary.copy(
+                                    fontWeight = FontWeight.Bold
+                                ),
+                                color = MaterialTheme.colorScheme
+                                    .onPrimaryContainer,
+                                textAlign = TextAlign.Center
+                            )
                         }
                     }
                 }

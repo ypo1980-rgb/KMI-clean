@@ -717,29 +717,70 @@ class AttendanceRepository private constructor(
                                         trainingStartMillis
 
                             /*
-                             * עד שעת האימון:
-                             * בחירת המתאמן קובעת.
+                             * סריקת QR היא אישור נוכחות בפועל.
                              *
-                             * משעת האימון:
-                             * בחירת המאמן קובעת.
+                             * לכן היא גוברת על בחירת המתאמן
+                             * גם בחצי השעה שלפני תחילת האימון.
                              *
-                             * status נשאר fallback בלבד
-                             * לרשומות ישנות.
+                             * ללא QR:
+                             * לפני האימון — בחירת המתאמן.
+                             * מתחילת האימון — בחירת המאמן.
                              */
+                            /*
+                             * אימות QR נפרד מסימון ההגעה המוקדם.
+                             *
+                             * האישור תקף לרשומה רק כאשר
+                             * מזהה האימון המאומת תואם
+                             * למזהה האימון של הרשומה.
+                             *
+                             * אין להסתמך על markedBy בלבד:
+                             * הוא עשוי להשתנות בעקבות פעולה נוספת.
+                             */
+                            val isQrAttendance =
+                                document
+                                    .getBoolean("qrVerified") == true &&
+                                        document
+                                            .getString("qrVerifiedOccurrenceId")
+                                            ?.trim()
+                                            ?.takeIf { it.isNotBlank() } ==
+                                        occurrenceId &&
+                                        coachStatusRaw ==
+                                        AttendanceStatus.PRESENT.name
+
+                            /*
+                             * סדר עדיפות:
+                             *
+                             * 1. נוכחות QR מאומתת.
+                             * 2. לפני האימון — בחירת המתאמן.
+                             * 3. מתחילת האימון — בחירת המאמן.
+                             *
+                             * ללא QR ההתנהגות נשארת ללא שינוי.
+                             */
+                            val markedBy =
+                                document
+                                    .getString("markedBy")
+                                    ?.trim()
+                                    .orEmpty()
+
                             val statusRaw =
-                                if (!isTrainingStarted) {
+                                when {
+                                    isQrAttendance ->
+                                        AttendanceStatus.PRESENT.name
 
-                                    traineeStatusRaw
-                                        .ifBlank {
-                                            legacyStatusRaw
-                                        }
+                                    !isTrainingStarted ->
+                                        traineeStatusRaw
+                                            .ifBlank {
+                                                legacyStatusRaw
+                                            }
 
-                                } else {
+                                    coachStatusRaw.isNotBlank() ->
+                                        coachStatusRaw
 
-                                    coachStatusRaw
-                                        .ifBlank {
-                                            legacyStatusRaw
-                                        }
+                                    markedBy == "trainee" ->
+                                        AttendanceStatus.ABSENT.name
+
+                                    else ->
+                                        legacyStatusRaw
                                 }
 
                             android.util.Log.d(
@@ -1141,10 +1182,20 @@ class AttendanceRepository private constructor(
                                  * הצפי מבוסס רק על בחירה
                                  * שהמתאמן ביצע בעצמו.
                                  */
-                                if (
+                                val hasTraineeChoice =
+                                    document
+                                        .getString("traineeStatus")
+                                        ?.trim()
+                                        ?.isNotBlank() == true
+
+                                val isLegacyTraineeChoice =
                                     document
                                         .getString("markedBy")
-                                        ?.trim() != "trainee"
+                                        ?.trim() == "trainee"
+
+                                if (
+                                    !hasTraineeChoice &&
+                                    !isLegacyTraineeChoice
                                 ) {
                                     return@mapNotNull null
                                 }
@@ -1275,16 +1326,54 @@ class AttendanceRepository private constructor(
 
                     val explicitStatus =
                         if (recordDocument.exists()) {
-                            recordDocument
-                                .getString("status")
-                                ?.let { rawStatus ->
-                                    runCatching {
-                                        AttendanceStatus.valueOf(
-                                            rawStatus
-                                        )
-                                    }.getOrNull()
+                            val coachStatusRaw =
+                                recordDocument
+                                    .getString("coachStatus")
+                                    ?.trim()
+                                    .orEmpty()
+
+                            val occurrenceId =
+                                recordDocument
+                                    .getString("occurrenceId")
+                                    ?.trim()
+                                    .orEmpty()
+
+                            val isQrVerified =
+                                occurrenceId.isNotBlank() &&
+                                        recordDocument
+                                            .getBoolean("qrVerified") == true &&
+                                        recordDocument
+                                            .getString("qrVerifiedOccurrenceId")
+                                            ?.trim() == occurrenceId &&
+                                        coachStatusRaw ==
+                                        AttendanceStatus.PRESENT.name
+
+                            val isLegacyCoachRecord =
+                                coachStatusRaw.isBlank() &&
+                                        recordDocument
+                                            .getString("markedBy")
+                                            ?.trim() == "coach"
+
+                            val finalStatusRaw =
+                                when {
+                                    isQrVerified ->
+                                        AttendanceStatus.PRESENT.name
+
+                                    coachStatusRaw.isNotBlank() ->
+                                        coachStatusRaw
+
+                                    isLegacyCoachRecord ->
+                                        recordDocument
+                                            .getString("status")
+                                            ?.trim()
+                                            .orEmpty()
+
+                                    else -> ""
                                 }
-                                ?: AttendanceStatus.ABSENT
+
+                            runCatching {
+                                AttendanceStatus.valueOf(finalStatusRaw)
+                            }.getOrNull()
                         } else {
                             null
                         }
@@ -1668,29 +1757,31 @@ class AttendanceRepository private constructor(
                 "memberId" to memberId,
 
                 /*
-                 * הבחירה של המתאמן לפני האימון.
+                 * דיווח מוקדם של המתאמן בלבד.
+                 *
+                 * traineeStatus = צפי הגעה.
+                 * coachStatus = נוכחות שסימן המאמן.
+                 * qrVerified = נוכחות שאומתה בשרת.
+                 *
+                 * אין לעדכן כאן status או coachStatus.
                  */
                 "traineeStatus" to status.name,
-
-                /*
-                 * נשאר לצורכי תאימות למסכים ישנים.
-                 * לפני תחילת האימון הוא משקף את בחירת המתאמן.
-                 */
-                "status" to status.name,
-
                 "traineeUid" to cleanUid,
-                "markedBy" to "trainee",
 
                 /*
-                 * אם המאמן סימן בטעות לפני האימון,
-                 * בחירה חדשה של המתאמן היא שוב מקור האמת
-                 * לצפי ולכן מוחקים coachStatus קודם.
+                 * שעת האימון שאליה מתייחס הדיווח.
                  */
-
                 "trainingStartMillis" to
                         trainingStartMillis,
 
-                "markedAtMillis" to now,
+                /*
+                 * זמן הדיווח העצמי נשמר בנפרד.
+                 *
+                 * markedAtMillis שייך לרישום הנוכחות
+                 * ואסור לדרוס אותו בדיווח מקדים.
+                 */
+                "traineeMarkedAtMillis" to now,
+
                 "updatedAtMillis" to now,
                 "updatedAt" to
                         FieldValue.serverTimestamp()
@@ -1713,18 +1804,89 @@ class AttendanceRepository private constructor(
                 occurrenceId
         }
 
-        sessionsRef(
-            cleanBranch,
-            cleanGroup
-        )
-            .document(sessionDocId)
-            .collection("records")
-            .document(memberId.toString())
-            .set(
-                data,
+        val recordRef =
+            sessionsRef(
+                cleanBranch,
+                cleanGroup
+            )
+                .document(sessionDocId)
+                .collection("records")
+                .document(memberId.toString())
+
+        firestore.runTransaction { transaction ->
+
+            val existing =
+                transaction.get(recordRef)
+
+            /*
+             * אימות נוסף בתוך ה-Transaction:
+             * אין לקבל דיווח עצמי לאחר תחילת האימון.
+             */
+            check(System.currentTimeMillis() < trainingStartMillis) {
+                "Training has already started"
+            }
+
+            /*
+             * שומרים את המקור הקיים אם המאמן
+             * כבר סימן נוכחות או אם QR אומת.
+             */
+            val hasCoachStatus =
+                !existing
+                    .getString("coachStatus")
+                    .isNullOrBlank()
+
+            val hasVerifiedQr =
+                existing.getBoolean("qrVerified") == true
+
+            val hasLegacyCoachMark =
+                existing
+                    .getString("markedBy")
+                    ?.trim() == "coach"
+
+            val update =
+                data.toMutableMap()
+
+            /*
+             * markedBy הוא שדה תאימות ישן.
+             *
+             * ברשומה חדשה מציינים שהמתאמן
+             * ביצע את הדיווח.
+             *
+             * ברשומה קיימת לא דורסים את
+             * מקור הסימון של המאמן או ה-QR.
+             */
+            if (
+                !hasCoachStatus &&
+                !hasVerifiedQr &&
+                !hasLegacyCoachMark
+            ) {
+                update["markedBy"] = "trainee"
+            }
+
+            /*
+             * אם מדובר ברשומה חדשה בלבד,
+             * שומרים זמן סימון ראשוני.
+             *
+             * אין להחליף markedAtMillis
+             * של סריקה או סימון מאמן.
+             */
+            if (!existing.exists()) {
+                update["markedAtMillis"] = now
+            }
+
+            /*
+             * רישום זמן נפרד לדיווח המתאמן.
+             */
+            update["traineeMarkedAtMillis"] = now
+
+            transaction.set(
+                recordRef,
+                update,
                 SetOptions.merge()
             )
-            .await()
+
+            true
+        }.await()
     }
 
     /**
@@ -1823,15 +1985,57 @@ class AttendanceRepository private constructor(
                     ?: doc.id.toLongOrNull()
                     ?: return@forEach
 
-                val statusRaw = doc.getString("status").orEmpty()
-                val status = runCatching {
-                    AttendanceStatus.valueOf(statusRaw)
-                }.getOrDefault(AttendanceStatus.ABSENT)
+                val coachStatusRaw =
+                    doc.getString("coachStatus")
+                        ?.trim()
+                        .orEmpty()
 
-                markedByMember[memberId] = (markedByMember[memberId] ?: 0) + 1
+                val occurrenceId =
+                    doc.getString("occurrenceId")
+                        ?.trim()
+                        .orEmpty()
 
-                if (status == AttendanceStatus.PRESENT) {
-                    presentByMember[memberId] = (presentByMember[memberId] ?: 0) + 1
+                val isQrVerified =
+                    occurrenceId.isNotBlank() &&
+                            doc.getBoolean("qrVerified") == true &&
+                            doc.getString("qrVerifiedOccurrenceId")
+                                ?.trim() == occurrenceId &&
+                            coachStatusRaw == AttendanceStatus.PRESENT.name
+
+                val isLegacyCoachRecord =
+                    coachStatusRaw.isBlank() &&
+                            doc.getString("markedBy")
+                                ?.trim() == "coach"
+
+                val finalStatusRaw =
+                    when {
+                        isQrVerified ->
+                            AttendanceStatus.PRESENT.name
+
+                        coachStatusRaw.isNotBlank() ->
+                            coachStatusRaw
+
+                        isLegacyCoachRecord ->
+                            doc.getString("status")
+                                ?.trim()
+                                .orEmpty()
+
+                        else -> ""
+                    }
+
+                val finalStatus =
+                    runCatching {
+                        AttendanceStatus.valueOf(finalStatusRaw)
+                    }.getOrNull()
+
+                if (finalStatus != null) {
+                    markedByMember[memberId] =
+                        (markedByMember[memberId] ?: 0) + 1
+
+                    if (finalStatus == AttendanceStatus.PRESENT) {
+                        presentByMember[memberId] =
+                            (presentByMember[memberId] ?: 0) + 1
+                    }
                 }
             }
         }

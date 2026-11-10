@@ -7,18 +7,45 @@ package il.kmi.app.screens.registration
 
 import android.content.Context
 import android.content.SharedPreferences
+import android.util.Log
 import android.util.Patterns
 import android.widget.Toast
-import android.util.Log
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.core.content.edit
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.layout.*
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.toMutableStateList
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
@@ -30,26 +57,30 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import androidx.core.content.edit
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseAuthUserCollisionException
 import com.google.firebase.firestore.FirebaseFirestore
-import il.kmi.app.auth.GoogleAuthManager
-import il.kmi.app.screens.admin.AdminAccess
 import com.google.firebase.firestore.SetOptions
-import il.kmi.app.training.TrainingCatalog
-import il.kmi.app.database.KmiDatabaseProvider
-import il.kmi.shared.prefs.KmiPrefs
+import com.google.firebase.firestore.Source
 import il.kmi.app.FcmTokenManager
 import il.kmi.app.KmiCalendarSync
+import il.kmi.app.auth.GoogleAuthManager
+import il.kmi.app.database.KmiDatabaseProvider
 import il.kmi.app.hasCalendarPermission
+import il.kmi.app.screens.admin.AdminAccess
 import il.kmi.app.training.TrainingAlarmReceiver
+import il.kmi.app.training.TrainingCatalog
 import il.kmi.app.ui.KmiTypography
+import il.kmi.shared.prefs.KmiPrefs
 import il.yuval.ui.theme.kmiSectionHeaderBackground
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.withTimeoutOrNull
+import kotlin.time.Duration.Companion.seconds
 
 private const val TAG_REG = "KMI_REGISTRATION"
 
@@ -84,7 +115,6 @@ private fun maskedPhoneForLog(phone: String): String {
 @Composable
 fun RegistrationFormScreen(
     initial: String = "trainee",
-    onBack: () -> Unit,
     onRegistrationComplete: () -> Unit,
     onOpenHome: () -> Unit,
     onOpenTerms: () -> Unit,
@@ -151,6 +181,8 @@ fun RegistrationFormScreen(
 
     val isEnglish = langManager.getCurrentLanguage() ==
             il.kmi.shared.localization.AppLanguage.ENGLISH
+
+    val registrationScope = rememberCoroutineScope()
 
     fun finishRegistrationFlow() {
         if (startAtProfile) {
@@ -235,25 +267,20 @@ fun RegistrationFormScreen(
                 FirebaseFirestore.getInstance()
                     .collection("authorizedCoaches")
                     .document(uid)
-                    .get()
+                    .get(Source.SERVER)
                     .await()
             }.onFailure { error ->
                 Log.e(
                     TAG_REG,
-                    "profile_coach_auth_error uid=$uid message=${error.message}",
+                    "profile_coach_auth_server_error " +
+                            "code=${(error as? com.google.firebase.firestore.FirebaseFirestoreException)?.code} " +
+                            "type=${error.javaClass.simpleName}",
                     error
                 )
             }.getOrNull()
 
-        Log.e(
-            TAG_REG,
-            "profile_coach_auth_check uid=$uid " +
-                    "exists=${coachDoc?.exists()} " +
-                    "active=${coachDoc?.getBoolean("active")} " +
-                    "role=${coachDoc?.getString("role")}"
-        )
-
-        profileCoachAuthorized =
+        // הרשאת מאמן דרך Firestore SDK.
+        val sdkCoachAuthorized =
             coachDoc?.exists() == true &&
                     coachDoc.getBoolean("active") == true &&
                     coachDoc.getString("role")
@@ -261,7 +288,48 @@ fun RegistrationFormScreen(
                         .equals(
                             "coach",
                             ignoreCase = true
+                        ) &&
+                    coachDoc.getBoolean("canOpenCoachDrawer") == true
+
+        // אותו אימות REST משותף שבו משתמש MainApp.
+        val restCoachAuthorized =
+            if (sdkCoachAuthorized) {
+                false
+            } else {
+                val idToken =
+                    try {
+                        FirebaseAuth.getInstance()
+                            .currentUser
+                            ?.getIdToken(false)
+                            ?.await()
+                            ?.token
+                            .orEmpty()
+                    } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                        throw cancelled
+                    } catch (error: Exception) {
+                        Log.e(
+                            TAG_REG,
+                            "profile_coach_shared_token_error",
+                            error
                         )
+                        ""
+                    }
+
+                val projectId =
+                    FirebaseFirestore.getInstance()
+                        .app.options.projectId.orEmpty()
+
+                il.kmi.app.verifyKmiCoachViaRest(
+                    uid = uid,
+                    idToken = idToken,
+                    projectId = projectId
+                )
+            }
+
+        // אין לאשר הרשאה אם המשתמש התחלף בזמן הבדיקה.
+        profileCoachAuthorized =
+            FirebaseAuth.getInstance().currentUser?.uid == uid &&
+                    (sdkCoachAuthorized || restCoachAuthorized)
     }
 
     var profileAdminAuthorized by remember {
@@ -1022,13 +1090,7 @@ fun RegistrationFormScreen(
         // בעריכת פרופיל ניתן להישאר מאמן רק
         // כאשר קיימת הרשאת מאמן מאומתת.
         val roleFinal =
-            if (
-                isCoach &&
-                (
-                        !startAtProfile ||
-                                profileAllowsCoach
-                        )
-            ) {
+            if (isCoach && profileAllowsCoach) {
                 "coach"
             } else {
                 "trainee"
@@ -1270,39 +1332,39 @@ fun RegistrationFormScreen(
             putString("role_locked_by", roleLockedBy)
             putBoolean(
                 "coach_authorized",
-                roleFinal == "coach" && profileAllowsCoach
+                roleFinal == "coach"
             )
             putBoolean(
                 "can_open_coach_drawer",
-                roleFinal == "coach" && profileAllowsCoach
+                roleFinal == "coach"
             )
             putBoolean(
                 "can_view_trainees",
-                roleFinal == "coach" && profileAllowsCoach
+                roleFinal == "coach"
             )
             putBoolean(
                 "can_manage_trainees",
-                roleFinal == "coach" && profileAllowsCoach
+                roleFinal == "coach"
             )
             putBoolean(
                 "can_manage_attendance",
-                roleFinal == "coach" && profileAllowsCoach
+                roleFinal == "coach"
             )
             putBoolean(
                 "can_manage_internal_exams",
-                roleFinal == "coach" && profileAllowsCoach
+                roleFinal == "coach"
             )
             putBoolean(
                 "can_view_payment_reports",
-                roleFinal == "coach" && profileAllowsCoach
+                roleFinal == "coach"
             )
             putBoolean(
                 "can_manage_payments",
-                roleFinal == "coach" && profileAllowsCoach
+                roleFinal == "coach"
             )
             putBoolean(
                 "can_send_broadcasts",
-                roleFinal == "coach" && profileAllowsCoach
+                roleFinal == "coach"
             )
 
             putString("gender", gender)
@@ -1350,39 +1412,39 @@ fun RegistrationFormScreen(
 
             putBoolean(
                 "coach_authorized",
-                roleFinal == "coach" && profileAllowsCoach
+                roleFinal == "coach"
             )
             putBoolean(
                 "can_open_coach_drawer",
-                roleFinal == "coach" && profileAllowsCoach
+                roleFinal == "coach"
             )
             putBoolean(
                 "can_view_trainees",
-                roleFinal == "coach" && profileAllowsCoach
+                roleFinal == "coach"
             )
             putBoolean(
                 "can_manage_trainees",
-                roleFinal == "coach" && profileAllowsCoach
+                roleFinal == "coach"
             )
             putBoolean(
                 "can_manage_attendance",
-                roleFinal == "coach" && profileAllowsCoach
+                roleFinal == "coach"
             )
             putBoolean(
                 "can_manage_internal_exams",
-                roleFinal == "coach" && profileAllowsCoach
+                roleFinal == "coach"
             )
             putBoolean(
                 "can_view_payment_reports",
-                roleFinal == "coach" && profileAllowsCoach
+                roleFinal == "coach"
             )
             putBoolean(
                 "can_manage_payments",
-                roleFinal == "coach" && profileAllowsCoach
+                roleFinal == "coach"
             )
             putBoolean(
                 "can_send_broadcasts",
-                roleFinal == "coach" && profileAllowsCoach
+                roleFinal == "coach"
             )
 
             // ✅ אזורים — שומרים גם תאימות ישנה וגם מקור אמת רשימתי
@@ -1743,14 +1805,32 @@ fun RegistrationFormScreen(
                 "stage=email_registration_auth_flow_start, email=${maskedEmailForLog(cleanEmail)}, passwordBlank=${cleanPassword.isBlank()}, ${regAuthStateForLog()}"
             )
 
-            auth.signOut()
+            registrationScope.launch {
+                val previousUser = auth.currentUser
 
-            Log.d(
-                TAG_REG,
-                "stage=email_registration_after_sign_out, ${regAuthStateForLog()}"
-            )
+                if (previousUser != null && !previousUser.isAnonymous) {
+                    val tokenRemoved =
+                        withTimeoutOrNull(5.seconds) {
+                            FcmTokenManager
+                                .removeCurrentDeviceTokenBeforeSignOut()
+                        } == true
 
-            auth.createUserWithEmailAndPassword(cleanEmail, cleanPassword)
+                    if (!tokenRemoved) {
+                        Log.w(
+                            TAG_REG,
+                            "FCM token cleanup not confirmed before email registration"
+                        )
+                    }
+                }
+
+                auth.signOut()
+
+                Log.d(
+                    TAG_REG,
+                    "stage=email_registration_after_sign_out, ${regAuthStateForLog()}"
+                )
+
+                auth.createUserWithEmailAndPassword(cleanEmail, cleanPassword)
                 .addOnSuccessListener { result ->
                     val newUid = result.user?.uid.orEmpty()
 
@@ -1830,6 +1910,7 @@ fun RegistrationFormScreen(
                         ).show()
                     }
                 }
+            }
 
             return
         }

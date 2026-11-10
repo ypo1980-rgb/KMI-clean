@@ -118,10 +118,13 @@ import il.kmi.app.ui.pdf.KmiPdfFooter
 import il.kmi.app.ui.pdf.KmiPdfHeader
 import il.kmi.app.ui.scaledIconSize
 import il.yuval.ui.theme.kmiScreenBackgroundBrush
+import il.yuval.ui.theme.kmiSectionHeaderBackground
+import il.yuval.ui.theme.kmiSectionHeaderContentColor
 import il.kmi.shared.domain.Explanations
 import il.kmi.shared.domain.SubTopicRegistry
 import il.kmi.shared.questions.model.util.ExerciseTitleFormatter
 import il.kmi.app.data.training.TrainingSummaryEntity
+import il.yuval.ui.theme.kmiBeltColor
 
 //===========================================================================
 
@@ -150,11 +153,6 @@ private val SummaryDivider: Color
         MaterialTheme.colorScheme.outlineVariant
             .copy(alpha = 0.72f)
 
-private val SummaryChip: Color
-    @Composable
-    get() =
-        MaterialTheme.colorScheme.surfaceVariant
-
 private val SummaryChipSelected: Color
     @Composable
     get() =
@@ -169,11 +167,6 @@ private val SummaryTextMuted: Color
     @Composable
     get() =
         MaterialTheme.colorScheme.onSurfaceVariant
-
-private val SummaryPrimaryButton: Color
-    @Composable
-    get() =
-        MaterialTheme.colorScheme.primary
 
 private val SummaryPurpleButton: Color
     @Composable
@@ -236,7 +229,14 @@ private fun SummarySectionHeader(
     ) {
         Row(
             modifier =
-                Modifier.fillMaxWidth(),
+                Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(14.dp))
+                    .kmiSectionHeaderBackground()
+                    .padding(
+                        horizontal = 12.dp,
+                        vertical = 10.dp
+                    ),
             verticalAlignment =
                 Alignment.CenterVertically
         ) {
@@ -256,7 +256,7 @@ private fun SummarySectionHeader(
                     fontWeight =
                         FontWeight.ExtraBold,
                     color =
-                        SummaryTextDark,
+                        kmiSectionHeaderContentColor(),
                     textAlign =
                         textAlign,
                     modifier =
@@ -271,7 +271,8 @@ private fun SummarySectionHeader(
                                 textDirectionStyle
                             ),
                     color =
-                        SummaryTextMuted,
+                        kmiSectionHeaderContentColor()
+                            .copy(alpha = 0.85f),
                     fontWeight =
                         FontWeight.SemiBold,
                     textAlign =
@@ -334,9 +335,7 @@ private fun SummarySectionHeader(
                     imageVector = icon,
                     contentDescription = null,
                     tint =
-                        MaterialTheme
-                            .colorScheme
-                            .onPrimary,
+                        kmiSectionHeaderContentColor(),
                     modifier =
                         Modifier.size(
                             KmiIconSize.small
@@ -382,7 +381,7 @@ private fun PremiumSummaryAccentCard(
         color =
             Color.Transparent,
         tonalElevation = 0.dp,
-        shadowElevation = 5.dp,
+        shadowElevation = 0.dp,
         border =
             BorderStroke(
                 width = 1.dp,
@@ -1189,16 +1188,8 @@ fun TrainingSummaryScreen(
                                     ) { (groupBelt, exercises) ->
 
                                         val beltColor =
-                                            when (groupBelt) {
-                                                Belt.WHITE -> Color(0xFF9CA3AF)
-                                                Belt.YELLOW -> Color(0xFFFACC15)
-                                                Belt.ORANGE -> Color(0xFFF97316)
-                                                Belt.GREEN -> Color(0xFF22C55E)
-                                                Belt.BLUE -> Color(0xFF3B82F6)
-                                                Belt.BROWN -> Color(0xFF8B5A2B)
-                                                Belt.BLACK -> Color(0xFF374151)
-                                                null -> MaterialTheme.colorScheme.primary
-                                            }
+                                            groupBelt?.let(::kmiBeltColor)
+                                                ?: MaterialTheme.colorScheme.primary
 
                                         val beltTitle =
                                             if (isEnglish) {
@@ -1984,6 +1975,10 @@ private fun AddExercisesBottomSheet(
         )
     }
 
+    var pendingExplanations by remember {
+        mutableStateOf<Set<String>>(emptySet())
+    }
+
     val topics: List<String> = remember(selectedBelt) {
         val belt = selectedBelt ?: return@remember emptyList()
 
@@ -2089,17 +2084,20 @@ private fun AddExercisesBottomSheet(
         topic = ""
         subTopic = ""
         pendingPicks = emptyMap()
+        pendingExplanations = emptySet()
         vm.setSearchQuery("")
     }
 
     LaunchedEffect(topic) {
         subTopic = ""
         pendingPicks = emptyMap()
+        pendingExplanations = emptySet()
         vm.setSearchQuery("")
     }
 
     LaunchedEffect(subTopic) {
         pendingPicks = emptyMap()
+        pendingExplanations = emptySet()
         vm.setSearchQuery("")
     }
 
@@ -2363,45 +2361,90 @@ private fun AddExercisesBottomSheet(
                                     val alreadySelected = state.selected.containsKey(id)
                                     val isPending = pendingPicks.containsKey(id)
 
-                                    ExercisePickRow(
-                                        item = ExercisePickItem(
-                                            exerciseId = id,
-                                            name = name,
-                                            topic = if (subTopic.isBlank()) topic else "$topic · $subTopic"
-                                        ),
-                                        checked = alreadySelected || isPending,
-                                        onToggle = {
-                                            if (alreadySelected) {
-                                                vm.toggleExercise(
-                                                    ExercisePickItem(
-                                                        exerciseId = id,
-                                                        name = name,
-                                                        topic = if (subTopic.isBlank()) topic else "$topic · $subTopic"
+                                    Column(
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        ExercisePickRow(
+                                            item = ExercisePickItem(
+                                                exerciseId = id,
+                                                name = name,
+                                                topic = if (subTopic.isBlank()) topic else "$topic · $subTopic"
+                                            ),
+                                            checked = alreadySelected || isPending,
+                                            onToggle = {
+                                                if (alreadySelected) {
+                                                    vm.toggleExercise(
+                                                        ExercisePickItem(
+                                                            exerciseId = id,
+                                                            name = name,
+                                                            topic = if (subTopic.isBlank()) topic else "$topic · $subTopic"
+                                                        )
                                                     )
-                                                )
-                                            } else {
-                                                pendingPicks =
-                                                    if (pendingPicks.containsKey(id)) {
-                                                        pendingPicks - id
-                                                    } else {
-                                                        pendingPicks +
-                                                                (
-                                                                        id to
-                                                                                ExercisePickItem(
-                                                                                    exerciseId = id,
-                                                                                    name = name,
-                                                                                    topic =
-                                                                                        if (subTopic.isBlank()) {
-                                                                                            topic
-                                                                                        } else {
-                                                                                            "$topic · $subTopic"
-                                                                                        }
-                                                                                )
-                                                                        )
+                                                } else if (isPending) {
+                                                    pendingPicks = pendingPicks - id
+                                                    pendingExplanations =
+                                                        pendingExplanations - id
+                                                } else {
+                                                    pendingPicks = pendingPicks +
+                                                            (
+                                                                    id to ExercisePickItem(
+                                                                        exerciseId = id,
+                                                                        name = name,
+                                                                        topic = if (subTopic.isBlank()) {
+                                                                            topic
+                                                                        } else {
+                                                                            "$topic · $subTopic"
+                                                                        }
+                                                                    )
+                                                                    )
+                                                }
+                                            }
+                                        )
+
+                                        if (isPending && !alreadySelected) {
+                                            Row(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .clickable {
+                                                        pendingExplanations =
+                                                            if (id in pendingExplanations) {
+                                                                pendingExplanations - id
+                                                            } else {
+                                                                pendingExplanations + id
+                                                            }
                                                     }
+                                                    .padding(
+                                                        horizontal = 12.dp,
+                                                        vertical = 2.dp
+                                                    ),
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Checkbox(
+                                                    checked = id in pendingExplanations,
+                                                    onCheckedChange = { checked ->
+                                                        pendingExplanations =
+                                                            if (checked) {
+                                                                pendingExplanations + id
+                                                            } else {
+                                                                pendingExplanations - id
+                                                            }
+                                                    }
+                                                )
+
+                                                Spacer(Modifier.width(6.dp))
+
+                                                Text(
+                                                    text = tr(
+                                                        "הוסף הסבר לתרגיל ב-PDF",
+                                                        "Include exercise explanation in PDF"
+                                                    ),
+                                                    style = KmiTypography.secondary,
+                                                    color = SummaryTextDark,
+                                                    modifier = Modifier.weight(1f)
+                                                )
                                             }
                                         }
-                                    )
+                                    }
 
                                     if (index < filteredItems.lastIndex) {
                                         Surface(
@@ -2577,14 +2620,19 @@ private fun AddExercisesBottomSheet(
                                                         p.exerciseId
                                                     )
                                             ) {
-                                                vm.toggleExercise(
-                                                    p
-                                                )
+                                                vm.toggleExercise(p)
+
+                                                if (p.exerciseId in pendingExplanations) {
+                                                    vm.setIncludeExplanation(
+                                                        p.exerciseId,
+                                                        true
+                                                    )
+                                                }
                                             }
                                         }
 
-                                    pendingPicks =
-                                        emptyMap()
+                                    pendingPicks = emptyMap()
+                                    pendingExplanations = emptySet()
 
                                     onDismiss()
                                 },
@@ -2746,7 +2794,7 @@ private fun TrainingInfoCard(
             val d = LocalDate.parse(iso.trim())
             val fmt = DateTimeFormatter.ofPattern(
                 "EEEE, d MMM yyyy",
-                if (isEnglish) Locale.US else Locale("he", "IL")
+                if (isEnglish) Locale.US else Locale.forLanguageTag("he-IL")
             )
             d.format(fmt)
         }.getOrDefault(iso)
@@ -4254,7 +4302,7 @@ private fun createTrainingSummaryPdf(
                         if (isEnglish) {
                             Locale.US
                         } else {
-                            Locale("he", "IL")
+                            Locale.forLanguageTag("he-IL")
                         }
                     )
                 )
@@ -4722,11 +4770,10 @@ private fun createTrainingSummaryPdf(
                             style = Paint.Style.STROKE
                         }
 
-                    val left = horizontalMargin
                     val right = pageWidth - horizontalMargin
 
                     canvas.drawRoundRect(
-                        left,
+                        horizontalMargin,
                         top,
                         right,
                         bottom,
@@ -4736,7 +4783,7 @@ private fun createTrainingSummaryPdf(
                     )
 
                     canvas.drawRoundRect(
-                        left,
+                        horizontalMargin,
                         top,
                         right,
                         bottom,
@@ -4941,71 +4988,79 @@ private fun createTrainingSummaryPdf(
                     )
                 }
 
-// מחלקים את הכרטיס למקטעים לפי המקום בכל עמוד.
-                var lineIndex = 0
+                // מודדים את הכרטיס כולו:
+                // שם התרגיל + הסבר + דגשים + ריווח פנימי.
+                val cardHeight =
+                    16f + cardLines.sumOf { (layout, spacing) ->
+                        (layout.height + 3f + spacing).toDouble()
+                    }.toFloat()
 
-                while (lineIndex < cardLines.size) {
+                val availablePageHeight =
+                    contentBottom - KmiPdfHeader.CONTENT_TOP
 
-                    val paddingHeight = 16f
-
-                    val firstLineHeight =
-                        cardLines[lineIndex].first.height + 3f
-
-                    if (
-                        y + paddingHeight + firstLineHeight >
-                        contentBottom
-                    ) {
-                        startPage()
+                // כרטיס ארוך במיוחד מוקטן רק אם
+                // גובהו גדול מהשטח של עמוד שלם.
+                val cardScale =
+                    if (cardHeight > availablePageHeight) {
+                        availablePageHeight / cardHeight
+                    } else {
+                        1f
                     }
 
-                    val segmentStart = lineIndex
-                    var segmentHeight = paddingHeight
+                val visibleCardHeight =
+                    cardHeight * cardScale
 
-                    while (lineIndex < cardLines.size) {
-                        val (layout, spacing) = cardLines[lineIndex]
-                        val required = layout.height + 3f + spacing
+                // מעבירים את הכרטיס כולו לעמוד הבא
+                // אם אין מקום להציג אותו בשלמותו.
+                if (
+                    y + visibleCardHeight >
+                    contentBottom
+                ) {
+                    startPage()
+                }
 
-                        if (
-                            y + segmentHeight + required >
-                            contentBottom
-                        ) {
-                            break
-                        }
+                val cardTop = y
 
-                        segmentHeight += required
-                        lineIndex++
+                // הקטנה סביב הפינה העליונה של הכרטיס,
+                // בלי לשנות את מיקום התוכן האחר בעמוד.
+                val saveCount = canvas.save()
+
+                try {
+                    if (cardScale < 1f) {
+                        canvas.scale(
+                            cardScale,
+                            cardScale,
+                            horizontalMargin,
+                            cardTop
+                        )
                     }
-
-                    val segmentTop = y
 
                     drawExerciseBackground(
-                        top = segmentTop,
-                        bottom = segmentTop + segmentHeight
+                        top = cardTop,
+                        bottom = cardTop + cardHeight
                     )
 
-                    y += 8f
+                    var textY = cardTop + 8f
 
-                    for (i in segmentStart until lineIndex) {
-                        val (layout, spacing) = cardLines[i]
+                    cardLines.forEach { (layout, spacing) ->
 
                         canvas.withTranslation(
                             x = horizontalMargin + 12f,
-                            y = y
+                            y = textY
                         ) {
                             layout.draw(this)
                         }
 
-                        y += layout.height + 3f + spacing
+                        textY +=
+                            layout.height + 3f + spacing
                     }
 
-                    y += 8f
-
-                    if (lineIndex < cardLines.size) {
-                        startPage()
-                    }
+                } finally {
+                    canvas.restoreToCount(saveCount)
                 }
 
-                y += 8f
+                // מתקדמים רק לפי הגובה המוצג בפועל.
+                y = cardTop + visibleCardHeight + 8f
 
             }
     }
