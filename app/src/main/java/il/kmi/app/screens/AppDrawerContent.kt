@@ -3,6 +3,7 @@
 package il.kmi.app.screens.drawer
 
 import android.content.Intent
+import android.util.Log
 import android.widget.Toast
 import androidx.browser.customtabs.CustomTabsIntent
 import androidx.compose.animation.AnimatedVisibility
@@ -99,7 +100,6 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.Query
 import com.google.firebase.firestore.ktx.firestore
 import com.google.firebase.ktx.Firebase
-import il.kmi.app.screens.admin.AdminAccess
 import il.kmi.app.ui.KmiIconSize
 import il.kmi.app.ui.KmiTypography
 import il.kmi.app.voicecommands.VoiceDrawerDestination
@@ -585,9 +585,13 @@ fun AppDrawerContent(
         }
     }
 
-    var resolvedIsAdmin by remember { mutableStateOf<Boolean?>(null) }
-
-    val effectiveIsAdmin = isAdmin || resolvedIsAdmin == true
+    /*
+     * הרשאת המנהל מגיעה מ-MainApp בלבד.
+     *
+     * אין לבצע בדיקת Firestore נוספת מתוך ה-Drawer.
+     * MainApp אחראי לאימות ולהעברת ההרשאה.
+     */
+    val effectiveIsAdmin = isAdmin
 
     // 🎬 דיאלוג סרטוני הדגמה
     var showDemoVideos by rememberSaveable {
@@ -612,11 +616,11 @@ fun AppDrawerContent(
     }
 
     /*
-     * effectiveIsAdmin הוא מפתח של האפקט כדי שה־Bridge
-     * יתחבר מחדש מיד לאחר השלמת בדיקת הרשאת המנהל.
+     * כאשר MainApp מעדכן את הרשאת המנהל,
+     * ה-Bridge מתחבר מחדש עם ההרשאה המעודכנת.
      *
-     * בלי המפתח הזה ה־handler עלול לשמור את הערך false
-     * שנקלט בזמן הטעינה הראשונית.
+     * אין לבצע בדיקת הרשאות נוספת מתוך המנגנון הקולי.
+     * פעולות מנהל רגישות חייבות להיאכף גם בצד השרת.
      */
     DisposableEffect(
         isEnglish,
@@ -796,22 +800,8 @@ fun AppDrawerContent(
         }
     }
 
-    LaunchedEffect(authUid, isAdmin) {
-        if (isAdmin) {
-            resolvedIsAdmin = true
-            return@LaunchedEffect
-        }
-
-        if (authUid.isNullOrBlank()) {
-            resolvedIsAdmin = null
-            return@LaunchedEffect
-        }
-
-        val isAdm = runCatching { AdminAccess.isCurrentUserAdmin() }
-            .getOrDefault(false)
-
-        resolvedIsAdmin = isAdm
-    }
+    // הרשאת מנהל נבדקת ב-MainApp.
+    // ה-Drawer משתמש בתוצאה ואינו פונה שוב לשרת.
 
     // רקע כחול־נייבי אחיד ועדין לכל המגירה
     CompositionLocalProvider(

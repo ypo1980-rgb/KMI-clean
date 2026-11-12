@@ -1,6 +1,7 @@
 package il.kmi.app.attendance.data
 
 import android.app.Application
+import android.util.Log
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.ListenerRegistration
@@ -500,7 +501,67 @@ class AttendanceRepository private constructor(
     ): Long {
         if (branch.isBlank() || groupKey.isBlank()) return 0L
 
-        ensureGroupMetadata(branch, groupKey)
+        Log.d(
+            "KMI_ATTENDANCE_REPO",
+            "ensureSession: starting group metadata check, " +
+                    "groupId=${groupDocId(branch, groupKey)}"
+        )
+
+        try {
+            ensureGroupMetadata(branch, groupKey)
+        } catch (cancelled: kotlinx.coroutines.CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            Log.e(
+                "KMI_ATTENDANCE_REPO",
+                "ensureSession: GROUP_METADATA_FAILED, " +
+                        "groupId=${groupDocId(branch, groupKey)}",
+                error
+            )
+            throw error
+        }
+
+        Log.d(
+            "KMI_ATTENDANCE_REPO",
+            "ensureSession: GROUP_METADATA_OK"
+        )
+
+        // Firestore הוא מקור האמת לשמות הסניף והקבוצה.
+        // מונע כשל הרשאות בגלל הבדלי מקפים ורווחים.
+        val groupSnapshot = groupRef(branch, groupKey)
+            .get()
+            .await()
+
+        check(groupSnapshot.exists()) {
+            "Attendance group document does not exist"
+        }
+
+        val canonicalBranch = groupSnapshot
+            .getString("branch")
+            ?.trim()
+            ?.takeIf { it.isNotBlank() }
+            ?: error("Attendance group branch is missing")
+
+        val canonicalGroup = groupSnapshot
+            .getString("groupKey")
+            ?.trim()
+            ?.takeIf { it.isNotBlank() }
+            ?: error("Attendance group key is missing")
+
+        check(
+            normalizeAttendanceIdentity(canonicalBranch) ==
+                    normalizeAttendanceIdentity(branch) &&
+                    normalizeAttendanceIdentity(canonicalGroup) ==
+                    normalizeAttendanceIdentity(groupKey)
+        ) {
+            "Attendance group identity mismatch"
+        }
+
+        Log.d(
+            "KMI_ATTENDANCE_REPO",
+            "ensureSession: CANONICAL_IDENTITY_OK, " +
+                    "branch=$canonicalBranch, group=$canonicalGroup"
+        )
 
         val sessionDocId = sessionDocId(date)
         val sessionId = stablePositiveLong("$branch|$groupKey|$sessionDocId")
@@ -512,8 +573,8 @@ class AttendanceRepository private constructor(
         val sessionData = mapOf(
             "id" to sessionId,
             "date" to date.toString(),
-            "branch" to branch.trim(),
-            "groupKey" to groupKey.trim(),
+            "branch" to canonicalBranch,
+            "groupKey" to canonicalGroup,
             "coachUid" to currentCoachUidOrNull().orEmpty(),
             "coachEmail" to currentCoachEmailOrNull().orEmpty(),
             "status" to "open",
@@ -522,10 +583,28 @@ class AttendanceRepository private constructor(
             "updatedAt" to FieldValue.serverTimestamp()
         )
 
-        sessionsRef(branch, groupKey)
-            .document(sessionDocId)
-            .set(sessionData, SetOptions.merge())
-            .await()
+        try {
+            sessionsRef(branch, groupKey)
+                .document(sessionDocId)
+                .set(sessionData, SetOptions.merge())
+                .await()
+
+            Log.d(
+                "KMI_ATTENDANCE_REPO",
+                "ensureSession: SESSION_WRITE_OK, " +
+                        "groupId=$groupId, date=$sessionDocId"
+            )
+        } catch (cancelled: kotlinx.coroutines.CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            Log.e(
+                "KMI_ATTENDANCE_REPO",
+                "ensureSession: SESSION_WRITE_FAILED, " +
+                        "groupId=$groupId, date=$sessionDocId",
+                error
+            )
+            throw error
+        }
 
         return sessionId
     }

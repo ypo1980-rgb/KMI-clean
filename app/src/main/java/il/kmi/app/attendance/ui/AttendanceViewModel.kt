@@ -2,11 +2,11 @@ package il.kmi.app.attendance.ui
 
 import android.app.Application
 import android.content.Context
+import android.util.Log
 import androidx.core.content.edit
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.firebase.firestore.DocumentSnapshot
-import com.google.firebase.firestore.FieldPath
 import com.google.firebase.firestore.ktx.firestore
 import com.google.firebase.ktx.Firebase
 import il.kmi.app.attendance.data.AttendanceRecord
@@ -822,18 +822,53 @@ class AttendanceViewModel(app: Application) : AndroidViewModel(app) {
         }
 
         viewModelScope.launch {
-            val result = runCatching {
-                repo.ensureSession(date = d, branch = b, groupKey = g)
-            }
-
-            result.onSuccess { id ->
-                _sessionId.value = id
-            }.onFailure {
-                _events.tryEmit(
-                    UiEvent.ReportSaveFailed(
-                        message = "Failed opening attendance session"
-                    )
+            try {
+                val id = repo.ensureSession(
+                    date = d,
+                    branch = b,
+                    groupKey = g
                 )
+
+                if (
+                    _date.value == d &&
+                    _branch.value == b &&
+                    _groupKey.value == g
+                ) {
+                    _sessionId.value = id
+                }
+
+                Log.d(
+                    "KMI_ATTENDANCE_SESSION",
+                    "Session opened successfully: " +
+                            "date=$d, branch=$b, group=$g"
+                )
+
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                throw cancelled
+
+            } catch (error: Exception) {
+                Log.e(
+                    "KMI_ATTENDANCE_SESSION",
+                    "Failed opening attendance session: " +
+                            "date=$d, branch=$b, group=$g, " +
+                            "errorType=${error.javaClass.simpleName}, " +
+                            "message=${error.message.orEmpty()}",
+                    error
+                )
+
+                if (
+                    _date.value == d &&
+                    _branch.value == b &&
+                    _groupKey.value == g
+                ) {
+                    _sessionId.value = null
+
+                    _events.tryEmit(
+                        UiEvent.ReportSaveFailed(
+                            message = "לא ניתן לפתוח את האימון. יש לבדוק את החיבור וההרשאות."
+                        )
+                    )
+                }
             }
         }
     }

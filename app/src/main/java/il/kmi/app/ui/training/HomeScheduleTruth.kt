@@ -9,8 +9,15 @@ import android.graphics.pdf.PdfDocument
 import android.text.StaticLayout
 import android.text.TextPaint
 import android.widget.Toast
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -21,110 +28,106 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Notes
+import androidx.compose.material.icons.automirrored.filled.PlaylistAddCheck
+import androidx.compose.material.icons.filled.CalendarMonth
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.EditNote
+import androidx.compose.material.icons.filled.FitnessCenter
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.FilledTonalIconButton
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.OutlinedIconButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextDirection
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.core.content.FileProvider
+import androidx.core.content.edit
+import androidx.core.graphics.withTranslation
+import il.kmi.app.data.training.TrainingSummaryEntity
+import il.kmi.app.domain.ContentRepo
+import il.kmi.app.search.KmiSearchBridge
 import il.kmi.app.training.TrainingCatalog
 import il.kmi.app.training.TrainingData
+import il.kmi.app.ui.KmiIconSize
+import il.kmi.app.ui.KmiPremiumDropdown
 import il.kmi.app.ui.KmiTopBar
 import il.kmi.app.ui.KmiTypography
-import il.kmi.shared.prefs.KmiPrefs
+import il.kmi.app.ui.loading.KmiLoadingRings
+import il.kmi.app.ui.pdf.KmiPdfDirection
+import il.kmi.app.ui.pdf.KmiPdfFooter
+import il.kmi.app.ui.pdf.KmiPdfHeader
+import il.kmi.app.ui.scaledIconSize
+import il.kmi.shared.domain.Belt
+import il.kmi.shared.domain.Explanations
+import il.kmi.shared.domain.SubTopicRegistry
 import il.kmi.shared.localization.AppLanguage
 import il.kmi.shared.localization.AppLanguageManager
+import il.kmi.shared.prefs.KmiPrefs
+import il.kmi.shared.questions.model.util.ExerciseTitleFormatter
+import il.yuval.ui.theme.kmiBeltColor
+import il.yuval.ui.theme.kmiScreenBackgroundBrush
+import il.yuval.ui.theme.kmiSectionHeaderBackground
+import il.yuval.ui.theme.kmiSectionHeaderContentColor
 import org.json.JSONArray
 import java.io.File
 import java.io.FileOutputStream
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.Locale
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.ui.text.style.TextOverflow
-import il.kmi.shared.domain.Belt
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.offset
-import androidx.compose.foundation.layout.size
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CalendarMonth
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.FitnessCenter
-import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.material3.FilledTonalButton
-import androidx.compose.material3.Icon
-import androidx.compose.material3.Surface
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.lerp
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.rememberModalBottomSheetState
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.layout.ColumnScope
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.EditNote
-import androidx.compose.material3.FilledTonalIconButton
-import androidx.compose.material3.OutlinedIconButton
-import androidx.compose.ui.graphics.Color
-import androidx.compose.material.icons.automirrored.filled.Notes
-import androidx.compose.material.icons.automirrored.filled.PlaylistAddCheck
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.IconButtonDefaults
-import androidx.compose.material3.OutlinedTextFieldDefaults
-import androidx.compose.ui.graphics.Shape
-import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.style.TextDirection
-import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.ui.platform.LocalLayoutDirection
-import androidx.compose.ui.unit.LayoutDirection
-import androidx.compose.ui.draw.scale
-import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.platform.LocalContext
-import androidx.core.content.FileProvider
-import androidx.core.content.edit
-import androidx.core.graphics.withTranslation
-import il.kmi.app.domain.ContentRepo
-import il.kmi.app.search.KmiSearchBridge
-import il.kmi.app.ui.KmiIconSize
-import il.kmi.app.ui.KmiPremiumDropdown
-import il.kmi.app.ui.loading.KmiLoadingRings
-import il.kmi.app.ui.pdf.KmiPdfDirection
-import il.kmi.app.ui.pdf.KmiPdfFooter
-import il.kmi.app.ui.pdf.KmiPdfHeader
-import il.kmi.app.ui.scaledIconSize
-import il.yuval.ui.theme.kmiScreenBackgroundBrush
-import il.yuval.ui.theme.kmiSectionHeaderBackground
-import il.yuval.ui.theme.kmiSectionHeaderContentColor
-import il.kmi.shared.domain.Explanations
-import il.kmi.shared.domain.SubTopicRegistry
-import il.kmi.shared.questions.model.util.ExerciseTitleFormatter
-import il.kmi.app.data.training.TrainingSummaryEntity
-import il.yuval.ui.theme.kmiBeltColor
 
 //===========================================================================
 
@@ -231,11 +234,11 @@ private fun SummarySectionHeader(
             modifier =
                 Modifier
                     .fillMaxWidth()
-                    .clip(RoundedCornerShape(14.dp))
+                    .clip(RoundedCornerShape(12.dp))
                     .kmiSectionHeaderBackground()
                     .padding(
                         horizontal = 12.dp,
-                        vertical = 10.dp
+                        vertical = 8.dp
                     ),
             verticalAlignment =
                 Alignment.CenterVertically
@@ -289,7 +292,7 @@ private fun SummarySectionHeader(
             Box(
                 modifier =
                     Modifier
-                        .size(42.dp)
+                        .size(36.dp)
                         .background(
                             brush =
                                 if (accentColor != null) {
@@ -374,22 +377,15 @@ private fun PremiumSummaryAccentCard(
         )
 
     Surface(
-        modifier =
-            modifier.fillMaxWidth(),
-        shape =
-            RoundedCornerShape(26.dp),
-        color =
-            Color.Transparent,
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(20.dp),
+        color = Color.Transparent,
         tonalElevation = 0.dp,
         shadowElevation = 0.dp,
-        border =
-            BorderStroke(
-                width = 1.dp,
-                color =
-                    accentColor.copy(
-                        alpha = 0.30f
-                    )
-            )
+        border = BorderStroke(
+            width = 1.dp,
+            color = MaterialTheme.colorScheme.outlineVariant
+        )
     ) {
         Box(
             modifier =
@@ -416,7 +412,7 @@ private fun PremiumSummaryAccentCard(
                                     colors =
                                         listOf(
                                             accentColor.copy(
-                                                alpha = 0.13f
+                                                alpha = 0.06f
                                             ),
                                             Color.Transparent
                                         )
@@ -441,7 +437,7 @@ private fun PremiumSummaryAccentCard(
                                     colors =
                                         listOf(
                                             accentColor.copy(
-                                                alpha = 0.10f
+                                                alpha = 0.04f
                                             ),
                                             Color.Transparent
                                         )
@@ -482,15 +478,11 @@ private fun PremiumSummaryAccentCard(
                     Modifier
                         .fillMaxWidth()
                         .padding(
-                            start = 18.dp,
-                            end = 18.dp,
-                            top = 18.dp,
-                            bottom = 16.dp
+                            horizontal = 12.dp,
+                            vertical = 12.dp
                         ),
                 verticalArrangement =
-                    Arrangement.spacedBy(
-                        12.dp
-                    ),
+                    Arrangement.spacedBy(10.dp),
                 content = content
             )
         }
@@ -505,16 +497,8 @@ private fun PremiumSaveRibbon(
     Box(
         modifier =
             modifier
-                .width(46.dp)
-                .height(62.dp)
-                .shadow(
-                    elevation = 6.dp,
-                    shape = RoundedCornerShape(
-                        bottomStart = 8.dp,
-                        bottomEnd = 8.dp
-                    ),
-                    clip = false
-                )
+                .width(34.dp)
+                .height(38.dp)
     ) {
 
         androidx.compose.foundation.Canvas(
@@ -579,8 +563,8 @@ private fun PremiumSaveRibbon(
             modifier =
                 Modifier
                     .align(Alignment.TopCenter)
-                    .padding(top = 10.dp)
-                    .size(28.dp)
+                    .padding(top = 5.dp)
+                    .size(22.dp)
                     .background(
                         color =
                             Color.White.copy(
@@ -932,23 +916,6 @@ fun TrainingSummaryScreen(
                                     exercisesAccent
                             )
 
-                            Surface(
-                                modifier =
-                                    Modifier.fillMaxWidth(),
-                                color =
-                                    SummaryDivider,
-                                shape =
-                                    RoundedCornerShape(
-                                        999.dp
-                                    )
-                            ) {
-                                Spacer(
-                                    Modifier.height(
-                                        2.dp
-                                    )
-                                )
-                            }
-
                             Text(
                                 text =
                                     if (state.selected.isEmpty()) {
@@ -1173,11 +1140,8 @@ fun TrainingSummaryScreen(
                                                 max = 560.dp
                                             ),
                                     verticalArrangement =
-                                        Arrangement.spacedBy(
-                                            12.dp
-                                        ),
-                                    userScrollEnabled =
-                                        true
+                                        Arrangement.spacedBy(8.dp),
+                                    userScrollEnabled = true
                                 ) {
 
                                     items(
@@ -1209,49 +1173,39 @@ fun TrainingSummaryScreen(
 
                                         Surface(
                                             modifier = Modifier.fillMaxWidth(),
-                                            shape = RoundedCornerShape(22.dp),
-                                            color = MaterialTheme.colorScheme.surface,
-                                            border = BorderStroke(
-                                                width = 1.5.dp,
-                                                color = beltColor.copy(alpha = 0.70f)
-                                            ),
+                                            shape = RoundedCornerShape(18.dp),
+                                            color = Color.Transparent,
                                             tonalElevation = 0.dp,
                                             shadowElevation = 0.dp
                                         ) {
                                             Column(
                                                 modifier = Modifier
                                                     .fillMaxWidth()
-                                                    .background(
-                                                        Brush.verticalGradient(
-                                                            listOf(
-                                                                lerp(
-                                                                    MaterialTheme.colorScheme.surface,
-                                                                    beltColor,
-                                                                    0.13f
-                                                                ),
-                                                                MaterialTheme.colorScheme.surface
-                                                            )
-                                                        )
-                                                    )
-                                                    .padding(10.dp),
-                                                verticalArrangement = Arrangement.spacedBy(10.dp)
+                                                    .padding(
+                                                        horizontal = 2.dp,
+                                                        vertical = 4.dp
+                                                    ),
+                                                verticalArrangement =
+                                                    Arrangement.spacedBy(6.dp)
                                             ) {
 
                                                 Surface(
                                                     modifier = Modifier.fillMaxWidth(),
-                                                    shape = RoundedCornerShape(14.dp),
-                                                    color = beltColor.copy(alpha = 0.16f),
-                                                    border = BorderStroke(
-                                                        1.dp,
-                                                        beltColor.copy(alpha = 0.35f)
-                                                    )
+                                                    shape = RoundedCornerShape(10.dp),
+                                                    color = lerp(
+                                                        MaterialTheme.colorScheme.surfaceVariant,
+                                                        beltColor,
+                                                        0.10f
+                                                    ),
+                                                    tonalElevation = 0.dp,
+                                                    shadowElevation = 0.dp
                                                 ) {
                                                     Row(
                                                         modifier = Modifier
                                                             .fillMaxWidth()
                                                             .padding(
-                                                                horizontal = 12.dp,
-                                                                vertical = 12.dp
+                                                                horizontal = 10.dp,
+                                                                vertical = 6.dp
                                                             ),
                                                         horizontalArrangement =
                                                             Arrangement.SpaceBetween,
@@ -1281,6 +1235,7 @@ fun TrainingSummaryScreen(
                                                     androidx.compose.runtime.key(ex.exerciseId) {
                                                         SelectedExerciseEditor(
                                                             item = ex,
+                                                            isEnglish = isEnglish,
                                                             onRemove = {
                                                                 vm.removeExercise(ex.exerciseId)
                                                             },
@@ -1305,37 +1260,6 @@ fun TrainingSummaryScreen(
                                 }
                             }
                         }
-                    }
-
-                    item {
-                        Spacer(
-                            Modifier.height(
-                                6.dp
-                            )
-                        )
-
-                        Surface(
-                            modifier =
-                                Modifier.fillMaxWidth(),
-                            color =
-                                SummaryDivider,
-                            shape =
-                                RoundedCornerShape(
-                                    999.dp
-                                )
-                        ) {
-                            Spacer(
-                                Modifier.height(
-                                    2.dp
-                                )
-                            )
-                        }
-
-                        Spacer(
-                            Modifier.height(
-                                6.dp
-                            )
-                        )
                     }
 
                     // -----------------------------
@@ -1373,25 +1297,6 @@ fun TrainingSummaryScreen(
                                 accentColor =
                                     summaryAccent
                             )
-
-                            Surface(
-                                modifier =
-                                    Modifier.fillMaxWidth(),
-                                color =
-                                    summaryAccent.copy(
-                                        alpha = 0.16f
-                                    ),
-                                shape =
-                                    RoundedCornerShape(
-                                        999.dp
-                                    )
-                            ) {
-                                Spacer(
-                                    Modifier.height(
-                                        2.dp
-                                    )
-                                )
-                            }
 
                             Surface(
                                 modifier =
@@ -1453,7 +1358,7 @@ fun TrainingSummaryScreen(
                                             Modifier
                                                 .fillMaxWidth()
                                                 .heightIn(
-                                                    min = 145.dp
+                                                    min = 120.dp
                                                 ),
                                         value =
                                             state.notes,
@@ -1550,13 +1455,6 @@ fun TrainingSummaryScreen(
                                     saveAccent
                             ) {
 
-                                /*
-                                 * מרווח קטן עבור ה־Ribbon.
-                                 */
-                                Spacer(
-                                    Modifier.height(6.dp)
-                                )
-
                                 SummarySectionHeader(
                                 title =
                                     tr(
@@ -1576,51 +1474,14 @@ fun TrainingSummaryScreen(
                                     saveAccent
                             )
 
-                            Surface(
-                                modifier =
-                                    Modifier.fillMaxWidth(),
-                                color =
-                                    saveAccent.copy(
-                                        alpha = 0.16f
-                                    ),
-                                shape =
-                                    RoundedCornerShape(
-                                        999.dp
-                                    )
-                            ) {
-                                Spacer(
-                                    Modifier.height(
-                                        2.dp
-                                    )
-                                )
-                            }
-
-                            Surface(
-                                modifier =
-                                    Modifier.fillMaxWidth(),
-                                shape =
-                                    RoundedCornerShape(
-                                        20.dp
-                                    ),
-                                color =
-                                    lerp(
-                                        MaterialTheme
-                                            .colorScheme
-                                            .surface,
-                                        saveAccent,
-                                        0.07f
-                                    ),
-                                tonalElevation = 0.dp,
-                                shadowElevation = 0.dp,
-                                border =
-                                    BorderStroke(
-                                        width = 1.dp,
-                                        color =
-                                            saveAccent.copy(
-                                                alpha = 0.18f
-                                            )
-                                    )
-                            ) {
+                                Surface(
+                                    modifier =
+                                        Modifier.fillMaxWidth(),
+                                    shape = RoundedCornerShape(16.dp),
+                                    color = Color.Transparent,
+                                    tonalElevation = 0.dp,
+                                    shadowElevation = 0.dp
+                                ) {
 
                                 val saveButtonEnabled =
                                     !state.isSaving
@@ -1649,22 +1510,12 @@ fun TrainingSummaryScreen(
                                         Modifier
                                             .fillMaxWidth()
                                             .padding(
-                                                horizontal = 10.dp,
-                                                vertical = 10.dp
+                                                horizontal = 2.dp,
+                                                vertical = 4.dp
                                             )
-                                            .height(58.dp)
-                                            .shadow(
-                                                elevation = 7.dp,
-                                                shape =
-                                                    RoundedCornerShape(
-                                                        999.dp
-                                                    ),
-                                                clip = false
-                                            )
+                                            .heightIn(min = 52.dp)
                                             .clip(
-                                                RoundedCornerShape(
-                                                    999.dp
-                                                )
+                                                RoundedCornerShape(14.dp)
                                             )
                                             .background(
                                                 brush =
@@ -2083,21 +1934,15 @@ private fun AddExercisesBottomSheet(
     LaunchedEffect(selectedBelt) {
         topic = ""
         subTopic = ""
-        pendingPicks = emptyMap()
-        pendingExplanations = emptySet()
         vm.setSearchQuery("")
     }
 
     LaunchedEffect(topic) {
         subTopic = ""
-        pendingPicks = emptyMap()
-        pendingExplanations = emptySet()
         vm.setSearchQuery("")
     }
 
     LaunchedEffect(subTopic) {
-        pendingPicks = emptyMap()
-        pendingExplanations = emptySet()
         vm.setSearchQuery("")
     }
 
@@ -2129,13 +1974,18 @@ private fun AddExercisesBottomSheet(
                         .imePadding(),
                 contentPadding =
                     PaddingValues(
-                        start = 16.dp,
-                        end = 16.dp,
-                        top = 12.dp,
-                        bottom = 108.dp
-                    ),
+                        horizontal = 12.dp,
+                        vertical = 10.dp
+                    ).let {
+                        PaddingValues(
+                            start = 12.dp,
+                            end = 12.dp,
+                            top = 10.dp,
+                            bottom = 140.dp
+                        )
+                    },
                 verticalArrangement =
-                    Arrangement.spacedBy(12.dp),
+                    Arrangement.spacedBy(8.dp),
                 horizontalAlignment =
                     if (isEnglish) {
                         Alignment.Start
@@ -2144,28 +1994,18 @@ private fun AddExercisesBottomSheet(
                     }
             ) {
                 item {
-                    PremiumSummaryCard(
-                        shape = RoundedCornerShape(26.dp)
-                    ) {
-                        SummarySectionHeader(
-                            title =
-                                tr(
-                                    "הוספת תרגילים",
-                                    "Add exercises"
-                                ),
-                            subtitle =
-                                tr(
-                                    "בחר חגורה, נושא ותת־נושא והוסף תרגילים לאימון",
-                                    "Choose belt, topic, and sub-topic and add exercises to training"
-                                ),
-                            icon =
-                                Icons.AutoMirrored
-                                    .Filled
-                                    .PlaylistAddCheck,
-                            isEnglish =
-                                isEnglish
-                        )
-                    }
+                    SummarySectionHeader(
+                        title = tr(
+                            "הוספת תרגילים",
+                            "Add exercises"
+                        ),
+                        subtitle = tr(
+                            "בחר חגורה, נושא ותת־נושא והוסף תרגילים לאימון",
+                            "Choose belt, topic, and sub-topic and add exercises to training"
+                        ),
+                        icon = Icons.AutoMirrored.Filled.PlaylistAddCheck,
+                        isEnglish = isEnglish
+                    )
                 }
 
                 item {
@@ -2292,14 +2132,9 @@ private fun AddExercisesBottomSheet(
                                         18.dp
                                     ),
                                 color =
-                                    SummaryCardInner,
+                                    MaterialTheme.colorScheme.surfaceVariant,
                                 tonalElevation = 0.dp,
-                                shadowElevation = 4.dp,
-                                border =
-                                    BorderStroke(
-                                        1.dp,
-                                        SummaryBorder
-                                    )
+                                shadowElevation = 0.dp
                             ) {
 
                                 Text(
@@ -2335,28 +2170,17 @@ private fun AddExercisesBottomSheet(
 
                     item {
                         Surface(
-                            modifier =
-                                Modifier.fillMaxWidth(),
-                            shape =
-                                RoundedCornerShape(18.dp),
-                            color =
-                                MaterialTheme
-                                    .colorScheme
-                                    .surface,
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(18.dp),
+                            color = Color.Transparent,
                             tonalElevation = 0.dp,
-                            shadowElevation = 0.dp,
-                            border =
-                                BorderStroke(
-                                    1.dp,
-                                    SummaryBorder
-                                )
+                            shadowElevation = 0.dp
                         ) {
                             Column(
-                                modifier =
-                                    Modifier.fillMaxWidth()
+                                modifier = Modifier.fillMaxWidth()
                             ) {
-                                filteredItems.forEachIndexed { index, name ->
-                                    val belt = selectedBelt ?: return@forEachIndexed
+                                filteredItems.forEach { name ->
+                                    val belt = selectedBelt ?: return@forEach
                                     val id = "${belt.id}|$topic|$subTopic|$name"
                                     val alreadySelected = state.selected.containsKey(id)
                                     val isPending = pendingPicks.containsKey(id)
@@ -2371,6 +2195,7 @@ private fun AddExercisesBottomSheet(
                                                 topic = if (subTopic.isBlank()) topic else "$topic · $subTopic"
                                             ),
                                             checked = alreadySelected || isPending,
+                                            isEnglish = isEnglish,
                                             onToggle = {
                                                 if (alreadySelected) {
                                                     vm.toggleExercise(
@@ -2405,6 +2230,22 @@ private fun AddExercisesBottomSheet(
                                             Row(
                                                 modifier = Modifier
                                                     .fillMaxWidth()
+                                                    .padding(
+                                                        horizontal = 4.dp,
+                                                        vertical = 2.dp
+                                                    )
+                                                    .clip(RoundedCornerShape(10.dp))
+                                                    .background(
+                                                        if (id in pendingExplanations) {
+                                                            MaterialTheme.colorScheme
+                                                                .secondaryContainer
+                                                                .copy(alpha = 0.55f)
+                                                        } else {
+                                                            MaterialTheme.colorScheme
+                                                                .surfaceVariant
+                                                                .copy(alpha = 0.35f)
+                                                        }
+                                                    )
                                                     .clickable {
                                                         pendingExplanations =
                                                             if (id in pendingExplanations) {
@@ -2414,7 +2255,7 @@ private fun AddExercisesBottomSheet(
                                                             }
                                                     }
                                                     .padding(
-                                                        horizontal = 12.dp,
+                                                        horizontal = 8.dp,
                                                         vertical = 2.dp
                                                     ),
                                                 verticalAlignment = Alignment.CenterVertically
@@ -2446,17 +2287,8 @@ private fun AddExercisesBottomSheet(
                                         }
                                     }
 
-                                    if (index < filteredItems.lastIndex) {
-                                        Surface(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .padding(horizontal = 12.dp),
-                                            color = SummaryDivider,
-                                            shape = RoundedCornerShape(999.dp)
-                                        ) {
-                                            Spacer(Modifier.height(1.dp))
-                                        }
-                                    }
+                                    // ההפרדה בין התרגילים מתבצעת
+                                    // באמצעות המרווחים של הכרטיסים.
                                 }
                             }
                         }
@@ -2479,19 +2311,15 @@ private fun AddExercisesBottomSheet(
             Surface(
                 modifier =
                     Modifier
-                        .align(
-                            Alignment.BottomCenter
-                        )
+                        .align(Alignment.BottomCenter)
                         .fillMaxWidth(),
-                color =
-                    MaterialTheme
-                        .colorScheme
-                        .surface
-                        .copy(
-                            alpha = 0.97f
-                        ),
+                color = MaterialTheme.colorScheme.surface,
                 tonalElevation = 0.dp,
-                shadowElevation = 10.dp
+                shadowElevation = 0.dp,
+                border = BorderStroke(
+                    width = 1.dp,
+                    color = MaterialTheme.colorScheme.outlineVariant
+                )
             ) {
 
                 Column(
@@ -2500,15 +2328,11 @@ private fun AddExercisesBottomSheet(
                             .fillMaxWidth()
                             .navigationBarsPadding()
                             .padding(
-                                start = 16.dp,
-                                end = 16.dp,
-                                top = 10.dp,
-                                bottom = 12.dp
+                                horizontal = 12.dp,
+                                vertical = 8.dp
                             ),
                     verticalArrangement =
-                        Arrangement.spacedBy(
-                            6.dp
-                        )
+                        Arrangement.spacedBy(4.dp)
                 ) {
 
                     if (pendingPicks.isNotEmpty()) {
@@ -2523,8 +2347,8 @@ private fun AddExercisesBottomSheet(
                                     }
                                 ),
                             onClick = {
-                                pendingPicks =
-                                    emptyMap()
+                                pendingPicks = emptyMap()
+                                pendingExplanations = emptySet()
                             }
                         ) {
 
@@ -2584,16 +2408,8 @@ private fun AddExercisesBottomSheet(
                                 .fillMaxWidth()
                                 .height(58.dp)
                                 .shadow(
-                                    elevation =
-                                        if (confirmEnabled) {
-                                            8.dp
-                                        } else {
-                                            0.dp
-                                        },
-                                    shape =
-                                        RoundedCornerShape(
-                                            999.dp
-                                        ),
+                                    elevation = 0.dp,
+                                    shape = RoundedCornerShape(999.dp),
                                     clip = false
                                 )
                                 .clip(
@@ -2850,7 +2666,7 @@ private fun TrainingInfoCard(
                 modifier =
                     Modifier.fillMaxWidth(),
                 verticalArrangement =
-                    Arrangement.spacedBy(12.dp)
+                    Arrangement.spacedBy(8.dp)
             ) {
                 SummarySectionHeader(
                     title =
@@ -2875,35 +2691,23 @@ private fun TrainingInfoCard(
                         infoAccent
                 )
 
-                Surface(
-                    modifier =
-                        Modifier.fillMaxWidth(),
-                    color =
-                        infoAccent.copy(
-                            alpha = 0.16f
-                        ),
-                    shape =
-                        RoundedCornerShape(
-                            999.dp
-                        )
-                ) {
-                    Spacer(
-                        Modifier.height(
-                            2.dp
-                        )
-                    )
-                }
+                // הכותרת הגלובלית מפרידה בין האזורים.
+                // אין צורך בפס נוסף.
 
                 FilledTonalButton(
                     modifier =
                         Modifier
                             .fillMaxWidth()
-                            .height(54.dp),
+                            .heightIn(min = 46.dp),
+                    contentPadding = PaddingValues(
+                        horizontal = 12.dp,
+                        vertical = 8.dp
+                    ),
                     onClick = {
                         onOpenCalendar?.invoke()
                     },
                     shape =
-                        RoundedCornerShape(999.dp),
+                        RoundedCornerShape(14.dp),
                     colors =
                         ButtonDefaults.filledTonalButtonColors(
                             containerColor =
@@ -2986,17 +2790,20 @@ private fun TrainingInfoCard(
                 } else {
                     Surface(
                         modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(14.dp),
-                        color = SummaryCardInner
+                        shape = RoundedCornerShape(12.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant
+                            .copy(alpha = 0.45f),
+                        tonalElevation = 0.dp,
+                        shadowElevation = 0.dp
                     ) {
                         Column(
                             modifier =
                                 Modifier.padding(
-                                    horizontal = 10.dp,
-                                    vertical = 8.dp
+                                    horizontal = 12.dp,
+                                    vertical = 6.dp
                                 ),
                             verticalArrangement =
-                                Arrangement.spacedBy(6.dp),
+                                Arrangement.spacedBy(2.dp),
                             horizontalAlignment =
                                 horizontalAlignment
                         ) {
@@ -3004,20 +2811,23 @@ private fun TrainingInfoCard(
                                 label = tr("סניף", "Branch"),
                                 value = branchName.ifBlank {
                                     tr("לא נמצא סניף", "Branch not found")
-                                }
+                                },
+                                isEnglish = isEnglish
                             )
 
                             PremiumInfoRow(
                                 label = tr("מאמן", "Coach"),
                                 value = coachName.ifBlank {
                                     tr("מאמן לא ידוע", "Unknown coach")
-                                }
+                                },
+                                isEnglish = isEnglish
                             )
 
                             if (groupKey.isNotBlank()) {
                                 PremiumInfoRow(
                                     label = tr("קבוצה", "Group"),
-                                    value = groupKey
+                                    value = groupKey,
+                                    isEnglish = isEnglish
                                 )
                             }
                         }
@@ -3073,20 +2883,9 @@ private fun TrainingInfoCard(
 @Composable
 private fun PremiumInfoRow(
     label: String,
-    value: String
+    value: String,
+    isEnglish: Boolean
 ) {
-    val context =
-        LocalContext.current
-
-    val languageManager =
-        remember {
-            AppLanguageManager(context)
-        }
-
-    val isEnglish =
-        languageManager.getCurrentLanguage() ==
-                AppLanguage.ENGLISH
-
     val layoutDirection =
         if (isEnglish) {
             LayoutDirection.Ltr
@@ -3099,13 +2898,6 @@ private fun PremiumInfoRow(
             TextAlign.Left
         } else {
             TextAlign.Right
-        }
-
-    val horizontalAlignment =
-        if (isEnglish) {
-            Alignment.Start
-        } else {
-            Alignment.End
         }
 
     val textDirectionStyle =
@@ -3122,34 +2914,30 @@ private fun PremiumInfoRow(
     CompositionLocalProvider(
         LocalLayoutDirection provides layoutDirection
     ) {
-        Column(
-            modifier =
-                Modifier.fillMaxWidth(),
-            horizontalAlignment =
-                horizontalAlignment,
-            verticalArrangement =
-                Arrangement.spacedBy(1.dp)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .heightIn(min = 32.dp)
+                .padding(vertical = 2.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             Text(
                 text = label,
-                style =
-                    KmiTypography.caption
-                        .merge(textDirectionStyle),
+                style = KmiTypography.caption.merge(textDirectionStyle),
                 color = SummaryTextMuted,
                 fontWeight = FontWeight.Bold,
-                textAlign = textAlignPrimary,
-                modifier = Modifier.fillMaxWidth()
+                textAlign = textAlignPrimary
             )
 
             Text(
                 text = value,
-                style =
-                    KmiTypography.body
-                        .merge(textDirectionStyle),
+                style = KmiTypography.body.merge(textDirectionStyle),
                 color = SummaryTextDark,
                 fontWeight = FontWeight.ExtraBold,
-                textAlign = textAlignPrimary,
-                modifier = Modifier.fillMaxWidth()
+                textAlign =
+                    if (isEnglish) TextAlign.Left else TextAlign.Right,
+                modifier = Modifier.weight(1f)
             )
         }
     }
@@ -3159,11 +2947,9 @@ private fun PremiumInfoRow(
 private fun ExercisePickRow(
     item: ExercisePickItem,
     checked: Boolean,
+    isEnglish: Boolean,
     onToggle: () -> Unit
 ) {
-    val context = LocalContext.current
-    val languageManager = remember { AppLanguageManager(context) }
-    val isEnglish = languageManager.getCurrentLanguage() == AppLanguage.ENGLISH
     val textAlignPrimary = if (isEnglish) TextAlign.Left else TextAlign.Right
     val horizontalEnd = if (isEnglish) Alignment.Start else Alignment.End
 
@@ -3171,13 +2957,15 @@ private fun ExercisePickRow(
         modifier =
             Modifier
                 .fillMaxWidth()
+                .padding(vertical = 3.dp)
+                .clip(RoundedCornerShape(12.dp))
                 .background(
                     if (checked) {
-                        SummaryChipSelected.copy(
-                            alpha = 0.38f
-                        )
+                        MaterialTheme.colorScheme
+                            .primaryContainer.copy(alpha = 0.55f)
                     } else {
-                        Color.Transparent
+                        MaterialTheme.colorScheme.surfaceVariant
+                            .copy(alpha = 0.38f)
                     }
                 )
                 .clickable {
@@ -3185,7 +2973,7 @@ private fun ExercisePickRow(
                 }
                 .padding(
                     horizontal = 12.dp,
-                    vertical = 7.dp
+                    vertical = 10.dp
                 ),
         verticalAlignment =
             Alignment.CenterVertically,
@@ -3290,22 +3078,11 @@ private fun <T> sortTrainingExercisesByBelt(
 @Composable
 private fun SelectedExerciseEditor(
     item: SelectedExerciseUi,
+    isEnglish: Boolean,
     onRemove: () -> Unit,
     onHighlight: (String) -> Unit,
     onIncludeExplanation: (Boolean) -> Unit
 ) {
-    val context =
-        LocalContext.current
-
-    val languageManager =
-        remember {
-            AppLanguageManager(context)
-        }
-
-    val isEnglish =
-        languageManager.getCurrentLanguage() ==
-                AppLanguage.ENGLISH
-
     fun tr(
         he: String,
         en: String
@@ -3344,34 +3121,8 @@ private fun SelectedExerciseEditor(
         }
 
     val beltAccentColor =
-        when (belt) {
-
-            Belt.WHITE ->
-                Color(0xFFD1D5DB)
-
-            Belt.YELLOW ->
-                Color(0xFFFACC15)
-
-            Belt.ORANGE ->
-                Color(0xFFF97316)
-
-            Belt.GREEN ->
-                Color(0xFF22C55E)
-
-            Belt.BLUE ->
-                Color(0xFF3B82F6)
-
-            Belt.BROWN ->
-                Color(0xFF8B5A2B)
-
-            Belt.BLACK ->
-                Color(0xFF111111)
-
-            null ->
-                MaterialTheme
-                    .colorScheme
-                    .primary
-        }
+        belt?.let(::kmiBeltColor)
+            ?: MaterialTheme.colorScheme.primary
 
     val beltLabel =
         when {
@@ -3446,28 +3197,19 @@ private fun SelectedExerciseEditor(
     }
 
     Surface(
-        modifier =
-            Modifier
-                .fillMaxWidth(),
-        shape =
-            RoundedCornerShape(
-                24.dp
-            ),
-        color =
-            Color.Transparent,
-        tonalElevation =
-            0.dp,
-        shadowElevation =
-            0.dp,
-        border =
-            BorderStroke(
-                width = 1.dp,
-                color =
-                    beltAccentColor
-                        .copy(
-                            alpha = 0.34f
-                        )
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        color = Color.Transparent,
+        tonalElevation = 0.dp,
+        shadowElevation = 0.dp,
+        border = BorderStroke(
+            width = 1.dp,
+            color = lerp(
+                MaterialTheme.colorScheme.outlineVariant,
+                beltAccentColor,
+                0.25f
             )
+        )
     ) {
 
         Box(
@@ -3481,50 +3223,41 @@ private fun SelectedExerciseEditor(
         ) {
 
             /*
-             * פס חגורה מודגש בצד הכרטיס.
+             * פס חגורה דק לכל גובה הכרטיס.
+             * ציור בלבד, ללא השפעה על מידות הכרטיס.
              */
-            Box(
-                modifier =
-                    Modifier
-                        .align(
-                            if (isEnglish) {
-                                Alignment.CenterStart
-                            } else {
-                                Alignment.CenterEnd
-                            }
-                        )
-                        .width(6.dp)
-                        .fillMaxSize()
-                        .background(
-                            color =
-                                beltAccentColor
-                        )
-            )
+            Canvas(
+                modifier = Modifier.matchParentSize()
+            ) {
+                val stripWidth = 3.dp.toPx()
+
+                drawRect(
+                    color = beltAccentColor,
+                    topLeft = Offset(
+                        x = if (isEnglish) {
+                            0f
+                        } else {
+                            size.width - stripWidth
+                        },
+                        y = 0f
+                    ),
+                    size = Size(
+                        width = stripWidth,
+                        height = size.height
+                    )
+                )
+            }
 
             Column(
                 modifier =
                     Modifier
                         .fillMaxWidth()
                         .padding(
-                            start =
-                                if (isEnglish) {
-                                    18.dp
-                                } else {
-                                    14.dp
-                                },
-                            end =
-                                if (isEnglish) {
-                                    14.dp
-                                } else {
-                                    18.dp
-                                },
-                            top = 14.dp,
-                            bottom = 12.dp
+                            horizontal = 12.dp,
+                            vertical = 8.dp
                         ),
                 verticalArrangement =
-                    Arrangement.spacedBy(
-                        10.dp
-                    )
+                    Arrangement.spacedBy(6.dp)
             ) {
 
                 Text(
@@ -3580,25 +3313,10 @@ private fun SelectedExerciseEditor(
                 ) {
 
                     Surface(
-                        shape =
-                            RoundedCornerShape(
-                                999.dp
-                            ),
-                        color =
-                            innerChipColor,
-                        tonalElevation =
-                            0.dp,
-                        shadowElevation =
-                            0.dp,
-                        border =
-                            BorderStroke(
-                                width = 1.dp,
-                                color =
-                                    beltAccentColor
-                                        .copy(
-                                            alpha = 0.20f
-                                        )
-                            )
+                        shape = RoundedCornerShape(10.dp),
+                        color = innerChipColor,
+                        tonalElevation = 0.dp,
+                        shadowElevation = 0.dp
                     ) {
 
                         Text(
@@ -3639,20 +3357,17 @@ private fun SelectedExerciseEditor(
                 ) {
 
                     FilledTonalIconButton(
+                        modifier = Modifier.size(40.dp),
                         onClick = {
-                            notesOpen =
-                                !notesOpen
+                            notesOpen = !notesOpen
                         },
                         colors =
                             IconButtonDefaults
                                 .filledTonalIconButtonColors(
                                     containerColor =
-                                        beltAccentColor
-                                            .copy(
-                                                alpha = 0.14f
-                                            ),
+                                        MaterialTheme.colorScheme.surfaceVariant,
                                     contentColor =
-                                        SummaryTextDark
+                                        MaterialTheme.colorScheme.onSurface
                                 )
                     ) {
 
@@ -3670,7 +3385,8 @@ private fun SelectedExerciseEditor(
                                         "פתח הערות",
                                         "Open notes"
                                     )
-                                }
+                                },
+                            modifier = Modifier.size(KmiIconSize.small)
                         )
                     }
 
@@ -3681,19 +3397,12 @@ private fun SelectedExerciseEditor(
                     )
 
                     OutlinedIconButton(
-                        onClick =
-                            onRemove,
-                        border =
-                            BorderStroke(
-                                width = 1.dp,
-                                color =
-                                    MaterialTheme
-                                        .colorScheme
-                                        .error
-                                        .copy(
-                                            alpha = 0.55f
-                                        )
-                            )
+                        modifier = Modifier.size(40.dp),
+                        onClick = onRemove,
+                        border = BorderStroke(
+                            width = 1.dp,
+                            color = MaterialTheme.colorScheme.outlineVariant
+                        )
                     ) {
 
                         Icon(
@@ -3705,9 +3414,8 @@ private fun SelectedExerciseEditor(
                                     "Delete exercise"
                                 ),
                             tint =
-                                MaterialTheme
-                                    .colorScheme
-                                    .error
+                                MaterialTheme.colorScheme.error,
+                            modifier = Modifier.size(KmiIconSize.small)
                         )
                     }
                 }
@@ -3798,39 +3506,27 @@ private fun SelectedExerciseEditor(
                                     !item.includeExplanation
                                 )
                             },
-                    shape =
-                        RoundedCornerShape(
-                            16.dp
-                        ),
+                    shape = RoundedCornerShape(12.dp),
                     color =
                         if (item.includeExplanation) {
-                            beltAccentColor.copy(
-                                alpha = 0.12f
-                            )
+                            MaterialTheme.colorScheme
+                                .secondaryContainer.copy(alpha = 0.65f)
                         } else {
-                            MaterialTheme
-                                .colorScheme
-                                .surfaceVariant
-                                .copy(
-                                    alpha = 0.55f
-                                )
+                            MaterialTheme.colorScheme
+                                .surfaceVariant.copy(alpha = 0.45f)
                         },
                     tonalElevation = 0.dp,
                     shadowElevation = 0.dp,
-                    border =
-                        BorderStroke(
-                            width = 1.dp,
-                            color =
-                                if (item.includeExplanation) {
-                                    beltAccentColor.copy(
-                                        alpha = 0.45f
-                                    )
-                                } else {
-                                    MaterialTheme
-                                        .colorScheme
-                                        .outlineVariant
-                                }
-                        )
+                    border = BorderStroke(
+                        width = 1.dp,
+                        color =
+                            if (item.includeExplanation) {
+                                MaterialTheme.colorScheme.secondary
+                                    .copy(alpha = 0.40f)
+                            } else {
+                                MaterialTheme.colorScheme.outlineVariant
+                            }
+                    )
                 ) {
 
                     Row(
@@ -4522,24 +4218,209 @@ private fun createTrainingSummaryPdf(
             linePaint
         )
 
-        y += 12f
+        y += 8f
     }
 
-    fun drawField(
-        label: String,
-        value: String
+    fun createTextLayout(
+        text: String,
+        paint: TextPaint,
+        width: Int
+    ): StaticLayout {
+        val safeText =
+            text.ifBlank { " " }
+
+        return StaticLayout.Builder
+            .obtain(
+                safeText,
+                0,
+                safeText.length,
+                paint,
+                width.coerceAtLeast(1)
+            )
+            .setAlignment(
+                KmiPdfDirection.layoutAlignment(
+                    isEnglish = isEnglish
+                )
+            )
+            .setTextDirection(
+                KmiPdfDirection.textDirection(
+                    isEnglish = isEnglish
+                )
+            )
+            .setIncludePad(false)
+            .build()
+    }
+
+    fun drawCompactFieldsRow(
+        fields: List<Pair<String, String>>
     ) {
-        drawTextLines(
-            text = label,
-            paint = emphasizedPaint,
-            bottomSpacing = 1f
+        val visibleFields =
+            fields.filter { it.second.isNotBlank() }
+
+        if (visibleFields.isEmpty()) {
+            return
+        }
+
+        val rowFields =
+            if (isEnglish) {
+                visibleFields
+            } else {
+                visibleFields.reversed()
+            }
+
+        val cardSpacing = 10f
+        val cardCorner = 12f
+        val cardInnerPaddingX = 12f
+        val cardInnerPaddingY = 10f
+
+        val cardFillPaint =
+            Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color =
+                    android.graphics.Color.rgb(
+                        247,
+                        249,
+                        252
+                    )
+                style = Paint.Style.FILL
+            }
+
+        val cardBorderPaint =
+            Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                color = dividerColor
+                strokeWidth = 1.1f
+                style = Paint.Style.STROKE
+            }
+
+        val labelPaint =
+            textPaint(
+                size = 11.5f,
+                color = mutedColor,
+                bold = true
+            )
+
+        val valuePaint =
+            textPaint(
+                size = 13.5f,
+                color = textColor,
+                bold = true
+            )
+
+        val cardsCount =
+            rowFields.size.coerceAtMost(2)
+
+        val totalSpacing =
+            if (cardsCount > 1) cardSpacing else 0f
+
+        val cardWidth =
+            (
+                    pageWidth -
+                            horizontalMargin * 2f -
+                            totalSpacing
+                    ) / cardsCount.toFloat()
+
+        data class CardMeasure(
+            val label: String,
+            val value: String,
+            val labelLayout: StaticLayout,
+            val valueLayout: StaticLayout,
+            val height: Float
         )
 
-        drawTextLines(
-            text = value,
-            paint = bodyPaint,
-            bottomSpacing = 8f
-        )
+        val measuredCards =
+            rowFields.map { (label, value) ->
+                val textWidth =
+                    (
+                            cardWidth -
+                                    cardInnerPaddingX * 2f
+                            ).toInt()
+
+                val labelLayout =
+                    createTextLayout(
+                        text = label,
+                        paint = labelPaint,
+                        width = textWidth
+                    )
+
+                val valueLayout =
+                    createTextLayout(
+                        text = value,
+                        paint = valuePaint,
+                        width = textWidth
+                    )
+
+                val cardHeight =
+                    cardInnerPaddingY +
+                            labelLayout.height +
+                            4f +
+                            valueLayout.height +
+                            cardInnerPaddingY
+
+                CardMeasure(
+                    label = label,
+                    value = value,
+                    labelLayout = labelLayout,
+                    valueLayout = valueLayout,
+                    height = cardHeight
+                )
+            }
+
+        val rowHeight =
+            measuredCards.maxOfOrNull { it.height } ?: 0f
+
+        ensureSpace(rowHeight + 10f)
+
+        measuredCards.forEachIndexed { index, card ->
+            val left =
+                horizontalMargin +
+                        index * (cardWidth + cardSpacing)
+
+            val top = y
+            val right = left + cardWidth
+            val bottom = top + rowHeight
+
+            canvas.drawRoundRect(
+                left,
+                top,
+                right,
+                bottom,
+                cardCorner,
+                cardCorner,
+                cardFillPaint
+            )
+
+            canvas.drawRoundRect(
+                left,
+                top,
+                right,
+                bottom,
+                cardCorner,
+                cardCorner,
+                cardBorderPaint
+            )
+
+            val textX = left + cardInnerPaddingX
+            val labelY = top + cardInnerPaddingY
+            val valueY =
+                labelY +
+                        card.labelLayout.height +
+                        4f
+
+            canvas.withTranslation(
+                x = textX,
+                y = labelY
+            ) {
+                card.labelLayout.draw(this)
+            }
+
+            canvas.withTranslation(
+                x = textX,
+                y = valueY
+            ) {
+                card.valueLayout.draw(this)
+            }
+        }
+
+        y += rowHeight + 10f
     }
 
     startPage()
@@ -4551,68 +4432,29 @@ private fun createTrainingSummaryPdf(
         )
     )
 
-    drawField(
-        label =
-            tr(
-                "תאריך",
-                "Date"
-            ),
-        value =
-            cleanText(
-                formattedDate,
-                tr(
-                    "לא נבחר תאריך",
-                    "No date selected"
-                )
-            )
-    )
-
-    drawField(
-        label =
-            tr(
-                "סניף",
-                "Branch"
-            ),
-        value =
-            cleanText(
-                data.branchName,
-                tr(
-                    "לא צוין סניף",
-                    "No branch specified"
-                )
-            )
-    )
-
-    drawField(
-        label =
+    drawCompactFieldsRow(
+        listOf(
             tr(
                 "קבוצה",
                 "Group"
-            ),
-        value =
-            cleanText(
+            ) to cleanText(
                 data.groupName,
                 tr(
                     "לא צוינה קבוצה",
                     "No group specified"
                 )
-            )
-    )
-
-    drawField(
-        label =
+            ),
             tr(
                 "מאמן",
                 "Coach"
-            ),
-        value =
-            cleanText(
+            ) to cleanText(
                 data.coachName,
                 tr(
                     "לא צוין מאמן",
                     "No coach specified"
                 )
             )
+        )
     )
 
     drawSectionTitle(
@@ -4635,8 +4477,9 @@ private fun createTrainingSummaryPdf(
     } else {
         data.exercises
             .forEachIndexed { index, exercise ->
-                ensureSpace(52f)
 
+                // גובה כרטיס התרגיל וההסבר נמדד בהמשך,
+                // לפני ציור הכרטיס ולפני מעבר עמוד.
                 val beltLabel =
                     when (exercise.belt) {
                         Belt.WHITE ->
@@ -4798,78 +4641,11 @@ private fun createTrainingSummaryPdf(
                         .getOrNull(index - 1)
                         ?.belt
 
-                if (index == 0 || previousBelt != exercise.belt) {
+                val needsBeltHeader =
+                    index == 0 || previousBelt != exercise.belt
 
-                    // שומרים מקום לכותרת ולתחילת התרגיל
-                    ensureSpace(80f)
-
-                    val headerTop = y
-                    val headerBottom = y + 38f
-
-                    val headerBackground =
-                        Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                            color = beltColor
-                            alpha = 28
-                            style = Paint.Style.FILL
-                        }
-
-                    val headerBorder =
-                        Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                            color = beltColor
-                            strokeWidth = 1.6f
-                            style = Paint.Style.STROKE
-                        }
-
-                    canvas.drawRoundRect(
-                        horizontalMargin,
-                        headerTop,
-                        pageWidth - horizontalMargin,
-                        headerBottom,
-                        12f,
-                        12f,
-                        headerBackground
-                    )
-
-                    canvas.drawRoundRect(
-                        horizontalMargin,
-                        headerTop,
-                        pageWidth - horizontalMargin,
-                        headerBottom,
-                        12f,
-                        12f,
-                        headerBorder
-                    )
-
-                    val headerText =
-                        Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                            color = beltColor
-                            textSize = 15f
-                            typeface = boldTypeface
-                            textAlign =
-                                if (isEnglish) {
-                                    Paint.Align.LEFT
-                                } else {
-                                    Paint.Align.RIGHT
-                                }
-                        }
-
-                    val headerTextX =
-                        if (isEnglish) {
-                            horizontalMargin + 14f
-                        } else {
-                            pageWidth - horizontalMargin - 14f
-                        }
-
-                    canvas.drawText(
-                        beltLabel,
-                        headerTextX,
-                        headerTop + 25f,
-                        headerText
-                    )
-
-                    y = headerBottom + 12f
-                }
-
+                val beltHeaderHeight =
+                    if (needsBeltHeader) 50f else 0f
 
                 val explanation =
                     if (
@@ -4995,14 +4771,28 @@ private fun createTrainingSummaryPdf(
                         (layout.height + 3f + spacing).toDouble()
                     }.toFloat()
 
+                // השטח הזמין בעמוד, לאחר שמירת מקום
+                // ל-Header ול-Footer הגלובליים.
                 val availablePageHeight =
-                    contentBottom - KmiPdfHeader.CONTENT_TOP
+                    contentBottom -
+                            KmiPdfHeader.CONTENT_TOP
 
-                // כרטיס ארוך במיוחד מוקטן רק אם
-                // גובהו גדול מהשטח של עמוד שלם.
+                // שומרים מרווח גם אחרי הכרטיס,
+                // לפני גבול התוכן של העמוד.
+                val cardBottomSpacing = 8f
+
+                // כותרת חגורה והתרגיל הראשון שלה
+                // חייבים להיכנס בשלמותם לאותו עמוד.
+                val availableCardHeight =
+                    (
+                            availablePageHeight -
+                                    beltHeaderHeight -
+                                    cardBottomSpacing
+                            ).coerceAtLeast(1f)
+
                 val cardScale =
-                    if (cardHeight > availablePageHeight) {
-                        availablePageHeight / cardHeight
+                    if (cardHeight > availableCardHeight) {
+                        availableCardHeight / cardHeight
                     } else {
                         1f
                     }
@@ -5010,13 +4800,84 @@ private fun createTrainingSummaryPdf(
                 val visibleCardHeight =
                     cardHeight * cardScale
 
-                // מעבירים את הכרטיס כולו לעמוד הבא
-                // אם אין מקום להציג אותו בשלמותו.
-                if (
-                    y + visibleCardHeight >
-                    contentBottom
-                ) {
+                val requiredHeight =
+                    beltHeaderHeight +
+                            visibleCardHeight +
+                            cardBottomSpacing
+
+                // מעבירים את כל היחידה לעמוד הבא
+                // לפני ציור הכותרת או התרגיל.
+                if (y + requiredHeight > contentBottom) {
                     startPage()
+                }
+
+                if (needsBeltHeader) {
+
+                    val headerTop = y
+                    val headerBottom = y + 38f
+
+                    val headerBackground =
+                        Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                            color = beltColor
+                            alpha = 28
+                            style = Paint.Style.FILL
+                        }
+
+                    val headerBorder =
+                        Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                            color = beltColor
+                            strokeWidth = 1.6f
+                            style = Paint.Style.STROKE
+                        }
+
+                    canvas.drawRoundRect(
+                        horizontalMargin,
+                        headerTop,
+                        pageWidth - horizontalMargin,
+                        headerBottom,
+                        12f,
+                        12f,
+                        headerBackground
+                    )
+
+                    canvas.drawRoundRect(
+                        horizontalMargin,
+                        headerTop,
+                        pageWidth - horizontalMargin,
+                        headerBottom,
+                        12f,
+                        12f,
+                        headerBorder
+                    )
+
+                    val headerText =
+                        Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                            color = beltColor
+                            textSize = 15f
+                            typeface = boldTypeface
+                            textAlign =
+                                if (isEnglish) {
+                                    Paint.Align.LEFT
+                                } else {
+                                    Paint.Align.RIGHT
+                                }
+                        }
+
+                    val headerTextX =
+                        if (isEnglish) {
+                            horizontalMargin + 14f
+                        } else {
+                            pageWidth - horizontalMargin - 14f
+                        }
+
+                    canvas.drawText(
+                        beltLabel,
+                        headerTextX,
+                        headerTop + 25f,
+                        headerText
+                    )
+
+                    y = headerBottom + 12f
                 }
 
                 val cardTop = y
@@ -5059,8 +4920,12 @@ private fun createTrainingSummaryPdf(
                     canvas.restoreToCount(saveCount)
                 }
 
-                // מתקדמים רק לפי הגובה המוצג בפועל.
-                y = cardTop + visibleCardHeight + 8f
+                // מתקדמים לפי הגובה המוצג בפועל,
+                // כולל מרווח הבטיחות שנמדד מראש.
+                y =
+                    cardTop +
+                            visibleCardHeight +
+                            cardBottomSpacing
 
             }
     }

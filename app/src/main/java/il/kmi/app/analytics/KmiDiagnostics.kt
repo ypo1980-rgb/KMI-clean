@@ -1,6 +1,9 @@
 package il.kmi.app.analytics
 
 import android.content.Context
+import android.util.Log
+import androidx.core.content.pm.PackageInfoCompat
+import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.SetOptions
 import com.google.firebase.firestore.ktx.firestore
@@ -10,8 +13,14 @@ object KmiDiagnostics {
 
     private fun appVersion(context: Context): String {
         return runCatching {
-            val info = context.packageManager.getPackageInfo(context.packageName, 0)
-            "${info.versionName ?: ""} (${info.longVersionCode})"
+            val info = context.packageManager.getPackageInfo(
+                context.packageName,
+                0
+            )
+
+            val versionCode = PackageInfoCompat.getLongVersionCode(info)
+
+            "${info.versionName.orEmpty()} ($versionCode)"
         }.getOrDefault("")
     }
 
@@ -35,7 +44,23 @@ object KmiDiagnostics {
         severity: String = "info",
         extra: Map<String, Any?> = emptyMap()
     ) {
+        val user = FirebaseAuth.getInstance().currentUser
+            ?.takeUnless { it.isAnonymous }
+            ?: return
+
+        val uid = user.uid.takeIf { it.isNotBlank() }
+            ?: return
+
+        val metadata = mutableMapOf<String, Any>()
+
+        extra.forEach { (key, value) ->
+            if (value != null) {
+                metadata[key] = value
+            }
+        }
+
         val payload = mutableMapOf<String, Any>(
+            // שדות קיימים: נשמרים לתאימות עם מרכז הבקרה.
             "type" to type,
             "title" to title,
             "message" to message,
@@ -43,11 +68,20 @@ object KmiDiagnostics {
             "severity" to severity,
             "appVersion" to appVersion(context),
             "language" to java.util.Locale.getDefault().language,
-            "createdAt" to FieldValue.serverTimestamp()
+            "createdAt" to FieldValue.serverTimestamp(),
+
+            // שדות הרשאה ואבחון אחידים.
+            "uid" to uid,
+            "level" to severity,
+            "source" to area.ifBlank { "app" },
+            "action" to type,
+            "metadata" to metadata
         )
 
-        extra.forEach { (key, value) ->
-            if (value != null) {
+        // שומרים על תאימות לשדות נוספים קיימים,
+        // אך לא מאפשרים ל-extra להחליף שדות מאומתים.
+        metadata.forEach { (key, value) ->
+            if (!payload.containsKey(key)) {
                 payload[key] = value
             }
         }
@@ -55,6 +89,13 @@ object KmiDiagnostics {
         Firebase.firestore
             .collection("adminLogs")
             .add(payload)
+            .addOnFailureListener { error ->
+                Log.e(
+                    "KMI_DIAGNOSTICS",
+                    "Failed to save admin log: type=$type",
+                    error
+                )
+            }
     }
 
     fun trackScreen(
@@ -78,6 +119,13 @@ object KmiDiagnostics {
                 screenPayload,
                 SetOptions.merge()
             )
+            .addOnFailureListener { error ->
+                Log.e(
+                    "KMI_DIAGNOSTICS",
+                    "Failed to update screen_views: screenId=$docId",
+                    error
+                )
+            }
 
         logEvent(
             context = context,

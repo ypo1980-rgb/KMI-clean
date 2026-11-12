@@ -1850,16 +1850,41 @@ exports.createKamiAttendanceQr =
             .replace(/\s+/g, " ")
             .toLowerCase();
 
-        const attendanceGroupId =
-          "g_" +
-          kamiAttendanceStableLong(
-            normalizeAttendanceIdentity(branch) +
-            "|" +
-            normalizeAttendanceIdentity(group)
-          ).toString();
+    /*
+     * חישוב מזהה יציב התואם ל-AttendanceRepository.kt.
+     *
+     * SHA-256 -> שמונת הבתים הראשונים ->
+     * הסרת ביט הסימן -> מספר חיובי.
+     *
+     * BigInt נדרש לשמירה על דיוק של 64 ביט.
+     */
+    const kamiAttendanceStableLong = (raw) => {
+      const bytes = require("node:crypto")
+        .createHash("sha256")
+        .update(
+          String(raw ?? "").trim().toLowerCase(),
+          "utf8"
+        )
+        .digest();
 
-        const savedReportsQuery =
-          db.collection("attendanceGroups")
+      const value = bytes.readBigUInt64BE(0);
+
+      const positive =
+        value & 0x7fffffffffffffffn;
+
+      return positive === 0n ? 1n : positive;
+    };
+
+    const attendanceGroupId =
+      "g_" +
+      kamiAttendanceStableLong(
+        normalizeAttendanceIdentity(branch) +
+          "|" +
+          normalizeAttendanceIdentity(group)
+      ).toString();
+
+    const savedReportsQuery =
+      db.collection("attendanceGroups")
             .doc(attendanceGroupId)
             .collection("reports")
             .where(

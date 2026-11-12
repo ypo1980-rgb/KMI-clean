@@ -1338,13 +1338,25 @@ match /used_numbers/{phone} {
     // AI Feedback – מסכי מנהל
     // =========================
     match /aiFeedback/{docId} {
+      // קריאת משובים: מנהל בלבד.
       allow read: if isAdmin();
-      allow write: if isSignedIn();
+
+      // משתמש מחובר רשאי לשלוח משוב חדש.
+      allow create: if isSignedIn();
+
+      // אין שינוי או מחיקה של משוב קיים מהלקוח.
+      allow update, delete: if false;
     }
 
      match /assistantFeedback/{docId} {
+      // קריאת משובים: מנהל בלבד.
       allow read: if isAdmin();
-      allow write: if isSignedIn();
+
+      // משתמש מחובר רשאי לשלוח משוב חדש.
+      allow create: if isSignedIn();
+
+      // אין שינוי או מחיקה של משוב קיים מהלקוח.
+      allow update, delete: if false;
     }
 
  // =========================
@@ -1495,12 +1507,22 @@ match /sessions/{sessionId} {
        attendanceGroupBranch();
 
   allow update: if isSignedIn()
-    && resource.data.branch is string
-    && request.resource.data.branch ==
-       resource.data.branch
+    && request.resource.data.branch is string
     && request.resource.data.branch ==
        attendanceGroupBranch()
-    && canManageThisAttendanceGroup();
+    && canManageThisAttendanceGroup()
+    && (
+      (
+        resource.data.branch is string
+        && request.resource.data.branch ==
+           resource.data.branch
+      )
+      ||
+      (
+        !("branch" in resource.data)
+        && resource.data.keys().size() == 0
+      )
+    );
 
   allow delete: if isSignedIn()
     && canManageThisAttendanceGroup();
@@ -2290,26 +2312,70 @@ match /beltStats/{beltId} {
 // =========================
 match /adminLogs/{logId} {
 
-  // יצירת לוג במבנה מוגדר בלבד.
+  // יצירת לוג על ידי משתמש מחובר בלבד.
   allow create: if isSignedIn()
+
     && request.resource.data.keys().hasOnly([
       "createdAt",
+      "uid",
+      "type",
+      "title",
+      "message",
+      "area",
+      "severity",
+      "appVersion",
+      "language",
       "level",
       "source",
       "action",
-      "message",
+      "metadata",
+      "screenName",
+      "route",
+      "queryLength",
+      "resultCount"
+    ])
+
+    && request.resource.data.keys().hasAll([
+      "createdAt",
       "uid",
-      "email",
+      "type",
+      "title",
+      "message",
+      "area",
+      "severity",
+      "appVersion",
+      "language",
+      "level",
+      "source",
+      "action",
       "metadata"
     ])
-    && request.resource.data.createdAt != null
-    && request.resource.data.level is string
-    && request.resource.data.source is string
-    && request.resource.data.action is string
-    && request.resource.data.message is string
-    && request.resource.data.uid == request.auth.uid;
 
-  // קריאה רק לאדמין.
+    && request.resource.data.uid == request.auth.uid
+
+    && request.resource.data.createdAt == request.time
+
+    && request.resource.data.type is string
+    && request.resource.data.title is string
+    && request.resource.data.message is string
+    && request.resource.data.area is string
+    && request.resource.data.severity is string
+    && request.resource.data.appVersion is string
+    && request.resource.data.language is string
+
+    && request.resource.data.level ==
+       request.resource.data.severity
+
+    && request.resource.data.action ==
+       request.resource.data.type
+
+    && request.resource.data.source is string
+
+    && request.resource.data.metadata is map
+
+    && request.resource.data.keys().size() <= 17;
+
+  // קריאת לוגים: מנהל מאומת בלבד.
   allow read: if isAdmin();
 
   // אין עריכה או מחיקה מהאפליקציה.
@@ -2380,33 +2446,38 @@ match /google_auth_diagnostics/{docId} {
 // =========================
 match /screen_views/{screenId} {
 
+  // צפייה בנתוני השימוש: מנהל בלבד.
   allow read: if isAdmin();
 
+  // יצירת מונה חדש עם צפייה ראשונה בלבד.
   allow create: if isSignedIn()
     && request.resource.data.keys().hasOnly([
-      "screenId",
+      "screenName",
+      "route",
       "count",
-      "lastViewedAt",
-      "updatedBy"
+      "updatedAt"
     ])
-    && request.resource.data.screenId == screenId
+    && request.resource.data.screenName is string
+    && request.resource.data.screenName.size() > 0
+    && request.resource.data.route is string
     && request.resource.data.count is int
-    && request.resource.data.count >= 1
-    && request.resource.data.updatedBy == request.auth.uid
-    && request.resource.data.lastViewedAt != null;
+    && request.resource.data.count == 1
+    && request.resource.data.updatedAt == request.time;
 
+  // עדכון מונה קיים: הגדלה ביחידה אחת בלבד.
   allow update: if isSignedIn()
-    && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-      "count",
-      "lastViewedAt",
-      "updatedBy"
-    ])
-    && request.resource.data.screenId == resource.data.screenId
+    && request.resource.data.diff(resource.data)
+      .affectedKeys().hasOnly([
+        "count",
+        "updatedAt"
+      ])
     && request.resource.data.count is int
-    && request.resource.data.count >= resource.data.count
-    && request.resource.data.updatedBy == request.auth.uid
-    && request.resource.data.lastViewedAt != null;
+    && resource.data.count is int
+    && request.resource.data.count ==
+       resource.data.count + 1
+    && request.resource.data.updatedAt == request.time;
 
+  // מחיקה: מנהל בלבד.
   allow delete: if isAdmin();
 }
 

@@ -28,6 +28,7 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.activity.compose.BackHandler
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -121,8 +122,13 @@ fun RegistrationFormScreen(
     onOpenDrawer: () -> Unit = { il.kmi.app.ui.DrawerBridge.open() },
     sp: SharedPreferences,
     kmiPrefs: KmiPrefs,
-    startAtProfile: Boolean = false
+    startAtProfile: Boolean = false,
+    onBack: () -> Unit = {}
 ) {
+    BackHandler(enabled = startAtProfile) {
+        onBack()
+    }
+
     val ctx = LocalContext.current
     val userSp = remember(ctx) { ctx.getSharedPreferences("kmi_user", Context.MODE_PRIVATE) }
 

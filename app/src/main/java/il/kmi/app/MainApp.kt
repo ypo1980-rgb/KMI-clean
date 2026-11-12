@@ -41,6 +41,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Density
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
@@ -375,6 +378,14 @@ fun MainApp(
     val currentRoute = mainBackStackEntry?.destination?.route
     val activeRouteForDrawer = currentRoute ?: resolvedStartDestination
 
+    val firebaseAuthForRoles = remember {
+        com.google.firebase.auth.FirebaseAuth.getInstance()
+    }
+
+    var authenticatedUid by remember {
+        mutableStateOf(firebaseAuthForRoles.currentUser?.uid)
+    }
+
     var isAdmin by remember {
         mutableStateOf(false)
     }
@@ -383,33 +394,68 @@ fun MainApp(
         mutableStateOf(false)
     }
 
-    LaunchedEffect(
-        currentRoute,
-        com.google.firebase.auth.FirebaseAuth
-            .getInstance()
-            .currentUser
-            ?.uid
-    ) {
-        isAdmin =
-            AdminAccess.isCurrentUserAdmin()
+    /*
+     * מעקב אחר זהות המשתמש המחובר.
+     * אין להסתמך על currentRoute לזיהוי שינוי משתמש.
+     */
+    DisposableEffect(firebaseAuthForRoles) {
+        val listener =
+            com.google.firebase.auth.FirebaseAuth.AuthStateListener { auth ->
+                val newUid = auth.currentUser?.uid
 
-        val uid =
-            com.google.firebase.auth.FirebaseAuth
-                .getInstance()
-                .currentUser
-                ?.uid
-                .orEmpty()
+                if (authenticatedUid != newUid) {
+                    isAdmin = false
+                    isCoachAuthorized = false
+                    authenticatedUid = newUid
+                }
+            }
+
+        firebaseAuthForRoles.addAuthStateListener(listener)
+
+        onDispose {
+            firebaseAuthForRoles.removeAuthStateListener(listener)
+        }
+    }
+
+    val lifecycleOwner = LocalLifecycleOwner.current
+
+    /*
+     * הרשאות נבדקות:
+     * 1. בעת התחברות או החלפת משתמש.
+     * 2. בעת חזרה של האפליקציה למצב STARTED.
+     *
+     * מעבר בין מסכים אינו מפעיל בדיקה נוספת.
+     * כשהאפליקציה יוצאת מ-STARTED, הבדיקה מתבטלת.
+     */
+    LaunchedEffect(authenticatedUid, lifecycleOwner) {
+        val uid = authenticatedUid.orEmpty()
+
+        isAdmin = false
+        isCoachAuthorized = false
 
         if (uid.isBlank()) {
-            isCoachAuthorized = false
             return@LaunchedEffect
         }
 
-        val firebaseApp =
-            com.google.firebase.FirebaseApp.getInstance()
+        lifecycleOwner.lifecycle.repeatOnLifecycle(
+            Lifecycle.State.STARTED
+        ) {
+            // אין להציג הרשאות ישנות בזמן בדיקה מחדש.
+            isAdmin = false
+            isCoachAuthorized = false
 
-        val firebaseAuth =
-            com.google.firebase.auth.FirebaseAuth.getInstance()
+            if (firebaseAuthForRoles.currentUser?.uid != uid) {
+                return@repeatOnLifecycle
+            }
+
+            isAdmin =
+                AdminAccess.isCurrentUserAdmin() &&
+                        firebaseAuthForRoles.currentUser?.uid == uid
+
+            val firebaseApp =
+                com.google.firebase.FirebaseApp.getInstance()
+
+        val firebaseAuth = firebaseAuthForRoles
 
         val firestore =
             com.google.firebase.firestore.FirebaseFirestore.getInstance()
@@ -493,13 +539,14 @@ fun MainApp(
             sameAuthenticatedUser &&
                     (sdkCoachAuthorized || restCoachAuthorized)
 
-        android.util.Log.d(
-            "KMI_COACH_AUTH",
-            "Drawer authorization: " +
-                    "sdk=$sdkCoachAuthorized " +
-                    "rest=$restCoachAuthorized " +
-                    "authorized=$isCoachAuthorized"
-        )
+            android.util.Log.d(
+                "KMI_COACH_AUTH",
+                "Drawer authorization: " +
+                        "sdk=$sdkCoachAuthorized " +
+                        "rest=$restCoachAuthorized " +
+                        "authorized=$isCoachAuthorized"
+            )
+        }
     }
 
     val ctxForDiagnostics = LocalContext.current.applicationContext

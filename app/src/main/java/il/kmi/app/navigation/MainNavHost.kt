@@ -1164,25 +1164,13 @@ fun MainNavHost(
     }
 
     /*
-     * הרשאת המנהל נבדקת מול אותו מנגנון שבו משתמש
-     * סרגל הצד. כך פקודה קולית לא יכולה לעקוף
-     * את הרשאות מסכי המנהל.
+     * הרשאת התצוגה של אזור המנהל מנוהלת ב-MainApp.
+     *
+     * מסכי המנהל מבצעים בדיקת הרשאה עצמאית בכניסה,
+     * כדי למנוע כניסה ישירה ללא אימות.
+     *
+     * אין צורך בבדיקת הרשאה גלובלית נוספת ב-MainNavHost.
      */
-    var isAdmin by remember(ownerUid) {
-        mutableStateOf(false)
-    }
-
-    LaunchedEffect(ownerUid) {
-        isAdmin =
-            if (ownerUid.isBlank()) {
-                false
-            } else {
-                runCatching {
-                    AdminAccess.isCurrentUserAdmin()
-                }.getOrDefault(false)
-            }
-    }
-
     val trainingSummaryVm = remember(ownerUid, ownerRole) {
         il.kmi.app.ui.training.TrainingSummaryViewModel(
             repo = il.kmi.app.data.training.FirestoreTrainingSummaryRepo(),

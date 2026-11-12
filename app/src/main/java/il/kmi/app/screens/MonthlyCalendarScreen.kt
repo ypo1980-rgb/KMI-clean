@@ -1716,13 +1716,13 @@ fun MonthlyCalendarScreen(
                                                                         hasSummaryForSelectedDate
                                                                     ) {
                                                                         tr(
-                                                                            "קריאת סיכום",
-                                                                            "Read training summary"
+                                                                            "עריכת הסיכום",
+                                                                            "Edit summary"
                                                                         )
                                                                     } else {
                                                                         tr(
                                                                             "הוספת סיכום",
-                                                                            "Add training summary"
+                                                                            "Add summary"
                                                                         )
                                                                     },
                                                                 style =
@@ -1730,7 +1730,9 @@ fun MonthlyCalendarScreen(
                                                                         fontWeight =
                                                                             FontWeight.ExtraBold
                                                                     ),
-                                                                maxLines = 1
+                                                                maxLines = 2,
+                                                                textAlign =
+                                                                    TextAlign.Center
                                                             )
                                                         }
 
@@ -1738,59 +1740,54 @@ fun MonthlyCalendarScreen(
                                                             hasSummaryForSelectedDate
                                                         ) {
 
-                                                            Surface(
+                                                            Button(
                                                                 modifier =
                                                                     Modifier
-                                                                        .size(
-                                                                            58.dp
-                                                                        )
-                                                                        .clickable {
-                                                                            onOpenSummaryPdf(
-                                                                                sel
-                                                                            )
-                                                                        },
+                                                                        .weight(1f)
+                                                                        .height(58.dp),
+                                                                onClick = {
+                                                                    onOpenSummaryPdf(sel)
+                                                                },
                                                                 shape =
                                                                     RoundedCornerShape(
                                                                         20.dp
                                                                     ),
-                                                                color =
-                                                                    colorScheme.surface
-                                                                        .copy(
-                                                                            alpha = 0.82f
-                                                                        ),
-                                                                tonalElevation = 0.dp,
-                                                                shadowElevation = 3.dp,
-                                                                border =
-                                                                    BorderStroke(
-                                                                        width = 1.dp,
-                                                                        color =
-                                                                            cardAccent.copy(
-                                                                                alpha = 0.28f
-                                                                            )
+                                                                colors =
+                                                                    ButtonDefaults.buttonColors(
+                                                                        containerColor =
+                                                                            cardAccent,
+                                                                        contentColor =
+                                                                            colorScheme.onPrimary
+                                                                    ),
+                                                                contentPadding =
+                                                                    PaddingValues(
+                                                                        horizontal = 6.dp,
+                                                                        vertical = 4.dp
+                                                                    ),
+                                                                elevation =
+                                                                    ButtonDefaults.buttonElevation(
+                                                                        defaultElevation = 2.dp,
+                                                                        pressedElevation = 0.dp
                                                                     )
                                                             ) {
 
-                                                                Box(
-                                                                    contentAlignment =
-                                                                        Alignment.Center
-                                                                ) {
-
-                                                                    Icon(
-                                                                        imageVector =
-                                                                            Icons.Filled.PictureAsPdf,
-                                                                        contentDescription =
-                                                                            tr(
-                                                                                "פתיחת PDF של סיכום האימון",
-                                                                                "Open training summary PDF"
-                                                                            ),
-                                                                        tint =
-                                                                            cardAccent,
-                                                                        modifier =
-                                                                            Modifier.size(
-                                                                                27.dp
-                                                                            )
-                                                                    )
-                                                                }
+                                                                Text(
+                                                                    text =
+                                                                        tr(
+                                                                            "קריאת הסיכום - PDF",
+                                                                            "Read summary - PDF"
+                                                                        ),
+                                                                    style =
+                                                                        KmiTypography.action.copy(
+                                                                            fontWeight =
+                                                                                FontWeight.ExtraBold
+                                                                        ),
+                                                                    color =
+                                                                        colorScheme.onPrimary,
+                                                                    maxLines = 2,
+                                                                    textAlign =
+                                                                        TextAlign.Center
+                                                                )
                                                             }
                                                         }
                                                     }
