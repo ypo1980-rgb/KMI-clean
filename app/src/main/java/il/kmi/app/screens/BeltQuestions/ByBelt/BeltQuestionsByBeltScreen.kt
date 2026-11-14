@@ -1526,13 +1526,27 @@ internal fun BeltPangoLayout(
                         belt = currentBelt,
                         lang = topBarLanguageManager.getCurrentLanguage()
                     ),
+
+                    // התמונה מוצגת לצד הכותרת באותה שורה.
+                    headerBeltLabel = null,
+                    headerBeltImageRes = when (currentBelt) {
+                        Belt.WHITE -> R.drawable.intro_belt_white
+                        Belt.YELLOW -> R.drawable.intro_belt_yellow
+                        Belt.ORANGE -> R.drawable.intro_belt_orange
+                        Belt.GREEN -> R.drawable.intro_belt_green
+                        Belt.BLUE -> R.drawable.intro_belt_blue
+                        Belt.BROWN -> R.drawable.intro_belt_brown
+                        Belt.BLACK -> R.drawable.intro_belt_black
+                    },
+
                     onHome = onBackHome,
+                    onBack = onBackHome,
                     lockSearch = false,
                     showBottomActions = true,
                     centerTitle = true,
                     showTopHome = false,
-                    showBackNavigation = false,
-                    showTopBeltIcon = true,
+                    showBackNavigation = true,
+                    showTopBeltIcon = false,
                     topBeltIconRes = null,
 
                     quickActionsAccentOverride =
@@ -2445,25 +2459,6 @@ private fun TopicsCardForBelt(
         modifier = Modifier.fillMaxWidth(),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Text(
-            text =
-                if (isEnglish) {
-                    "Topics in Belt"
-                } else {
-                    "נושאים בחגורה"
-                },
-            style = KmiTypography.sectionTitle,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 14.dp),
-            textAlign = TextAlign.Center,
-            color = titleColor,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis
-        )
-
-        Spacer(Modifier.height(6.dp))
-
         Surface(
             tonalElevation = 0.dp,
             shadowElevation = 0.dp,

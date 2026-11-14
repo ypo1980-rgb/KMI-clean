@@ -8,28 +8,40 @@ import android.graphics.Paint
 import android.graphics.pdf.PdfDocument
 import android.net.Uri
 import android.widget.Toast
-import androidx.core.content.FileProvider
-import androidx.core.content.edit
-import androidx.core.net.toUri
-import il.kmi.app.ui.pdf.KmiPdfFooter
-import il.kmi.app.ui.pdf.KmiPdfHeader
-import java.io.File
-import java.io.FileOutputStream
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.systemBars
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
-import androidx.compose.foundation.Canvas
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.VideoLibrary
@@ -48,6 +60,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -60,41 +73,45 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.drawscope.Fill
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.core.content.FileProvider
+import androidx.core.content.edit
+import androidx.core.net.toUri
 import coil.compose.AsyncImage
 import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.firestore.ktx.firestore
 import com.google.firebase.ktx.Firebase
 import com.google.firebase.storage.ktx.storage
-import il.kmi.app.subscription.KmiAccess
+import il.kmi.app.database.KmiDatabaseProvider
 import il.kmi.app.localization.rememberIsEnglish
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.tasks.await
-import kotlinx.datetime.Instant
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
-import androidx.compose.foundation.text.BasicTextField
-import androidx.compose.ui.graphics.SolidColor
+import il.kmi.app.privacy.TraineeDisplayNameMapper
+import il.kmi.app.screens.registration.CoachBranchAssignmentsCodec
+import il.kmi.app.subscription.KmiAccess
 import il.kmi.app.ui.KmiIconSize
 import il.kmi.app.ui.KmiPremiumDropdown
 import il.kmi.app.ui.KmiTypography
 import il.kmi.app.ui.loading.KmiLoadingRings
+import il.kmi.app.ui.pdf.KmiPdfFooter
+import il.kmi.app.ui.pdf.KmiPdfHeader
 import il.kmi.app.ui.scaledIconSize
-import il.kmi.app.privacy.TraineeDisplayNameMapper
-import il.kmi.app.screens.registration.CoachBranchAssignmentsCodec
-import il.kmi.app.database.KmiDatabaseProvider
-import androidx.compose.runtime.collectAsState
 import il.yuval.ui.theme.kmiScreenBackgroundBrush
 import il.yuval.ui.theme.kmiSectionHeaderBackground
 import il.yuval.ui.theme.kmiSectionHeaderContentColor
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
+import kotlinx.datetime.Instant
+import java.io.File
+import java.io.FileOutputStream
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 //==================================================================
 
@@ -902,38 +919,25 @@ fun ForumScreen(
         }
     }
 
-    fun SharedPreferences.hasActiveSubscriptionAccess(): Boolean {
-        val now = System.currentTimeMillis()
-        val until = getLong("sub_access_until", 0L)
-
-        val verifiedAndValid =
-            getBoolean("google_subscription_verified", false) && until > now
-
-        return KmiAccess.hasFullAccess(this) ||
-                verifiedAndValid ||
-                getBoolean("has_full_access", false) ||
-                getBoolean("full_access", false) ||
-                getBoolean("subscription_active", false) ||
-                getBoolean("is_subscribed", false)
-    }
-
-    val isTrial = remember(forumAccessRefreshTick, isManagerOverride) {
-        KmiAccess.isTrialActive(userSp) &&
-                !userSp.hasActiveSubscriptionAccess() &&
-                !subsSp.hasActiveSubscriptionAccess() &&
-                !legacySp.hasActiveSubscriptionAccess()
-    }
-
-    val hasFull = remember(forumAccessRefreshTick, isManagerOverride) {
+    // מקור אמת גלובלי להרשאות הפורום.
+    // בתקופת הבדיקות KmiAccess מאפשר גישה מלאה.
+    val hasFull = remember(
+        forumAccessRefreshTick,
+        isManagerOverride
+    ) {
         isManagerOverride ||
-                userSp.hasActiveSubscriptionAccess() ||
-                subsSp.hasActiveSubscriptionAccess() ||
-                legacySp.hasActiveSubscriptionAccess()
+                KmiAccess.canUseForum(userSp) ||
+                KmiAccess.canUseForum(subsSp) ||
+                KmiAccess.canUseForum(legacySp)
     }
 
-    // 🔒 גישת פורום:
-    // פתוח רק למנהל או למנוי חודשי/שנתי פעיל.
-    // Trial לא פותח פורום.
+    val isTrial = remember(
+        forumAccessRefreshTick
+    ) {
+        KmiAccess.isTrialActive(userSp) && !hasFull
+    }
+
+    // גישה לפורום לפי ההרשאה הגלובלית.
     val canUseExtras = hasFull
 
     /*

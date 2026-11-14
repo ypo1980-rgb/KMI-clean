@@ -190,6 +190,11 @@ fun KmiTopBar(
     topBeltIconBottomPadding: Dp? = null,
     centerTopBeltIcon: Boolean = false,
     titleVerticalOffset: Dp = 0.dp,
+
+    // חגורה קומפקטית בתוך הכותרת, ללא תוספת גובה.
+    headerBeltLabel: String? = null,
+    headerBeltImageRes: Int? = null,
+
     onPickSearchResult: ((String) -> Unit)? = null,
     showLogoInBar: Boolean = false,
     logoRes: Int? = R.drawable.kami_logo,
@@ -326,8 +331,11 @@ fun KmiTopBar(
                 }
         }
 
+    // כאשר החגורה מוצגת לצד הכותרת,
+    // אין להציג במקביל תמונת חגורה צפה.
     val shouldRenderTopBeltIcon =
-        showTopBeltIcon || resolvedTopBeltIconRes != null
+        headerBeltImageRes == null &&
+                (showTopBeltIcon || resolvedTopBeltIconRes != null)
 
     val rootView = LocalView.current
     val keyboardController = LocalSoftwareKeyboardController.current
@@ -1249,46 +1257,129 @@ fun KmiTopBar(
                     Alignment.Center
                 }
         ) {
-            Text(
-                text = title,
-                style = KmiTypography.screenTitle.copy(
-                    fontSize =
-                        KmiTypography.screenTitle.fontSize *
-                                titleScale,
-                    lineHeight =
-                        KmiTypography.screenTitle.lineHeight *
-                                titleScale
-                ),
-                maxLines = titleMaxLines,
-                softWrap = titleMaxLines > 1,
-                overflow =
-                    if (alignTitleEnd && titleMaxLines == 1) {
-                        TextOverflow.Clip
-                    } else {
-                        TextOverflow.Ellipsis
-                    },
-                textAlign =
-                    if (alignTitleEnd) {
-                        TextAlign.Right
-                    } else {
-                        TextAlign.Center
-                    },
-                color = topBarTitleColor,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .offset(
-                        y = titleVerticalOffset - 6.dp
-                    )
-                    .then(
-                        if (alignTitleEnd && titleMaxLines == 1) {
-                            Modifier.basicMarquee(
-                                iterations = Int.MAX_VALUE
-                            )
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    Text(
+                        text = title,
+                    style = KmiTypography.screenTitle.copy(
+                        fontSize =
+                            KmiTypography.screenTitle.fontSize *
+                                    titleScale,
+                        lineHeight =
+                            KmiTypography.screenTitle.lineHeight *
+                                    titleScale
+                    ),
+                    maxLines =
+                        if (headerBeltLabel != null) 1 else titleMaxLines,
+                    softWrap =
+                        headerBeltLabel == null && titleMaxLines > 1,
+                    overflow =
+                        if (
+                            alignTitleEnd &&
+                            titleMaxLines == 1 &&
+                            headerBeltLabel == null
+                        ) {
+                            TextOverflow.Clip
                         } else {
-                            Modifier
-                        }
+                            TextOverflow.Ellipsis
+                        },
+                    textAlign =
+                        if (alignTitleEnd) {
+                            TextAlign.Right
+                        } else {
+                            TextAlign.Center
+                        },
+                    color = topBarTitleColor,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .offset(
+                                y =
+                                    if (
+                                        headerBeltImageRes != null ||
+                                        headerBeltLabel != null
+                                    ) {
+                                        0.dp
+                                    } else {
+                                        titleVerticalOffset - 6.dp
+                                    }
+                            )
+                            .then(
+                            if (
+                                alignTitleEnd &&
+                                titleMaxLines == 1 &&
+                                headerBeltLabel == null
+                            ) {
+                                Modifier.basicMarquee(
+                                    iterations = Int.MAX_VALUE
+                                )
+                            } else {
+                                Modifier
+                            }
+                        )
                     )
-            )
+
+                    if (
+                        headerBeltImageRes != null &&
+                        headerBeltLabel.isNullOrBlank()
+                    ) {
+                        Image(
+                            painter = painterResource(
+                                id = headerBeltImageRes
+                            ),
+                            contentDescription = title,
+                            modifier = Modifier
+                                .width(72.dp)
+                                .height(22.dp),
+                            contentScale =
+                                androidx.compose.ui.layout.ContentScale.Fit
+                        )
+                    }
+
+                    if (!headerBeltLabel.isNullOrBlank()) {
+                        Row(
+                            modifier = Modifier
+                                .height(22.dp)
+                                .offset(y = (-2).dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        Text(
+                            text = headerBeltLabel,
+                            style = KmiTypography.caption.copy(
+                                fontWeight = FontWeight.Bold
+                            ),
+                            color = topBarTitleColor,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+
+                        if (headerBeltImageRes != null) {
+                            Spacer(Modifier.width(7.dp))
+
+                            Image(
+                                painter = painterResource(
+                                    id = headerBeltImageRes
+                                ),
+                                contentDescription = headerBeltLabel,
+                                modifier = Modifier
+                                    .width(64.dp)
+                                    .height(22.dp),
+                                contentScale =
+                                    androidx.compose.ui.layout.ContentScale.Fit
+                            )
+                        }
+                    }
+                }
+                }
+            }
         }
 
         if (shouldRenderTopBeltIcon && resolvedTopBeltIconRes != null) {
@@ -1403,15 +1494,15 @@ fun KmiTopBar(
                             if (isEnglish) {
                                 0.dp
                             } else {
-                                7.dp
+                                23.dp
                             },
                         end =
                             if (isEnglish) {
-                                7.dp
+                                23.dp
                             } else {
                                 0.dp
                             },
-                        top = 6.dp
+                        top = 0.dp
                     )
                     .zIndex(40f)
             ) {

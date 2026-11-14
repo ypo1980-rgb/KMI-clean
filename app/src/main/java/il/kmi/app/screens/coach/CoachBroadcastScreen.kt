@@ -206,7 +206,8 @@ private data class CoachRecipient(
     val name: String,
     val phone: String,
     val email: String,
-    val selected: Boolean
+    val selected: Boolean,
+    val groups: List<String> = emptyList()
 )
 
 //======================================================================
@@ -762,12 +763,9 @@ private fun createCoachBroadcastPdf(
                             }
                     )
 
-                    if (
-                        !demoPrivacyEnabled &&
-                        recipient.phone.isNotBlank()
-                    ) {
+                    if (recipient.groups.isNotEmpty()) {
                         append(
-                            " · ${recipient.phone}"
+                            " · ${recipient.groups.joinToString(", ")}"
                         )
                     }
                 }
@@ -1369,6 +1367,17 @@ fun CoachBroadcastScreen(
                                 ?.trim()
                                 .orEmpty()
 
+                        val recipientGroups =
+                            (recipientMap["groups"] as? List<*>)
+                                ?.mapNotNull { rawGroup ->
+                                    rawGroup
+                                        ?.toString()
+                                        ?.trim()
+                                        ?.takeIf { it.isNotBlank() }
+                                }
+                                ?.distinct()
+                                .orEmpty()
+
                         if (
                             uid.isBlank()
                         ) {
@@ -1396,7 +1405,10 @@ fun CoachBroadcastScreen(
                                     ?: phone
                                         .takeIf { it.isNotBlank() }
                                         ?.let { currentSelectionByPhone[it] }
-                                    ?: true
+                                    ?: true,
+
+                            groups =
+                                recipientGroups
                         )
                     }
                     .distinctBy {
@@ -1485,7 +1497,7 @@ fun CoachBroadcastScreen(
             }
         }
 
-    // נמענים שנבחרו (גם טלפונים וגם UIDs)
+    // נמענים שנבחרו לשליחת Push לפי UID.
     val selectedRecipients =
         recipients.filter {
             it.selected
@@ -1498,7 +1510,7 @@ fun CoachBroadcastScreen(
      * מתאמן 1, מתאמן 2 וכו'.
      *
      * הרשימה האמיתית נשארת ב-selectedRecipients
-     * לצורך SMS / Push / Firestore בלבד.
+     * לצורך Push / Firestore בלבד.
      */
     val selectedUiRecipients =
         uiRecipients.filter {
@@ -2501,26 +2513,28 @@ fun CoachBroadcastScreen(
                                             modifier = Modifier.fillMaxWidth()
                                         )
                                         Text(
-                                            text =
-                                                if (
-                                                    demoPrivacyEnabled
-                                                ) {
-                                                    coachBroadcastTr(
-                                                        isEnglish,
-                                                        "מספר מוסתר",
-                                                        "Hidden number"
-                                                    )
-                                                } else {
-                                                    r.phone.ifBlank {
-                                                        coachBroadcastTr(
-                                                            isEnglish,
-                                                            "ללא מספר טלפון",
-                                                            "No phone number"
-                                                        )
-                                                    }
-                                                },
-                                            style =
-                                                KmiTypography.caption,
+                                            text = coachBroadcastTr(
+                                                isEnglish,
+                                                "סניף: $branch",
+                                                "Branch: $branch"
+                                            ),
+                                            style = KmiTypography.caption,
+                                            color = if (isSelected) {
+                                                MaterialTheme.colorScheme.onSecondaryContainer
+                                            } else {
+                                                MaterialTheme.colorScheme.onSurfaceVariant
+                                            },
+                                            textAlign = screenTextAlign,
+                                            modifier = Modifier.fillMaxWidth()
+                                        )
+
+                                        Text(
+                                            text = coachBroadcastTr(
+                                                isEnglish,
+                                                "קבוצה: ${r.groups.joinToString(", ").ifBlank { "לא משויכת" }}",
+                                                "Group: ${r.groups.joinToString(", ").ifBlank { "Not assigned" }}"
+                                            ),
+                                            style = KmiTypography.caption,
                                             color = if (isSelected) {
                                                 MaterialTheme.colorScheme.onSecondaryContainer
                                             } else {

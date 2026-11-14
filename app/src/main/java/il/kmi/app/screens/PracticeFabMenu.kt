@@ -355,21 +355,36 @@ fun PracticeMenuScreen(
             tonalElevation = 0.dp,
             shadowElevation = 0.dp
         ) {
-            Row(
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(
                         horizontal = 14.dp,
-                        vertical = 13.dp
-                    ),
-                verticalAlignment =
-                    Alignment.CenterVertically,
-                horizontalArrangement =
-                    Arrangement.spacedBy(12.dp)
+                        vertical = 11.dp
+                    )
             ) {
-                Surface(
-                    modifier =
-                        Modifier.size(46.dp),
+                Text(
+                    text = title,
+                    modifier = Modifier.fillMaxWidth(),
+                    color = MaterialTheme.colorScheme.onSurface,
+                    style = KmiTypography.cardTitle.copy(
+                        fontWeight = FontWeight.Black
+                    ),
+                    textAlign = textAlign,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+
+                Spacer(Modifier.height(5.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.Bottom,
+                    horizontalArrangement =
+                        Arrangement.spacedBy(10.dp)
+                ) {
+                    Surface(
+                        modifier = Modifier.size(46.dp),
                     shape =
                         RoundedCornerShape(15.dp),
                     color =
@@ -413,28 +428,6 @@ fun PracticeMenuScreen(
                         }
                 ) {
                     Text(
-                        text = title,
-                        modifier =
-                            Modifier.fillMaxWidth(),
-                        color =
-                            MaterialTheme.colorScheme
-                                .onSurface,
-                        style =
-                            KmiTypography.cardTitle.copy(
-                                fontWeight =
-                                    FontWeight.Black
-                            ),
-                        textAlign = textAlign,
-                        maxLines = 2,
-                        overflow =
-                            TextOverflow.Ellipsis
-                    )
-
-                    Spacer(
-                        Modifier.height(3.dp)
-                    )
-
-                    Text(
                         text = subtitle,
                         modifier =
                             Modifier.fillMaxWidth(),
@@ -476,7 +469,8 @@ fun PracticeMenuScreen(
                                     1f
                                 }
                         }
-                )
+                    )
+                }
             }
         }
     }
@@ -598,8 +592,8 @@ fun PracticeMenuScreen(
 
                     PracticeActionCard(
                         title = tr(
-                            "תרגול אקראי",
-                            "Random practice"
+                            "תרגול אקראי - ${selectedBelt.heb}",
+                            "Random practice - ${selectedBelt.en} belt"
                         ),
                         subtitle = tr(
                             "תרגול מגוון מכל חומר החגורה",
@@ -620,8 +614,8 @@ fun PracticeMenuScreen(
 
                     PracticeActionCard(
                         title = tr(
-                            "מבחן מסכם",
-                            "Final exam"
+                            "מבחן מסכם - ${selectedBelt.heb}",
+                            "Final exam - ${selectedBelt.en} belt"
                         ),
                         subtitle = tr(
                             "בדיקת ידע והתקדמות בחגורה",

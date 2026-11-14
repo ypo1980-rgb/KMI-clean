@@ -24,8 +24,11 @@ private const val DEV_UNLOCK_CODE = "34567@"
 private const val FORCE_SUBSCRIPTION_LOCK = false
 
 // בזמן בדיקות מנויים: אדמין לא עוקף מנוי.
-// כך אפשר לבדוק שהמנעולים חוזרים אחרי שהמנוי החודשי/שנתי פג.
 private const val ADMIN_BYPASSES_SUBSCRIPTION = false
+
+// זמני: גישה לתכונות Premium המקומיות בתקופת בדיקות סגורה.
+// חובה לשנות ל-false לפני הפצה ציבורית.
+private const val TESTER_FULL_ACCESS_ENABLED = true
 
 object KmiAccess {
 
@@ -147,6 +150,13 @@ object KmiAccess {
      * מנוי רגיל / בדיקות נפתח רק אם sub_access_until עדיין בתוקף.
      */
     fun hasFullAccess(sp: SharedPreferences): Boolean {
+
+        // פתיחה זמנית לכל הבודקים בגרסת הבדיקות.
+        // אין שינוי בנתוני המנוי או בתוקף הרכישה.
+        if (TESTER_FULL_ACCESS_ENABLED) {
+            return true
+        }
+
         val admin = isAdmin(sp)
         val dev = hasDevUnlock(sp)
         val timedSubscription = hasValidTimedSubscription(sp)

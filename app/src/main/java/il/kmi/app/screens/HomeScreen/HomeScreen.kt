@@ -95,6 +95,7 @@ import il.kmi.app.screens.registration.CoachBranchAssignmentsCodec
 import il.kmi.app.messages.ui.MessageCenterViewModel
 import il.kmi.app.ui.FloatingQuickMenu
 import androidx.lifecycle.viewmodel.compose.viewModel
+import il.kmi.app.subscription.KmiAccess
 import il.kmi.app.ui.FloatingQuickMenuAction
 import il.kmi.app.ui.KmiIconSize
 import il.kmi.app.ui.KmiTopBar
@@ -859,50 +860,12 @@ fun HomeScreen(
                     }
                 }
 
-                fun SharedPreferences.hasActiveSubscriptionAccess(): Boolean {
-                    val now = System.currentTimeMillis()
-                    val until = getLong("sub_access_until", 0L)
-
-                    val hasSubscriptionFlags =
-                        getBoolean("google_subscription_verified", false) ||
-                                getBoolean("has_full_access", false) ||
-                                getBoolean("full_access", false) ||
-                                getBoolean("subscription_active", false) ||
-                                getBoolean("is_subscribed", false) ||
-                                getString("sub_product", "").orEmpty().isNotBlank()
-
-                    // מנוי רגיל / בדיקות פותח רק אם יש זמן תקף.
-                    val active =
-                        hasSubscriptionFlags &&
-                                until > now
-
-// אם הזמן עבר — מנקים את כל הדגלים הישנים כדי שהמנעולים יחזרו.
-                    if (
-                        !active &&
-                        hasSubscriptionFlags &&
-                        until > 0L
-                    ) {
-                        edit {
-                            putBoolean("google_subscription_verified", false)
-                            putBoolean("has_full_access", false)
-                            putBoolean("full_access", false)
-                            putBoolean("subscription_active", false)
-                            putBoolean("is_subscribed", false)
-                            remove("sub_product")
-                            remove("sub_token")
-                            remove("sub_purchase_time")
-                            remove("sub_access_until")
-                            putLong("access_changed_at", System.currentTimeMillis())
-                        }
-                    }
-
-                    return active
-                }
-
+                // מקור אמת גלובלי להרשאות Premium.
+                // בתקופת הבדיקות KmiAccess מאפשר גישה מלאה.
                 val hasFullAccess = remember(homeAccessRefreshTick) {
-                    userSp.hasActiveSubscriptionAccess() ||
-                            subsSp.hasActiveSubscriptionAccess() ||
-                            legacySp.hasActiveSubscriptionAccess()
+                    KmiAccess.hasFullAccess(userSp) ||
+                            KmiAccess.hasFullAccess(subsSp) ||
+                            KmiAccess.hasFullAccess(legacySp)
                 }
 
                 // התפריט המהיר מוצג תמיד, גם כאשר אין מספיק תוכן לגלילה.
