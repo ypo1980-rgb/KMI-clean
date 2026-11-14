@@ -606,8 +606,78 @@ fun MyProfileScreen(
     }
 
     val ctx = LocalContext.current
-    val userSp = remember(key1 = ctx) { ctx.getSharedPreferences("kmi_user", Context.MODE_PRIVATE) }
-    val scroll = rememberScrollState()   // ✅ גלילה
+    val userSp = remember(key1 = ctx) {
+        ctx.getSharedPreferences(
+            "kmi_user",
+            Context.MODE_PRIVATE
+        )
+    }
+
+    val scroll = rememberScrollState()
+
+    // אותו מנגנון שיוכי מאמן של מסך הבית.
+    val homeCoachAssignmentsState =
+        rememberHomeCoachAssignmentsState(
+            currentUid =
+                FirebaseAuth.getInstance()
+                    .currentUser
+                    ?.uid,
+            userSp = userSp
+        )
+
+    fun readProfileActiveMode(): String =
+        userSp.getString("active_user_mode", null)
+            ?: userSp.getString("last_active_app_role", null)
+            ?: userSp.getString("user_role", "trainee")
+            ?: "trainee"
+
+    var profileActiveMode by remember(userSp) {
+        mutableStateOf(readProfileActiveMode())
+    }
+
+    var profileAssignmentsRefreshTick by remember {
+        androidx.compose.runtime.mutableIntStateOf(0)
+    }
+
+    androidx.compose.runtime.DisposableEffect(userSp, sp) {
+        val listener =
+            SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+                when (key) {
+                    "active_user_mode",
+                    "last_active_app_role",
+                    "user_role" -> {
+                        profileActiveMode = readProfileActiveMode()
+                    }
+
+                    "trainee_branch_assignments_json",
+                    "coach_branch_assignments_json",
+                    "branches_json",
+                    "selected_branches" -> {
+                        profileAssignmentsRefreshTick++
+                    }
+                }
+            }
+
+        userSp.registerOnSharedPreferenceChangeListener(listener)
+
+        if (sp !== userSp) {
+            sp.registerOnSharedPreferenceChangeListener(listener)
+        }
+
+        onDispose {
+            userSp.unregisterOnSharedPreferenceChangeListener(listener)
+
+            if (sp !== userSp) {
+                sp.unregisterOnSharedPreferenceChangeListener(listener)
+            }
+        }
+    }
+
+    val isCoachProfile =
+        profileActiveMode.equals(
+            "coach",
+            ignoreCase = true
+        )
 
     val langManager = remember(ctx) {
         AppLanguageManager(ctx)
@@ -664,158 +734,15 @@ fun MyProfileScreen(
 
                 val p = firestoreProfile
 
-                /*
-                 * בוחר את המקור העדכני הראשון שאינו ריק.
-                 * אין לאחד את כל השדות, משום שחלקם עשויים
-                 * להכיל ערכים שנשארו לפני עריכת הפרופיל.
-                 */
-                fun preferredFirestoreList(
-                    vararg keys: String
-                ): List<String> {
-                    keys.forEach { key ->
-                        val values = firestoreProfileStringList(
-                            data,
-                            key
-                        )
-
-                        if (values.isNotEmpty()) {
-                            return values
-                        }
-                    }
-
-                    return emptyList()
-                }
-
-                /*
-    * תחילה מחפשים את השדות הרשימתיים שמכילים את כל
-    * הסניפים והקבוצות. השדות היחידים משמשים רק כ־fallback.
-    */
-                /*
-                 * המבנה החדש קודם לרשימות הישנות.
-                 */
-                val branchesFromFirestore =
-                    if (
-                        firestoreBranchAssignments
-                            .isNotEmpty()
-                    ) {
-                        CoachBranchAssignmentsCodec
-                            .flattenBranches(
-                                firestoreBranchAssignments
-                            )
-                    } else {
-                        preferredFirestoreList(
-                            "branches",
-                            "branches_json",
-                            "selected_branches",
-                            "branchesCsv",
-                            "branch",
-                            "activeBranch",
-                            "active_branch"
-                        )
-                            .map { branch ->
-                                branch.trim()
-                            }
-                            .filter { branch ->
-                                branch.isNotBlank()
-                            }
-                            .distinct()
-                    }
-
-                val groupsFromFirestore =
-                    if (
-                        firestoreBranchAssignments
-                            .isNotEmpty()
-                    ) {
-                        CoachBranchAssignmentsCodec
-                            .flattenGroups(
-                                firestoreBranchAssignments
-                            )
-                    } else {
-                        preferredFirestoreList(
-                            "age_groups",
-                            "groups",
-                            "groups_json",
-                            "selected_groups",
-                            "groupsCsv",
-                            "group",
-                            "age_group",
-                            "primaryGroup",
-                            "activeGroup",
-                            "active_group",
-                            "groupKey",
-                            "group_key"
-                        )
-                            .map { group ->
-                                group.trim()
-                            }
-                            .filter { group ->
-                                group.isNotBlank()
-                            }
-                            .distinct()
-                    }
-
-                val branchAssignmentsJson =
-                    CoachBranchAssignmentsCodec.encode(
-                        firestoreBranchAssignments
-                    )
-
-                val branchesCsv =
-                    branchesFromFirestore
-                        .joinToString(", ")
-
-                val groupsCsv =
-                    groupsFromFirestore
-                        .joinToString(", ")
-
-                val branchesJson =
-                    org.json.JSONArray(
-                        branchesFromFirestore
-                    ).toString()
-
-                val groupsJson =
-                    org.json.JSONArray(
-                        groupsFromFirestore
-                    ).toString()
-
-// מיישר גם את SharedPreferences כדי ששאר המסכים ייהנו מהמידע.
+                // מסך הפרופיל הוא מסך תצוגה.
+                // אין לדרוס כאן שיוכי מאמן, סניפים,
+                // קבוצות, מצב פעיל או הרשאות.
                 val profilePrefsSaved = userSp.edit()
                     .putString("fullName", p.fullName)
                     .putString("email", p.email)
                     .putString("phone", p.phone)
-
-                    .putString("branch", branchesCsv)
-                    .putString("branches", branchesCsv)
-                    .putString("branches_json", branchesJson)
-                    .putString("selected_branches", branchesCsv)
-                    .putString("activeBranch", branchesFromFirestore.firstOrNull().orEmpty())
-                    .putString("active_branch", branchesFromFirestore.firstOrNull().orEmpty())
-
-                    .putString("group", groupsCsv)
-                    .putString("groups", groupsCsv)
-                    .putString("groups_json", groupsJson)
-                    .putString("selected_groups", groupsCsv)
-                    .putString("groupKey", groupsFromFirestore.firstOrNull().orEmpty())
-                    .putString("age_group", groupsCsv)
-                    .putString(
-                        "activeGroup",
-                        groupsFromFirestore
-                            .firstOrNull()
-                            .orEmpty()
-                    )
-                    .putString(
-                        "active_group",
-                        groupsFromFirestore
-                            .firstOrNull()
-                            .orEmpty()
-                    )
-                    .putString(
-                        "coach_branch_assignments_json",
-                        branchAssignmentsJson
-                    )
-
                     .putString("belt", p.belt)
                     .putString("current_belt", p.belt)
-                    .putString("user_role", p.role)
                     .commit()
 
                 if (profilePrefsSaved) {
@@ -955,26 +882,94 @@ fun MyProfileScreen(
          * 2. המבנה החדש שנשמר מקומית.
          * 3. הרשימות הישנות.
          */
+        val localCoachAssignmentsJson =
+            sp.getString(
+                "coach_branch_assignments_json",
+                null
+            ) ?: userSp.getString(
+                "coach_branch_assignments_json",
+                null
+            )
+
         val savedBranchAssignments =
-            firestoreBranchAssignments
-                .ifEmpty {
-                    CoachBranchAssignmentsCodec
-                        .decode(
-                            userSp.getString(
-                                "coach_branch_assignments_json",
-                                ""
+            if (localCoachAssignmentsJson != null) {
+                CoachBranchAssignmentsCodec.decode(
+                    localCoachAssignmentsJson
+                )
+            } else {
+                firestoreBranchAssignments
+            }
+
+        val hasExplicitCoachAssignments =
+            localCoachAssignmentsJson != null ||
+                    firestoreBranchAssignments.isNotEmpty()
+
+        // לכל מצב עבודה מקור שיוכים נפרד.
+        // מאמן: אותו מקור שמשמש את מסך הבית.
+        // מתאמן: השיוכים הייעודיים שנשמרו בעריכת הפרופיל.
+        val traineeAssignmentsJson =
+            remember(profileAssignmentsRefreshTick, userSp, sp) {
+                userSp.getString(
+                    "trainee_branch_assignments_json",
+                    null
+                ) ?: sp.getString(
+                    "trainee_branch_assignments_json",
+                    null
+                )
+            }
+
+        val effectiveProfileAssignments =
+            if (isCoachProfile) {
+                homeCoachAssignmentsState
+                    .branchGroupPairs
+                    .groupBy(
+                        keySelector = { it.first },
+                        valueTransform = { it.second }
+                    )
+                    .map { (branch, groups) ->
+                        CoachBranchAssignment(
+                            branch = branch,
+                            groups = groups.distinct()
+                        ).sanitized()
+                    }
+            } else {
+                CoachBranchAssignmentsCodec.decode(
+                    traineeAssignmentsJson.orEmpty()
+                )
+            }
+
+        val hasExplicitProfileAssignments =
+            isCoachProfile ||
+                    traineeAssignmentsJson != null
+
+        androidx.compose.runtime.LaunchedEffect(
+            profileActiveMode,
+            profileAssignmentsRefreshTick,
+            effectiveProfileAssignments
+        ) {
+            android.util.Log.d(
+                "KMI_PROFILE_BRANCHES",
+                "mode=$profileActiveMode " +
+                        "traineeSourcePresent=${traineeAssignmentsJson != null} " +
+                        "traineeBranches=${
+                            CoachBranchAssignmentsCodec.flattenBranches(
+                                CoachBranchAssignmentsCodec.decode(
+                                    traineeAssignmentsJson.orEmpty()
+                                )
                             )
-                        )
-                }
-                .ifEmpty {
-                    CoachBranchAssignmentsCodec
-                        .decode(
-                            sp.getString(
-                                "coach_branch_assignments_json",
-                                ""
+                        } " +
+                        "coachHomeBranches=${
+                            homeCoachAssignmentsState.branchGroupPairs
+                                .map { it.first }
+                                .distinct()
+                        } " +
+                        "displayBranches=${
+                            CoachBranchAssignmentsCodec.flattenBranches(
+                                effectiveProfileAssignments
                             )
-                        )
-                }
+                        }"
+            )
+        }
 
         val branchRaw = prefStr(
             kmiPrefs.branch,
@@ -1001,10 +996,10 @@ fun MyProfileScreen(
                 .distinct()
 
         val branchesList: List<String> =
-            if (savedBranchAssignments.isNotEmpty()) {
+            if (hasExplicitProfileAssignments) {
                 CoachBranchAssignmentsCodec
                     .flattenBranches(
-                        savedBranchAssignments
+                        effectiveProfileAssignments
                     )
             } else {
                 splitBranches(branchRaw)
@@ -1051,10 +1046,10 @@ fun MyProfileScreen(
         }
 
         val groupsList =
-            if (savedBranchAssignments.isNotEmpty()) {
+            if (hasExplicitProfileAssignments) {
                 CoachBranchAssignmentsCodec
                     .flattenGroups(
-                        savedBranchAssignments
+                        effectiveProfileAssignments
                     )
             } else {
                 profilePrefsList(
@@ -1161,14 +1156,12 @@ fun MyProfileScreen(
          * משתמשים במכפלה הישנה רק כ-fallback
          * למשתמש שטרם נשמר במבנה החדש.
          */
-        val branchGroupPairs:
-                List<Pair<String, String>> =
-            if (savedBranchAssignments.isNotEmpty()) {
-                savedBranchAssignments
+        val branchGroupPairs: List<Pair<String, String>> =
+            if (hasExplicitProfileAssignments) {
+                effectiveProfileAssignments
                     .flatMap { assignment ->
                         assignment.groups.map { groupName ->
-                            assignment.branch to
-                                    groupName
+                            assignment.branch to groupName
                         }
                     }
                     .filter { (branchName, groupName) ->
@@ -1453,10 +1446,10 @@ fun MyProfileScreen(
                  */
                 val groupsForThisBranch =
                     if (
-                        savedBranchAssignments
-                            .isNotEmpty()
+                        isCoachProfile ||
+                        effectiveProfileAssignments.isNotEmpty()
                     ) {
-                        savedBranchAssignments
+                        effectiveProfileAssignments
                             .firstOrNull { assignment ->
                                 normalizedProfileBranchKey(
                                     assignment.branch

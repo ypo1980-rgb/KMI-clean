@@ -1,5 +1,7 @@
 package il.kmi.app.messages.ui
 
+import android.content.Context
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -116,8 +118,58 @@ fun MessageCenterScreen(
         mutableStateOf<MessageCenterItem?>(null)
     }
 
+    val context = LocalContext.current
+
+    val pushPreferences = remember(context) {
+        context.getSharedPreferences(
+            "kmi_settings",
+            Context.MODE_PRIVATE
+        )
+    }
+
     LaunchedEffect(Unit) {
         viewModel.startListening()
+    }
+
+    // פתיחת ההודעה שנבחרה מהתראת Push.
+    // מזהה ההודעה נכתב ב-MainActivity
+    // ונשאר זמין גם לאחר פתיחה קרה של האפליקציה.
+    LaunchedEffect(messages, isLoading) {
+
+        val pendingBroadcastId =
+            pushPreferences.getString(
+                "coach_broadcast_push_id",
+                null
+            )?.trim().orEmpty()
+
+        if (
+            pendingBroadcastId.isBlank() ||
+            isLoading
+        ) {
+            return@LaunchedEffect
+        }
+
+        val targetMessage =
+            messages.firstOrNull { item ->
+                item.id == pendingBroadcastId
+            } ?: return@LaunchedEffect
+
+        // מנקים את המזהה רק אחרי שנמצאה ההודעה.
+        // כך לא מאבדים את הבקשה בזמן טעינת Firestore.
+        pushPreferences.edit()
+            .remove("coach_broadcast_push_id")
+            .apply()
+
+        selectedTabIndex = 0
+        selectedMessage = targetMessage
+
+        viewModel.markAsRead(targetMessage)
+
+        android.util.Log.d(
+            "KMI_PUSH_NAV",
+            "broadcastOpened " +
+                    "broadcastId=$pendingBroadcastId"
+        )
     }
 
     val layoutDirection: LayoutDirection =

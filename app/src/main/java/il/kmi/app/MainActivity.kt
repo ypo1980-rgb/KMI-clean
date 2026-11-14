@@ -405,6 +405,14 @@ class MainActivity : androidx.fragment.app.FragmentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
+
+        Log.d(
+            "KMI_PUSH_NAV",
+            "onNewIntent " +
+                    "type=${intent.getStringExtra("fcm_type")} " +
+                    "broadcastId=${intent.getStringExtra("broadcastId")}"
+        )
+
         handleCoachGateIntent(intent)
         handleForumPushIntent(intent)
         handleDailyReminderIntent(intent)
@@ -491,6 +499,13 @@ class MainActivity : androidx.fragment.app.FragmentActivity() {
             .remove("coach_broadcast_open_from_push")
             .remove("coach_broadcast_open_dialog")
             .apply()
+
+        Log.d(
+            "KMI_PUSH_NAV",
+            "coachBroadcastNavigationRequested " +
+                    "broadcastId=$broadcastId " +
+                    "hasValidId=${broadcastId.isNotBlank()}"
+        )
 
         // ניקוי מצב ישן של דיאלוג הודעות מאמן.
         // תוכן ההודעה ייקרא מ-Firestore לאחר התחברות.
@@ -1094,6 +1109,13 @@ private fun AndroidAppRoot(
             initialLanguageSelected &&
             currentScreen != "main"
         ) {
+            Log.d(
+                "KMI_PUSH_NAV",
+                "openingMainFromPush " +
+                        "coachPush=$canOpenCoachMessages " +
+                        "forumPush=$hasPendingForumPush"
+            )
+
             startRoute = Route.Home.route
             currentScreen = "main"
             return@LaunchedEffect

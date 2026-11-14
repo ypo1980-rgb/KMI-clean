@@ -1571,6 +1571,15 @@ class AttendanceRepository private constructor(
             currentAuthUid.isBlank() ||
             cleanUid != currentAuthUid
         ) {
+            Log.w(
+                "KMI_MEMBER_LOOKUP",
+                "INVALID_LOOKUP_CONTEXT " +
+                        "branchBlank=${cleanBranch.isBlank()} " +
+                        "groupBlank=${cleanGroup.isBlank()} " +
+                        "uidBlank=${cleanUid.isBlank()} " +
+                        "authenticated=${currentAuthUid.isNotBlank()} " +
+                        "uidMatches=${cleanUid == currentAuthUid}"
+            )
             return null
         }
 
@@ -1578,28 +1587,72 @@ class AttendanceRepository private constructor(
          * קודם מנסים למצוא member שכבר
          * מקושר ל-Firebase UID.
          */
+        val targetGroupId =
+            groupDocId(cleanBranch, cleanGroup)
+
+        Log.d(
+            "KMI_MEMBER_LOOKUP",
+            "LOOKUP_START " +
+                    "groupId=$targetGroupId " +
+                    "branch=$cleanBranch " +
+                    "group=$cleanGroup"
+        )
+
         val existingMember =
-            membersRef(
-                cleanBranch,
-                cleanGroup
-            )
-                .whereEqualTo(
-                    "authUid",
-                    cleanUid
+            try {
+                membersRef(
+                    cleanBranch,
+                    cleanGroup
                 )
-                .limit(1)
-                .get()
-                .await()
-                .documents
-                .firstOrNull()
+                    .whereEqualTo(
+                        "authUid",
+                        cleanUid
+                    )
+                    .limit(1)
+                    .get()
+                    .await()
+                    .documents
+                    .firstOrNull()
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                Log.e(
+                    "KMI_MEMBER_LOOKUP",
+                    "LOOKUP_FAILED groupId=$targetGroupId",
+                    error
+                )
+                throw error
+            }
 
         if (existingMember != null) {
+            val isActive =
+                existingMember.getBoolean("isActive") != false
+
+            Log.d(
+                "KMI_MEMBER_LOOKUP",
+                "MEMBER_FOUND " +
+                        "groupId=$targetGroupId " +
+                        "isActive=$isActive"
+            )
+
+            if (!isActive) {
+                return null
+            }
+
             return existingMember.getLong("id")
                 ?: existingMember.id.toLongOrNull()
                 ?: stablePositiveLong(
                     existingMember.id
                 )
         }
+
+        Log.w(
+            "KMI_MEMBER_LOOKUP",
+            "MEMBER_NOT_FOUND " +
+                    "groupId=$targetGroupId " +
+                    "branch=$cleanBranch " +
+                    "group=$cleanGroup"
+        )
 
         /*
    * אין member המשויך ל-Firebase UID המאומת.

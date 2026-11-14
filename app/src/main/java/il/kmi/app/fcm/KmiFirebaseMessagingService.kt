@@ -9,6 +9,7 @@ import android.content.pm.PackageManager
 import android.content.Intent
 import android.graphics.BitmapFactory
 import android.os.Build
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
@@ -54,6 +55,15 @@ class KmiFirebaseMessagingService : FirebaseMessagingService() {
                     AppLanguage.ENGLISH
 
         val data = message.data
+
+        Log.d(
+            "KMI_PUSH_RECEIVE",
+            "messageReceived " +
+                    "messageId=${message.messageId} " +
+                    "type=${data["type"].orEmpty()} " +
+                    "broadcastId=${data["broadcastId"].orEmpty()} " +
+                    "hasNotification=${message.notification != null}"
+        )
 
         val rawType =
             data["type"]
@@ -337,8 +347,26 @@ class KmiFirebaseMessagingService : FirebaseMessagingService() {
             with(NotificationManagerCompat.from(context)) {
                 notify(requestCode, builder.build())
             }
-        } catch (_: SecurityException) {
-        } catch (_: Exception) {
+
+            Log.d(
+                "KMI_PUSH_RECEIVE",
+                "notificationPosted " +
+                        "type=$type " +
+                        "broadcastId=$broadcastId " +
+                        "requestCode=$requestCode"
+            )
+        } catch (error: SecurityException) {
+            Log.e(
+                "KMI_PUSH_RECEIVE",
+                "notificationPermissionDenied",
+                error
+            )
+        } catch (error: Exception) {
+            Log.e(
+                "KMI_PUSH_RECEIVE",
+                "notificationPostFailed",
+                error
+            )
         }
     }
 

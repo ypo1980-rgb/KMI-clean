@@ -726,6 +726,19 @@ fun MainApp(
             return@LaunchedEffect
         }
 
+        val broadcastId =
+            coachPushSp.getString(
+                "coach_broadcast_push_id",
+                ""
+            ).orEmpty()
+
+        android.util.Log.d(
+            "KMI_PUSH_NAV",
+            "openingMessageCenter " +
+                    "broadcastId=$broadcastId " +
+                    "currentRoute=$currentRoute"
+        )
+
         // מנקים את הבקשה לפני הניווט למניעת פתיחה חוזרת.
         coachPushSp.edit()
             .putBoolean(

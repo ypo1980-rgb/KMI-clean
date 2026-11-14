@@ -196,8 +196,18 @@ fun RegistrationFormScreen(
 
     val initialIsCoach = savedRoleForProfile.equals("coach", ignoreCase = true)
 
+    // בעריכת פרופיל מתחילים תמיד בטאב מתאמן.
+    // טאב מאמן ייפתח רק לאחר אימות הרשאות Firestore.
     var selectedTab by rememberSaveable(startAtProfile, savedRoleForProfile) {
-        mutableIntStateOf(if (initialIsCoach) 1 else 0)
+        mutableIntStateOf(
+            if (startAtProfile) {
+                0
+            } else if (initialIsCoach) {
+                1
+            } else {
+                0
+            }
+        )
     }
 
     val isCoach = selectedTab == 1
@@ -272,14 +282,26 @@ fun RegistrationFormScreen(
         mutableStateOf<String?>(null)
     }
 
+    // מבדיל בין הרשאה שעדיין נבדקת לבין הרשאה שנשללה.
+    var profileAccessChecking by remember {
+        mutableStateOf(startAtProfile)
+    }
+
+    var profileVerifiedUid by remember {
+        mutableStateOf<String?>(null)
+    }
+
     LaunchedEffect(
         startAtProfile,
         FirebaseAuth.getInstance().currentUser?.uid
     ) {
         profileCoachAuthorized = false
         profileAccessType = null
+        profileVerifiedUid = null
+        profileAccessChecking = startAtProfile
 
         if (!startAtProfile) {
+            profileAccessChecking = false
             return@LaunchedEffect
         }
 
@@ -290,6 +312,7 @@ fun RegistrationFormScreen(
                 .orEmpty()
 
         if (uid.isBlank()) {
+            profileAccessChecking = false
             return@LaunchedEffect
         }
 
@@ -321,13 +344,15 @@ fun RegistrationFormScreen(
             }
 
         val coachDoc =
-            runCatching {
+            try {
                 FirebaseFirestore.getInstance()
                     .collection("authorizedCoaches")
                     .document(uid)
                     .get(Source.SERVER)
                     .await()
-            }.onFailure { error ->
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
                 Log.e(
                     TAG_REG,
                     "profile_coach_auth_server_error " +
@@ -335,7 +360,8 @@ fun RegistrationFormScreen(
                             "type=${error.javaClass.simpleName}",
                     error
                 )
-            }.getOrNull()
+                null
+            }
 
         // הרשאת מאמן דרך Firestore SDK.
         val sdkCoachAuthorized =
@@ -352,9 +378,14 @@ fun RegistrationFormScreen(
                         ) &&
                     coachDoc.getBoolean("canOpenCoachDrawer") == true
 
-        // אותו אימות REST משותף שבו משתמש MainApp.
+        // REST משמש כחלופה רק כאשר אין תוצאה
+        // מאושרת מקריאת SDK והמסמך לא שלל הרשאה.
         val restCoachAuthorized =
-            if (sdkCoachAuthorized) {
+            if (
+                sdkCoachAuthorized ||
+                profileAccessType !in setOf("coach", "both") ||
+                coachDoc?.exists() == true
+            ) {
                 false
             } else {
                 val idToken =
@@ -387,15 +418,43 @@ fun RegistrationFormScreen(
                 )
             }
 
-        // הרשאת מאמן מחייבת גם אישור מנהל מפורש
-        // וגם מסמך מאמן פעיל.
+        // מסמך מאמן קיים שאינו מאושר
+        // גובר על תוצאת אימות REST חלופית.
+        val coachDocExplicitlyDenied =
+            coachDoc?.exists() == true &&
+                    (
+                            coachDoc.getBoolean("active") != true ||
+                                    coachDoc.getBoolean(
+                                        "accessRevokedByAdmin"
+                                    ) == true ||
+                                    !coachDoc.getString("role")
+                                        .orEmpty()
+                                        .equals(
+                                            "coach",
+                                            ignoreCase = true
+                                        ) ||
+                                    coachDoc.getBoolean(
+                                        "canOpenCoachDrawer"
+                                    ) != true
+                            )
+
+        val sameAuthenticatedUser =
+            FirebaseAuth.getInstance().currentUser?.uid == uid
+
         profileCoachAuthorized =
-            FirebaseAuth.getInstance().currentUser?.uid == uid &&
+            sameAuthenticatedUser &&
                     profileAccessType in setOf("coach", "both") &&
-                    coachDoc?.getBoolean(
-                        "accessRevokedByAdmin"
-                    ) != true &&
+                    !coachDocExplicitlyDenied &&
                     (sdkCoachAuthorized || restCoachAuthorized)
+
+        profileVerifiedUid =
+            uid.takeIf {
+                sameAuthenticatedUser &&
+                        userDoc?.exists() == true
+            }
+
+        // מאפשרים סנכרון טאבים רק בסיום הבדיקה.
+        profileAccessChecking = false
     }
 
     val profileAllowsCoach =
@@ -1239,17 +1298,30 @@ fun RegistrationFormScreen(
         scrollToMissingField = null
     }
 
-    // סנכרון ראשוני בלבד.
-    // בחירה ידנית בטאב מקבלת עדיפות לאחר מכן.
+    // בחירה ידנית נשמרת רק כל עוד ההרשאה תקפה.
     LaunchedEffect(
         startAtProfile,
         profileCoachAuthorized,
         profileAccessType,
+        profileAccessChecking,
         pendingCoachSelection
     ) {
         if (!startAtProfile) {
             pendingCoachSelection = false
             selectedTab = 0
+            return@LaunchedEffect
+        }
+
+        // לא מסנכרנים טאבים עד לסיום בדיקת ההרשאות.
+        if (profileAccessChecking) {
+            return@LaunchedEffect
+        }
+
+        // הרשאה שנשללה גוברת על בחירה ידנית.
+        if (!profileAllowsCoach && selectedTab == 1) {
+            pendingCoachSelection = false
+            userManuallySelectedRole = false
+            switchRegistrationRole(0)
             return@LaunchedEffect
         }
 
@@ -1326,7 +1398,21 @@ fun RegistrationFormScreen(
     // --------------------------------
     // פונקציית שליחה – יחידה אחת בלבד
     // --------------------------------
-    fun submitRegistration() {
+    suspend fun submitRegistration() {
+
+        if (startAtProfile && profileAccessChecking) {
+            Toast.makeText(
+                ctx,
+                if (isEnglish) {
+                    "Please wait until permissions are verified"
+                } else {
+                    "יש להמתין לסיום בדיקת ההרשאות"
+                },
+                Toast.LENGTH_SHORT
+            ).show()
+            return
+        }
+
         Log.d(
             TAG_REG,
             "stage=submit_registration_clicked, startAtProfile=$startAtProfile, isGoogleAuth=$isGoogleAuth, selectedTab=$selectedTab, email=${
@@ -1335,17 +1421,24 @@ fun RegistrationFormScreen(
                 )
             }, phone=${maskedPhoneForLog(phone)}, ${regAuthStateForLog()}"
         )
-        if (startAtProfile) {
+        if (
+            startAtProfile &&
+            selectedTab == 1 &&
+            !profileAllowsCoach
+        ) {
             Toast.makeText(
                 ctx,
                 if (isEnglish) {
-                    "Saving profile..."
+                    "Coach access is not authorized. Profile was not saved."
                 } else {
-                    "שומר פרופיל..."
+                    "הרשאת מאמן אינה מאושרת. הפרופיל לא נשמר."
                 },
-                Toast.LENGTH_SHORT
+                Toast.LENGTH_LONG
             ).show()
+            return
         }
+
+        // הודעת הצלחה תוצג רק לאחר אישור Firestore.
         // בכל לחיצה בודקים מחדש את הערכים הנוכחיים.
         // כך שדה שכבר הושלם לא נשאר מסומן כשגיאה.
         fullNameError = false
@@ -1508,6 +1601,169 @@ fun RegistrationFormScreen(
             TAG_REG,
             "stage=submit_registration_validation_success, isGoogleAuth=$isGoogleAuth, startAtProfile=$startAtProfile, ${regAuthStateForLog()}"
         )
+
+        if (startAtProfile) {
+            val authenticatedUid =
+                FirebaseAuth.getInstance()
+                    .currentUser
+                    ?.uid
+                    .orEmpty()
+
+            if (
+                authenticatedUid.isBlank() ||
+                authenticatedUid != profileVerifiedUid
+            ) {
+                Toast.makeText(
+                    ctx,
+                    if (isEnglish) {
+                        "User verification failed. Please reopen your profile."
+                    } else {
+                        "אימות המשתמש נכשל. יש לפתוח מחדש את הפרופיל."
+                    },
+                    Toast.LENGTH_LONG
+                ).show()
+                return
+            }
+
+            // קריאת שרת חדשה לפני כתיבת נתונים כלשהם.
+            val latestUserDoc = try {
+                FirebaseFirestore.getInstance()
+                    .collection("users")
+                    .document(authenticatedUid)
+                    .get(Source.SERVER)
+                    .await()
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                Log.e(
+                    TAG_REG,
+                    "profile_save_access_read_failed",
+                    error
+                )
+
+                Toast.makeText(
+                    ctx,
+                    if (isEnglish) {
+                        "Unable to verify permissions. Profile was not saved."
+                    } else {
+                        "לא ניתן לאמת הרשאות. הפרופיל לא נשמר."
+                    },
+                    Toast.LENGTH_LONG
+                ).show()
+                return
+            }
+
+            if (!latestUserDoc.exists()) {
+                Toast.makeText(
+                    ctx,
+                    if (isEnglish) {
+                        "User profile was not found. Nothing was saved."
+                    } else {
+                        "פרופיל המשתמש לא נמצא. לא בוצעה שמירה."
+                    },
+                    Toast.LENGTH_LONG
+                ).show()
+                return
+            }
+
+            val latestAccessType =
+                latestUserDoc.getString("accessType")
+                    ?.trim()
+                    ?.lowercase()
+
+            if (selectedTab == 1) {
+                if (latestAccessType !in setOf("coach", "both")) {
+                    profileCoachAuthorized = false
+                    profileAccessType = latestAccessType
+
+                    Toast.makeText(
+                        ctx,
+                        if (isEnglish) {
+                            "Coach access has changed. Profile was not saved."
+                        } else {
+                            "הרשאת המאמן השתנתה. הפרופיל לא נשמר."
+                        },
+                        Toast.LENGTH_LONG
+                    ).show()
+                    return
+                }
+
+                val latestCoachDoc = try {
+                    FirebaseFirestore.getInstance()
+                        .collection("authorizedCoaches")
+                        .document(authenticatedUid)
+                        .get(Source.SERVER)
+                        .await()
+                } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                    throw cancelled
+                } catch (error: Exception) {
+                    Log.e(
+                        TAG_REG,
+                        "profile_save_coach_read_failed",
+                        error
+                    )
+
+                    Toast.makeText(
+                        ctx,
+                        if (isEnglish) {
+                            "Unable to verify coach access. Profile was not saved."
+                        } else {
+                            "לא ניתן לאמת הרשאת מאמן. הפרופיל לא נשמר."
+                        },
+                        Toast.LENGTH_LONG
+                    ).show()
+                    return
+                }
+
+                val latestCoachAuthorized =
+                    latestCoachDoc.exists() &&
+                            latestCoachDoc.getBoolean("active") == true &&
+                            latestCoachDoc.getBoolean(
+                                "accessRevokedByAdmin"
+                            ) != true &&
+                            latestCoachDoc.getString("role")
+                                .orEmpty()
+                                .equals(
+                                    "coach",
+                                    ignoreCase = true
+                                ) &&
+                            latestCoachDoc.getBoolean(
+                                "canOpenCoachDrawer"
+                            ) == true
+
+                if (!latestCoachAuthorized) {
+                    profileCoachAuthorized = false
+
+                    Toast.makeText(
+                        ctx,
+                        if (isEnglish) {
+                            "Coach permission is no longer active."
+                        } else {
+                            "הרשאת המאמן אינה פעילה עוד."
+                        },
+                        Toast.LENGTH_LONG
+                    ).show()
+                    return
+                }
+            }
+
+            // מוודאים שהחשבון לא התחלף במהלך קריאות הרשת.
+            if (
+                FirebaseAuth.getInstance().currentUser?.uid !=
+                authenticatedUid
+            ) {
+                Toast.makeText(
+                    ctx,
+                    if (isEnglish) {
+                        "User session changed. Profile was not saved."
+                    } else {
+                        "חשבון המשתמש השתנה. הפרופיל לא נשמר."
+                    },
+                    Toast.LENGTH_LONG
+                ).show()
+                return
+            }
+        }
 
         // role סופי:
         // בהרשמה רגילה נשמר התפקיד שנבחר.
@@ -1758,11 +2014,16 @@ fun RegistrationFormScreen(
                 "username",
                 if (isGoogleAuth) email.trim() else username
             )
-            putString(
-                "authProvider",
-                if (isGoogleAuth) "google" else "local"
-            )
-            putBoolean("google_login", isGoogleAuth)
+            // ספק ההתחברות מתעדכן רק בהרשמה חדשה.
+            // בעריכת פרופיל נשמר הערך המקורי.
+            if (!startAtProfile) {
+                putString(
+                    "authProvider",
+                    if (isGoogleAuth) "google" else "local"
+                )
+                putBoolean("google_login", isGoogleAuth)
+            }
+
             remove("password")
             remove("user_password")
             remove("remember_password")
@@ -2107,9 +2368,10 @@ fun RegistrationFormScreen(
                 firestoreData["role"] = roleFinal
                 firestoreData["user_role"] = roleFinal
             } else {
-                // שדות מערכת ושיוכים מוגנים אינם
-                // ניתנים לעדכון עצמי ב-users.
+                // עריכת פרופיל אינה משנה ספק התחברות,
+                // תפקיד קבוע או שדות ניהול.
                 listOf(
+                    "authProvider",
                     "branch",
                     "branches",
                     "activeBranch",
@@ -2441,7 +2703,25 @@ fun RegistrationFormScreen(
             return
         }
 
-        val uid = FirebaseAuth.getInstance().currentUser?.uid.orEmpty()
+        val uid =
+            FirebaseAuth.getInstance()
+                .currentUser
+                ?.uid
+                .orEmpty()
+
+        if (startAtProfile && uid.isBlank()) {
+            Toast.makeText(
+                ctx,
+                if (isEnglish) {
+                    "User session expired. Please sign in again."
+                } else {
+                    "החיבור למשתמש הסתיים. יש להתחבר מחדש."
+                },
+                Toast.LENGTH_LONG
+            ).show()
+            return
+        }
+
         persistRegistrationToFirestore(uid)
     }
 
@@ -2534,7 +2814,13 @@ fun RegistrationFormScreen(
 
                         Toast.makeText(
                             ctx,
-                            if (isEnglish) {
+                            if (profileAccessChecking) {
+                                if (isEnglish) {
+                                    "Checking coach permissions..."
+                                } else {
+                                    "בודק הרשאות מאמן..."
+                                }
+                            } else if (isEnglish) {
                                 "Coach mode is not permitted by your current access"
                             } else {
                                 "הרשאת מאמן אינה מאושרת למשתמש זה"
@@ -2819,7 +3105,9 @@ fun RegistrationFormScreen(
                     if (isEnglish) "Complete registration" else "סיום רישום"
                 },
                 onSubmitRegistration = {
-                    submitRegistration()
+                    registrationScope.launch {
+                        submitRegistration()
+                    }
                 }
             )
 
@@ -2868,7 +3156,12 @@ private fun RegistrationTabsBilingual(
             .kmiSectionHeaderBackground()
     ) {
         CompositionLocalProvider(
-            LocalLayoutDirection provides LayoutDirection.Rtl
+            LocalLayoutDirection provides
+                    if (isEnglish) {
+                        LayoutDirection.Ltr
+                    } else {
+                        LayoutDirection.Rtl
+                    }
         ) {
             Row(
                 modifier = Modifier

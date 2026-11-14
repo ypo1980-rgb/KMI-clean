@@ -69,6 +69,293 @@ exports.syncTrainingOverrideOccurrence =
     });
 
 /**
+ * KMI — Sync trainee registration to attendance members.
+ *
+ * Triggered after users/{uid} is written.
+ * Uses the latest user document to avoid stale events.
+ *
+ * Never links members by display name or phone.
+ * Never reactivates an inactive member.
+ * Never overwrites an existing member.
+ */
+exports.syncTraineeAttendanceMembership =
+  functions
+    .region("europe-west1")
+    .firestore
+    .document("users/{uid}")
+    .onWrite(async (change, context) => {
+
+      if (!change.after.exists) {
+        return null;
+      }
+
+      const uid =
+        String(context.params.uid || "").trim();
+
+      if (!uid) {
+        return null;
+      }
+
+      // Always read the latest profile.
+      const userSnapshot =
+        await db.collection("users").doc(uid).get();
+
+      if (!userSnapshot.exists) {
+        return null;
+      }
+
+      const user = userSnapshot.data() || {};
+
+      if (
+        user.isActive === false ||
+        user.archived === true ||
+        user.profileCompleted !== true
+      ) {
+        return null;
+      }
+
+      const assignments =
+        Array.isArray(user.traineeBranchAssignments)
+          ? user.traineeBranchAssignments
+          : [];
+
+      const displayName =
+        String(user.fullName || "").trim().slice(0, 150);
+
+      if (!displayName) {
+        return null;
+      }
+
+      const normalizeIdentity = (value) =>
+        String(value || "")
+          .trim()
+          .replace(/[־–—]/g, "-")
+          .replace(/\u00a0/g, " ")
+          .replace(/\s+/g, " ")
+          .toLowerCase();
+
+      const stableLong = (value) => {
+        const bytes = crypto
+          .createHash("sha256")
+          .update(
+            String(value || "").trim().toLowerCase(),
+            "utf8"
+          )
+          .digest();
+
+        const number =
+          bytes.readBigUInt64BE(0) &
+          0x7fffffffffffffffn;
+
+        return number === 0n ? 1n : number;
+      };
+
+      const pairs = [];
+
+      for (const assignment of assignments) {
+        const branch =
+          String(assignment?.branch || "").trim();
+
+        const groups =
+          Array.isArray(assignment?.groups)
+            ? assignment.groups
+            : [];
+
+        for (const rawGroup of groups) {
+          const group =
+            String(rawGroup || "").trim();
+
+          if (branch && group) {
+            pairs.push({ branch, group });
+          }
+        }
+      }
+
+      const uniquePairs =
+        Array.from(
+          new Map(
+            pairs.map((pair) => [
+              normalizeIdentity(pair.branch) +
+                "||" +
+                normalizeIdentity(pair.group),
+              pair,
+            ])
+          ).values()
+        );
+
+      // Defensive limit against malformed profile data.
+      if (uniquePairs.length > 40) {
+        console.warn(
+          "KMI_TRAINEE_MEMBER_SYNC_LIMIT",
+          { uid, count: uniquePairs.length }
+        );
+        return null;
+      }
+
+      let created = 0;
+      let existing = 0;
+      let skipped = 0;
+
+      for (const { branch, group } of uniquePairs) {
+
+        const groupId =
+          "g_" +
+          stableLong(
+            normalizeIdentity(branch) +
+              "|" +
+              normalizeIdentity(group)
+          ).toString();
+
+        const groupRef =
+          db.collection("attendanceGroups")
+            .doc(groupId);
+
+        /*
+         * If the attendance group does not exist,
+         * require a matching server-scheduled occurrence.
+         * Profile input alone cannot establish a group.
+         */
+        const groupSnapshot =
+          await groupRef.get();
+
+        if (!groupSnapshot.exists) {
+          const scheduled =
+            await db.collection("trainingOccurrences")
+              .where("branch", "==", branch)
+              .where("group", "==", group)
+              .limit(1)
+              .get();
+
+          if (scheduled.empty) {
+            console.warn(
+              "KMI_TRAINEE_MEMBER_SYNC_NO_SCHEDULE",
+              { groupId }
+            );
+            skipped++;
+            continue;
+          }
+        }
+
+        const memberId =
+          stableLong(
+            `${branch}|${group}|uid:${uid}`
+          );
+
+        const memberRef =
+          groupRef.collection("members")
+            .doc(memberId.toString());
+
+        const result =
+          await db.runTransaction(async (transaction) => {
+
+            const membershipQuery =
+              groupRef.collection("members")
+                .where("authUid", "==", uid)
+                .limit(2);
+
+            const [
+              currentGroup,
+              membersByUid,
+              targetMember,
+            ] = await Promise.all([
+              transaction.get(groupRef),
+              transaction.get(membershipQuery),
+              transaction.get(memberRef),
+            ]);
+
+            if (currentGroup.exists) {
+              const groupData =
+                currentGroup.data() || {};
+
+              if (
+                normalizeIdentity(groupData.branch) !==
+                  normalizeIdentity(branch) ||
+                normalizeIdentity(groupData.groupKey) !==
+                  normalizeIdentity(group)
+              ) {
+                return "identity_mismatch";
+              }
+            }
+
+            if (!membersByUid.empty) {
+              if (membersByUid.size !== 1) {
+                return "duplicate_uid";
+              }
+
+              const member =
+                membersByUid.docs[0].data() || {};
+
+              return member.isActive === false
+                ? "inactive"
+                : "existing";
+            }
+
+            if (targetMember.exists) {
+              return "target_exists";
+            }
+
+            const now = Date.now();
+
+            if (!currentGroup.exists) {
+              transaction.create(groupRef, {
+                id: groupId,
+                branch,
+                groupKey: group,
+                source: "server_trainee_sync",
+                createdAtMillis: now,
+                updatedAtMillis: now,
+                updatedAt:
+                  admin.firestore.FieldValue
+                    .serverTimestamp(),
+              });
+            }
+
+            transaction.create(memberRef, {
+              id: memberId,
+              authUid: uid,
+              branch,
+              groupKey: group,
+              displayName,
+              isActive: true,
+              source: "server_trainee_registration",
+              createdAtMillis: now,
+              updatedAtMillis: now,
+              updatedAt:
+                admin.firestore.FieldValue
+                  .serverTimestamp(),
+            });
+
+            return "created";
+          });
+
+        if (result === "created") {
+          created++;
+        } else if (result === "existing") {
+          existing++;
+        } else {
+          skipped++;
+
+          console.warn(
+            "KMI_TRAINEE_MEMBER_SYNC_SKIPPED",
+            { groupId, reason: result }
+          );
+        }
+      }
+
+      console.log(
+        "KMI_TRAINEE_MEMBER_SYNC_RESULT",
+        {
+          uid,
+          created,
+          existing,
+          skipped,
+        }
+      );
+
+      return null;
+    });
+
+/**
  * KMI — Automatic Scheduled Training Occurrences
  * Creates up to 10 missing occurrences per run.
  * Preserves existing occurrences and active overrides.

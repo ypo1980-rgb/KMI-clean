@@ -1382,69 +1382,31 @@ fun HomeScreen(
                     fun databaseGroupMatches(
                         selectedGroup: String,
                         databaseGroupHe: String,
-                        databaseGroupEn: String,
-                        branchName: String
+                        databaseGroupEn: String
                     ): Boolean {
-                        val wanted = TrainingCatalog
-                            .normalizeGroupName(selectedGroup)
-                            .ifBlank { selectedGroup }
-                            .trim()
 
-                        val dbHe = TrainingCatalog
-                            .normalizeGroupName(databaseGroupHe)
-                            .ifBlank { databaseGroupHe }
-                            .trim()
+                        fun normalizeExactGroup(value: String): String =
+                            value
+                                .trim()
+                                .lowercase(Locale.ROOT)
+                                .replace('־', '-')
+                                .replace('–', '-')
+                                .replace('—', '-')
+                                .replace('׳', '\'')
+                                .replace('’', '\'')
+                                .replace(Regex("\\s*\\+\\s*"), "+")
+                                .replace(Regex("\\s*-\\s*"), "-")
+                                .replace(Regex("\\s+"), " ")
 
-                        val dbEn = databaseGroupEn.trim()
+                        val wanted =
+                            normalizeExactGroup(selectedGroup)
 
-                        if (wanted.equals(dbHe, ignoreCase = true)) return true
+                        if (wanted.isBlank()) return false
 
-                        if (
-                            selectedGroup.trim()
-                                .equals(
-                                    databaseGroupHe.trim(),
-                                    ignoreCase = true
-                                )
-                        ) {
-                            return true
-                        }
-
-                        if (
-                            selectedGroup.trim()
-                                .equals(
-                                    dbEn,
-                                    ignoreCase = true
-                                )
-                        ) {
-                            return true
-                        }
-
-                        val isOfek =
-                            branchName
-                                .replace("־", "-")
-                                .replace("–", "-")
-                                .replace("—", "-")
-                                .contains(
-                                    "מרכז קהילתי אופק",
-                                    ignoreCase = true
-                                )
-
-                        if (
-                            wanted == "נוער" &&
-                            dbHe == "נוער + בוגרים"
-                        ) {
-                            return true
-                        }
-
-                        if (
-                            !isOfek &&
-                            wanted == "בוגרים" &&
-                            dbHe == "נוער + בוגרים"
-                        ) {
-                            return true
-                        }
-
-                        return false
+                        return wanted ==
+                                normalizeExactGroup(databaseGroupHe) ||
+                                wanted ==
+                                normalizeExactGroup(databaseGroupEn)
                     }
 
                     data class HomeTrainingCandidate(
@@ -1471,8 +1433,7 @@ fun HomeScreen(
                             databaseGroupMatches(
                                 selectedGroup = groupName,
                                 databaseGroupHe = day.groupHe,
-                                databaseGroupEn = day.groupEn,
-                                branchName = branchName
+                                databaseGroupEn = day.groupEn
                             )
                         }
 
@@ -1580,19 +1541,26 @@ fun HomeScreen(
                                         coachFallback = coachFromPrefs
                                     )
 
-                                if (dbItems.isNotEmpty()) {
-                                    val validDbItems =
-                                        dbItems.filter { candidate ->
-                                            isWithinUpcomingSevenDays(
-                                                candidate.training
-                                            )
-                                        }
+                                if (
+                                    KmiDatabaseProvider.branchByName(
+                                        ctx,
+                                        branchName
+                                    ) != null
+                                ) {
+                                    // סניף קיים במקור החדש:
+                                    // מציגים רק אימונים של קבוצות
+                                    // שעברו התאמה מדויקת.
+                                    all += dbItems.filter { candidate ->
+                                        isWithinUpcomingSevenDays(
+                                            candidate.training
+                                        )
+                                    }
 
-                                    all += validDbItems
                                     return@forEach
                                 }
 
-                                // ✅ 2) Fallback דרך TrainingCatalog
+                                // Fallback רק לסניפים שאינם קיימים
+                                // במסד הנתונים החדש.
                                 val branchVariants =
                                     branchScheduleVariants(branchName)
 
@@ -3346,8 +3314,17 @@ private fun TrainingCardCompact(
                     else ->
                         ""
                 }
-        } catch (_: Throwable) {
+        } catch (cancelled: kotlinx.coroutines.CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            android.util.Log.e(
+                "KMI_ATTENDANCE_LOOKUP",
+                "Failed to resolve attendance member: " +
+                        "branch=$branch, group=$attendanceGroup",
+                error
+            )
             resolvedAttendanceMemberId = null
+            traineeAttendanceChoice = ""
         }
     }
 

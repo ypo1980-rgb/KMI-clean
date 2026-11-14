@@ -206,8 +206,7 @@ private data class CoachRecipient(
     val name: String,
     val phone: String,
     val email: String,
-    val selected: Boolean,
-    val canReceiveSms: Boolean = phone.isNotBlank()
+    val selected: Boolean
 )
 
 //======================================================================
@@ -1397,10 +1396,7 @@ fun CoachBroadcastScreen(
                                     ?: phone
                                         .takeIf { it.isNotBlank() }
                                         ?.let { currentSelectionByPhone[it] }
-                                    ?: true,
-
-                            canReceiveSms =
-                                phone.isNotBlank()
+                                    ?: true
                         )
                     }
                     .distinctBy {
@@ -1509,16 +1505,6 @@ fun CoachBroadcastScreen(
             it.selected
         }
 
-    val selectedNumbers =
-        selectedRecipients
-            .map {
-                it.phone.trim()
-            }
-            .filter {
-                it.isNotBlank()
-            }
-            .distinct()
-
     val selectedUids =
         selectedRecipients
         .map { it.uid.trim() }
@@ -1553,10 +1539,9 @@ fun CoachBroadcastScreen(
         )
     }
 
-    // שמירה מאובטחת והפעלת SMS רק לאחר אישור Firebase
+    // שליחת הודעה מאובטחת דרך Firebase / Push בלבד.
     fun saveBroadcast(
         messageToSend: String,
-        numbersToSend: List<String>,
         uidsToSend: List<String>,
         groupsToSend: List<String>
     ) {
@@ -1592,45 +1577,15 @@ fun CoachBroadcastScreen(
                         message = ""
                     }
 
-                    val smsOpened =
-                        if (numbersToSend.isNotEmpty()) {
-                            runCatching {
-                                onOpenSms(
-                                    numbersToSend,
-                                    messageToSend
-                                )
-                            }.isSuccess
-                        } else {
-                            true
-                        }
-
                     isSending = false
 
-                    val feedback =
-                        when {
-                            numbersToSend.isEmpty() ->
-                                coachBroadcastTr(
-                                    isEnglish,
-                                    "ההודעה נשמרה לעיבוד Push עבור ${uidsToSend.size} נמענים.",
-                                    "The message was saved for Push processing for ${uidsToSend.size} recipients."
-                                )
-
-                            smsOpened ->
-                                coachBroadcastTr(
-                                    isEnglish,
-                                    "ההודעה נשמרה לעיבוד Push ונפתחה בקשה ליצירת SMS.",
-                                    "The message was saved for Push processing and the SMS composer was requested."
-                                )
-
-                            else ->
-                                coachBroadcastTr(
-                                    isEnglish,
-                                    "ההודעה נשמרה לעיבוד Push, אך פתיחת אפליקציית SMS נכשלה.",
-                                    "The message was saved for Push processing, but opening the SMS app failed."
-                                )
-                        }
-
-                    snackbarHostState.showSnackbar(feedback)
+                    snackbarHostState.showSnackbar(
+                        coachBroadcastTr(
+                            isEnglish,
+                            "ההודעה נשמרה ונשלחה לעיבוד Push עבור ${uidsToSend.size} נמענים.",
+                            "The message was saved and queued for Push processing for ${uidsToSend.size} recipients."
+                        )
+                    )
                 }
             }
         )
@@ -2666,8 +2621,8 @@ fun CoachBroadcastScreen(
                     )
                 }
 
-                // שליחה דרך SMS + שמירה + פידבק
-                androidx.compose.material3.Button(
+                    // שליחת Push בלבד דרך Cloud Function.
+                    androidx.compose.material3.Button(
                     onClick = {
                         scope.launch {
                             if (isSending) {
@@ -2699,7 +2654,6 @@ fun CoachBroadcastScreen(
 
                                     saveBroadcast(
                                         messageToSend = message.trim(),
-                                        numbersToSend = selectedNumbers.toList(),
                                         uidsToSend = selectedUids.toList(),
                                         groupsToSend = effectiveGroupKeys.toList()
                                     )
