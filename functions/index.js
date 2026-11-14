@@ -2675,6 +2675,22 @@ exports.verifyCoachInvite = functions.https.onCall(async (data, context) => {
       ? existingAuthorizedCoachSnap.data() || {}
       : {};
 
+  /*
+   * ביטול הרשאה מפורש על ידי מנהל גובר
+   * על הזמנת מאמן שהייתה תקפה בעבר.
+   *
+   * אין לאפשר למשתמש להחזיר לעצמו
+   * הרשאת מאמן באמצעות אימות חוזר.
+   */
+  if (
+    existingAuthorizedCoach.accessRevokedByAdmin === true
+  ) {
+    throw new functions.https.HttpsError(
+      "permission-denied",
+      "Coach access was revoked by an administrator."
+    );
+  }
+
   const coachBranchAssignments =
     Array.isArray(
       existingAuthorizedCoach.coachBranchAssignments
@@ -2741,44 +2757,175 @@ exports.verifyCoachInvite = functions.https.onCall(async (data, context) => {
      permissions
    );
 
-  await authorizedCoachRef.set(
-    coachPayload,
-    { merge: true }
-  );
+  const verifiedPermissions = await db.runTransaction(
+    async (transaction) => {
+    const [
+      currentInviteSnap,
+      currentCoachSnap,
+      currentUserSnap,
+    ] = await Promise.all([
+      transaction.get(inviteRef),
+      transaction.get(authorizedCoachRef),
+      transaction.get(userRef),
+    ]);
 
-  await inviteRef.set(
-    {
-      linkedUid: uid,
-      linkedAt: admin.firestore.FieldValue.serverTimestamp(),
-      linkedAtMillis: Date.now(),
-    },
-    { merge: true }
-  );
+    const currentInvite =
+      currentInviteSnap.exists
+        ? currentInviteSnap.data() || {}
+        : {};
 
- const userCoachPayload =
-   Object.assign(
-     {
-       role: "coach",
-       userType: "coach",
-       isCoach: true,
-       coachAuthorized: true,
-       coachInvitePhoneDigits:
-         phoneDigits,
-       coachAuthorizedAt:
-         admin.firestore.FieldValue.serverTimestamp(),
-     },
-     permissions
-   );
+    const currentCoach =
+      currentCoachSnap.exists
+        ? currentCoachSnap.data() || {}
+        : {};
 
- await db
-   .collection("users")
-   .doc(uid)
-   .set(
-     userCoachPayload,
-     {
-       merge: true,
-     }
-   );
+    const currentUser =
+      currentUserSnap.exists
+        ? currentUserSnap.data() || {}
+        : {};
+
+    const currentLinkedUid =
+      String(currentInvite.linkedUid || "").trim();
+
+    const inviteStillValid =
+      currentInviteSnap.exists &&
+      currentInvite.active === true &&
+      String(currentInvite.role || "")
+        .trim()
+        .toLowerCase() === "coach" &&
+      normalizeEmail(
+        currentInvite.emailLower || currentInvite.email
+      ) === emailLower &&
+      normalizeDigits(
+        currentInvite.phoneDigits || phoneDigits
+      ) === phoneDigits &&
+      (
+        !currentLinkedUid ||
+        currentLinkedUid === uid
+      );
+
+    if (!inviteStillValid) {
+      throw new functions.https.HttpsError(
+        "permission-denied",
+        "Coach invite is no longer valid."
+      );
+    }
+
+    const currentAccessType =
+      String(currentUser.accessType || "")
+        .trim()
+        .toLowerCase();
+
+    const adminGrantedCoach =
+      (
+        currentAccessType === "coach" ||
+        currentAccessType === "both"
+      ) &&
+      String(currentUser.roleLockedBy || "")
+        .trim()
+        .length > 0;
+
+    const existingAuthorizedCoach =
+      currentCoachSnap.exists &&
+      currentCoach.active === true &&
+      String(currentCoach.role || "")
+        .trim()
+        .toLowerCase() === "coach";
+
+    const accessExplicitlyDenied =
+      currentCoach.accessRevokedByAdmin === true ||
+      currentAccessType === "trainee" ||
+      (
+        currentAccessType.length > 0 &&
+        !["coach", "both"].includes(currentAccessType)
+      );
+
+    if (
+      accessExplicitlyDenied ||
+      !(
+        adminGrantedCoach ||
+        (
+          currentAccessType.length === 0 &&
+          existingAuthorizedCoach
+        )
+      )
+    ) {
+      throw new functions.https.HttpsError(
+        "permission-denied",
+        "Coach access requires administrator approval."
+      );
+    }
+
+    /*
+     * הרשאות משנה נלקחות ממקור האמת
+     * authorizedCoaches בלבד.
+     *
+     * הרשאות מהזמנה ישנה לא יכולות
+     * לדרוס החלטת מנהל.
+     */
+    const currentPermissions = {
+      canOpenCoachDrawer:
+        currentCoach.canOpenCoachDrawer === true,
+      canViewTrainees:
+        currentCoach.canViewTrainees === true,
+      canManageTrainees:
+        currentCoach.canManageTrainees === true,
+      canManageAttendance:
+        currentCoach.canManageAttendance === true,
+      canManageInternalExams:
+        currentCoach.canManageInternalExams === true,
+      canViewPaymentReports:
+        currentCoach.canViewPaymentReports === true,
+      canManagePayments:
+        currentCoach.canManagePayments === true,
+      canSendBroadcasts:
+        currentCoach.canSendBroadcasts === true,
+    };
+
+    const currentAssignments =
+      Array.isArray(currentCoach.coachBranchAssignments)
+        ? currentCoach.coachBranchAssignments
+        : coachBranchAssignments;
+
+    transaction.set(
+      authorizedCoachRef,
+      {
+        ...coachPayload,
+        ...currentPermissions,
+        coachBranchAssignments: currentAssignments,
+        accessRevokedByAdmin: false,
+      },
+      { merge: true }
+    );
+
+    transaction.set(
+      inviteRef,
+      {
+        linkedUid: uid,
+        linkedAt:
+          admin.firestore.FieldValue.serverTimestamp(),
+        linkedAtMillis: Date.now(),
+      },
+      { merge: true }
+    );
+
+    transaction.set(
+      userRef,
+      {
+        role: "coach",
+        userType: "coach",
+        isCoach: true,
+        coachAuthorized: true,
+        coachInvitePhoneDigits: phoneDigits,
+        coachAuthorizedAt:
+          admin.firestore.FieldValue.serverTimestamp(),
+        ...currentPermissions,
+      },
+      { merge: true }
+    );
+
+    return currentPermissions;
+  });
 
   return {
     allowed: true,
@@ -2787,9 +2934,238 @@ exports.verifyCoachInvite = functions.https.onCall(async (data, context) => {
     fullName,
     emailLower,
     phoneDigits,
-    permissions,
+    permissions: verifiedPermissions,
   };
 });
+
+
+/**
+ * ====================================================
+ * K.M.I — Admin User Access Management
+ *
+ * accessType:
+ * trainee = מתאמן בלבד
+ * coach   = מאמן בלבד
+ * both    = מתאמן ומאמן
+ *
+ * רק מנהל פעיל יכול לשנות הרשאות.
+ * authorizedCoaches נשאר מקור האמת למאמן.
+ * ====================================================
+ */
+exports.setKamiUserAccess =
+  functions
+    .region("europe-west1")
+    .https.onCall(async (data, context) => {
+      const adminUid =
+        String(context.auth?.uid || "").trim();
+
+      if (!adminUid) {
+        throw new functions.https.HttpsError(
+          "unauthenticated",
+          "Authentication required."
+        );
+      }
+
+      const targetUid =
+        String(data?.uid || "").trim();
+
+      const accessType =
+        String(data?.accessType || "")
+          .trim()
+          .toLowerCase();
+
+      if (
+        !/^[A-Za-z0-9_-]{10,128}$/.test(targetUid) ||
+        !["trainee", "coach", "both"].includes(accessType)
+      ) {
+        throw new functions.https.HttpsError(
+          "invalid-argument",
+          "Invalid user or access type."
+        );
+      }
+
+      /*
+       * קודם מאמתים שהמבקש הוא מנהל פעיל.
+       * אין לחשוף גם מידע על קיום חשבון
+       * Firebase Authentication למשתמש רגיל.
+       */
+      const requestingAdminSnap = await db
+        .collection("admins")
+        .doc(adminUid)
+        .get();
+
+      if (
+        !requestingAdminSnap.exists ||
+        requestingAdminSnap.get("enabled") !== true
+      ) {
+        throw new functions.https.HttpsError(
+          "permission-denied",
+          "Administrator access required."
+        );
+      }
+
+           /*
+            * לאחר אימות המנהל, מאמתים שה-UID
+            * שייך לחשבון Firebase Auth קיים.
+            */
+           try {
+             await admin.auth().getUser(targetUid);
+      } catch (error) {
+        if (error?.code === "auth/user-not-found") {
+          throw new functions.https.HttpsError(
+            "not-found",
+            "Firebase Authentication user not found."
+          );
+        }
+
+        throw new functions.https.HttpsError(
+          "internal",
+          "Unable to verify the target user."
+        );
+      }
+
+      const adminRef =
+        db.collection("admins").doc(adminUid);
+
+      const userRef =
+        db.collection("users").doc(targetUid);
+
+      const coachRef =
+        db.collection("authorizedCoaches").doc(targetUid);
+
+      const coachAllowed =
+        accessType === "coach" ||
+        accessType === "both";
+
+      const allowedModes =
+        accessType === "both"
+          ? ["trainee", "coach"]
+          : [accessType];
+
+      await db.runTransaction(async (transaction) => {
+        const [
+          adminSnap,
+          userSnap,
+          coachSnap,
+        ] = await Promise.all([
+          transaction.get(adminRef),
+          transaction.get(userRef),
+          transaction.get(coachRef),
+        ]);
+
+        if (
+          !adminSnap.exists ||
+          adminSnap.get("enabled") !== true
+        ) {
+          throw new functions.https.HttpsError(
+            "permission-denied",
+            "Administrator access required."
+          );
+        }
+
+        if (!userSnap.exists) {
+          throw new functions.https.HttpsError(
+            "not-found",
+            "User profile not found."
+          );
+        }
+
+        const userData = userSnap.data() || {};
+
+        const declaredUid =
+          String(userData.uid || "").trim();
+
+        if (
+          declaredUid &&
+          declaredUid !== targetUid
+        ) {
+          throw new functions.https.HttpsError(
+            "failed-precondition",
+            "User document UID does not match Firebase Auth."
+          );
+        }
+
+        const coachData =
+          coachSnap.exists
+            ? coachSnap.data() || {}
+            : {};
+
+        const permissions = [
+          "canOpenCoachDrawer",
+          "canViewTrainees",
+          "canManageTrainees",
+          "canManageAttendance",
+          "canManageInternalExams",
+          "canViewPaymentReports",
+          "canManagePayments",
+          "canSendBroadcasts",
+        ];
+
+        const userUpdate = {
+          role: coachAllowed ? "coach" : "trainee",
+          user_role: coachAllowed ? "coach" : "trainee",
+          userType: coachAllowed ? "coach" : "trainee",
+          isCoach: coachAllowed,
+          coachAuthorized: coachAllowed,
+          coach_authorized: coachAllowed,
+          allowedModes,
+          accessType,
+          roleLockedBy: adminUid,
+          roleUpdatedAt:
+            admin.firestore.FieldValue.serverTimestamp(),
+        };
+
+        permissions.forEach((permission) => {
+          userUpdate[permission] =
+            permission === "canOpenCoachDrawer"
+              ? coachAllowed
+              : coachAllowed &&
+                coachData[permission] === true;
+        });
+
+        transaction.update(userRef, userUpdate);
+
+        transaction.set(
+          coachRef,
+          {
+            active: coachAllowed,
+            role: "coach",
+            accessRevokedByAdmin: !coachAllowed,
+
+            // הרשאת תפריט המאמן נגזרת ישירות
+            // מהתפקיד שהמנהל העניק.
+            canOpenCoachDrawer: coachAllowed,
+
+            accessUpdatedBy: adminUid,
+            accessUpdatedAt:
+              admin.firestore.FieldValue.serverTimestamp(),
+          },
+          { merge: true }
+        );
+
+        /*
+         * אין למחוק הרשאות משנה או שיוכי
+         * סניפים וקבוצות קיימים.
+         *
+         * כאשר המאמן אינו פעיל, בדיקות
+         * ההרשאה בשרת חוסמות את הגישה.
+         */
+      });
+
+      console.log("KMI_USER_ACCESS_UPDATED", {
+        adminUid,
+        targetUid,
+        accessType,
+      });
+
+      return {
+        accepted: true,
+        uid: targetUid,
+        accessType,
+        allowedModes,
+        coachAuthorized: coachAllowed,
+      };
+    });
 
 
 /**

@@ -285,6 +285,9 @@ object TrainingOverrideRepository {
 
         val cleanBranch =
             branch.trim()
+                .replace('־', '-')
+                .replace('–', '-')
+                .replace('—', '-')
 
         val cleanGroup =
             group.trim()
@@ -984,6 +987,9 @@ object TrainingOverrideRepository {
 
         val cleanBranch =
             branch.trim()
+                .replace('־', '-')
+                .replace('–', '-')
+                .replace('—', '-')
 
         val cleanGroup =
             group.trim()

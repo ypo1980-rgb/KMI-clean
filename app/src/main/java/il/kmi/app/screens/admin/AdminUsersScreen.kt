@@ -33,9 +33,16 @@ import com.google.firebase.Timestamp
 import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.Query
 import com.google.firebase.firestore.ktx.firestore
+import com.google.firebase.functions.FirebaseFunctions
 import com.google.firebase.ktx.Firebase
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.RadioButton
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 import il.kmi.shared.domain.Belt
 import il.kmi.app.ui.KmiTopBar
+import il.kmi.app.ui.KmiPremiumDropdown
 import il.kmi.app.ui.ext.color
 import il.kmi.app.privacy.TraineeDisplayNameMapper
 import il.kmi.app.screens.registration.CoachBranchAssignment
@@ -44,6 +51,7 @@ import kotlinx.coroutines.tasks.await
 import java.util.Calendar
 import java.util.Locale
 import android.app.Activity
+import android.util.Log
 import androidx.compose.ui.platform.LocalContext
 import il.kmi.shared.localization.AppLanguage
 import il.kmi.shared.localization.AppLanguageManager
@@ -121,6 +129,7 @@ private fun adminMillisFromFirestore(value: Any?): Long? {
 data class AdminUserRecord(
     val id: String,
     val uidField: String?,
+    val accessTargetUid: String? = null,
     val fullName: String,
     val gender: String?,
     val birthDay: Int?,
@@ -141,7 +150,8 @@ data class AdminUserRecord(
     val phone: String?,
     val email: String?,
 
-    // ✅ חדש: שדות לזיהוי מאמן/מתאמן
+    // הרשאה שהמנהל קבע, אם קיימת.
+    val accessType: String? = null,
     val role: String? = null,
     val isCoachFlag: Boolean? = null,
 
@@ -210,21 +220,31 @@ data class AdminUserRecord(
     val belt: Belt?
         get() = currentBeltId?.let { Belt.fromId(it) }
 
-    // ✅ חדש: חישוב מאמן (תומך בכמה שיטות שמירה ב-Firestore)
     val isCoach: Boolean
         get() {
-            if (isCoachFlag == true) return true
+            return when (accessType?.trim()?.lowercase()) {
+                "trainee" -> false
+                "coach", "both" -> true
 
-            val r = role?.trim()?.lowercase()
-            if (r != null) {
-                if (r in listOf("coach", "trainer", "instructor", "admin_coach")) return true
-                if ("coach" in r || "trainer" in r || "instructor" in r) return true
-                if ("מאמן" in r) return true
+                else -> {
+                    // תאימות להצגת משתמשים ותיקים בלבד.
+                    // אין להשתמש בתוצאה לאישור פעולות מאמן.
+                    isCoachFlag == true ||
+                            role?.trim()?.lowercase() in setOf(
+                        "coach",
+                        "trainer",
+                        "instructor",
+                        "admin_coach",
+                        "מאמן"
+                    )
+                }
             }
+        }
 
-            // fallback לפי groups
-            val g = groups.joinToString(" ").lowercase()
-            return ("מאמן" in g) || ("מאמנים" in g) || ("coach" in g) || ("coaches" in g) || ("trainer" in g)
+    val isTrainee: Boolean
+        get() = when (accessType?.trim()?.lowercase()) {
+            "coach" -> false
+            else -> true
         }
 } // ✅ חשוב: סגירת AdminUserRecord כאן
 
@@ -655,8 +675,34 @@ private fun mergeAdminUserRecords(
                 }
             }
 
+    val declaredUids =
+        records
+            .mapNotNull { record ->
+                record.uidField
+                    ?.trim()
+                    ?.takeIf { it.isNotBlank() }
+            }
+            .distinct()
+
+    val verifiedAccessUids =
+        records
+            .mapNotNull { it.accessTargetUid }
+            .distinct()
+
+    val safeAccessUid =
+        verifiedAccessUids
+            .singleOrNull()
+            ?.takeIf { uid ->
+                declaredUids.isEmpty() ||
+                        (
+                                declaredUids.size == 1 &&
+                                        declaredUids.single() == uid
+                                )
+            }
+
     return newest.copy(
         uidField = newestNonBlank { it.uidField },
+        accessTargetUid = safeAccessUid,
         fullName =
             newestNonBlank { record ->
                 record.fullName.takeUnless {
@@ -722,6 +768,9 @@ private fun mergeAdminUserRecords(
         email =
             newestNonBlank { it.email },
 
+        accessType =
+            newestNonBlank { it.accessType },
+
         role =
             newestNonBlank { it.role },
 
@@ -757,40 +806,264 @@ private fun mergeAdminUserRecords(
 private fun mergeDuplicateAdminUsers(
     users: List<AdminUserRecord>
 ): List<AdminUserRecord> {
-    val groups =
-        mutableListOf<MutableList<AdminUserRecord>>()
 
-    users.forEach { user ->
-        val matchingIndexes =
-            groups.indices.filter { index ->
-                groups[index].any { existing ->
-                    existing.isSameAdminUser(user)
-                }
-            }
+    fun displayIdentityKey(
+        user: AdminUserRecord
+    ): String? {
+        val name = user.fullName
+            .trim()
+            .replace(Regex("\\s+"), " ")
+            .lowercase()
 
-        if (matchingIndexes.isEmpty()) {
-            groups += mutableListOf(user)
-        } else {
-            val targetIndex = matchingIndexes.first()
+        val email = user.email
+            .orEmpty()
+            .trim()
+            .lowercase()
 
-            groups[targetIndex].add(user)
+        val rawPhone = user.phone
+            .orEmpty()
+            .filter { it.isDigit() }
 
-            matchingIndexes
-                .drop(1)
-                .sortedDescending()
-                .forEach { index ->
-                    groups[targetIndex]
-                        .addAll(groups[index])
+        val phone = when {
+            rawPhone.startsWith("00972") ->
+                "0" + rawPhone.removePrefix("00972")
 
-                    groups.removeAt(index)
-                }
+            rawPhone.startsWith("972") ->
+                "0" + rawPhone.removePrefix("972")
+
+            else -> rawPhone
+        }
+
+        // ללא פרטי קשר אי אפשר לקבוע זהות לתצוגה.
+        if (name.isBlank() ||
+            name.startsWith("unknown user") ||
+            (email.isBlank() && phone.isBlank())
+        ) {
+            return null
+        }
+
+        return "$name|$email|$phone"
+    }
+
+    val verifiedUsers = users.filter {
+        !it.accessTargetUid.isNullOrBlank()
+    }
+
+    val unverifiedUsers = users.filter {
+        it.accessTargetUid.isNullOrBlank()
+    }
+
+    // נרמול פרטי קשר לצורך זיהוי כפילויות.
+    fun normalizedEmail(user: AdminUserRecord): String =
+        user.email.orEmpty()
+            .trim()
+            .lowercase()
+
+    fun normalizedPhone(user: AdminUserRecord): String {
+        val digits = user.phone.orEmpty()
+            .filter(Char::isDigit)
+
+        return when {
+            digits.startsWith("00972") ->
+                "0" + digits.removePrefix("00972")
+
+            digits.startsWith("972") ->
+                "0" + digits.removePrefix("972")
+
+            else -> digits
         }
     }
 
-    return groups
-        .map { records ->
-            mergeAdminUserRecords(records)
+    // אבחון כפילויות ללא חשיפת פרטי קשר.
+    val duplicateNames = users.groupBy { user ->
+        user.fullName.trim()
+            .replace(Regex("\\s+"), " ")
+            .lowercase()
+    }.filter { (name, records) ->
+        name.isNotBlank() && records.size > 1
+    }
+
+    duplicateNames.forEach { (name, records) ->
+        val reference = records.first()
+
+        android.util.Log.d(
+            "KMI_ADMIN_IDENTITY",
+            "name=$name records=${records.size}"
+        )
+
+        records.forEach { record ->
+            val emailA = normalizedEmail(reference)
+            val emailB = normalizedEmail(record)
+            val phoneA = normalizedPhone(reference)
+            val phoneB = normalizedPhone(record)
+
+            val sameEmail =
+                emailA.isNotBlank() &&
+                        emailB.isNotBlank() &&
+                        emailA == emailB
+
+            val samePhone =
+                phoneA.isNotBlank() &&
+                        phoneB.isNotBlank() &&
+                        phoneA == phoneB
+
+            val sameBirthDate =
+                reference.birthYear != null &&
+                        reference.birthMonth != null &&
+                        reference.birthDay != null &&
+                        reference.birthYear == record.birthYear &&
+                        reference.birthMonth == record.birthMonth &&
+                        reference.birthDay == record.birthDay
+
+            android.util.Log.d(
+                "KMI_ADMIN_IDENTITY",
+                "docSuffix=${record.id.takeLast(6)} " +
+                        "sameEmail=$sameEmail " +
+                        "samePhone=$samePhone " +
+                        "sameBirthDate=$sameBirthDate " +
+                        "age=${record.age} " +
+                        "accessType=${record.accessType}"
+            )
         }
+    }
+
+    // חשבונות בעלי UID מאומת מאוחדים לפי UID בלבד.
+    val verifiedGroups = verifiedUsers
+        .groupBy { it.accessTargetUid.orEmpty().trim() }
+        .map { (_, records) ->
+            val merged = mergeAdminUserRecords(records)
+            val canonical = records.first()
+
+            merged.copy(
+                id = canonical.id,
+                uidField = canonical.uidField,
+                accessTargetUid = canonical.accessTargetUid,
+                accessType = canonical.accessType,
+                role = canonical.role,
+                isCoachFlag = canonical.isCoachFlag
+            )
+        }
+
+    // רשומות ישנות מקובצות לצורך תצוגה בלבד.
+    val legacyGroups = unverifiedUsers
+        .groupBy { user ->
+            val identity = displayIdentityKey(user)
+                ?: return@groupBy "document:${user.id}"
+
+            val declaredUid = user.uidField
+                .orEmpty()
+                .trim()
+
+            "$identity|uid:$declaredUid"
+        }
+        .values
+        .map { records ->
+            mergeAdminUserRecords(records).copy(
+                accessTargetUid = null
+            )
+        }
+
+    val remainingLegacy =
+        legacyGroups.toMutableList()
+
+    val result = verifiedGroups.map { verified ->
+        val verifiedUid =
+            verified.accessTargetUid.orEmpty().trim()
+
+        val verifiedIdentity =
+            displayIdentityKey(verified)
+
+        if (verifiedIdentity == null) {
+            return@map verified
+        }
+
+        // התאמה מותרת רק לחשבון מאומת יחיד.
+        val matchingVerifiedCount =
+            verifiedGroups.count { candidate ->
+                displayIdentityKey(candidate) == verifiedIdentity
+            }
+
+        if (matchingVerifiedCount != 1) {
+            return@map verified
+        }
+
+        val matches = remainingLegacy.filter { legacy ->
+            val legacyUid =
+                legacy.uidField.orEmpty().trim()
+
+            displayIdentityKey(legacy) == verifiedIdentity &&
+                    (
+                            legacyUid.isBlank() ||
+                                    legacyUid == verifiedUid
+                            )
+        }
+
+        if (matches.isEmpty()) {
+            return@map verified
+        }
+
+        remainingLegacy.removeAll(matches)
+
+        // מאחדים פרטי תצוגה, אך שומרים את זהות
+        // והרשאות החשבון המאומת כמקור האמת.
+        mergeAdminUserRecords(
+            listOf(verified) + matches
+        ).copy(
+            id = verified.id,
+            uidField = verified.uidField,
+            accessTargetUid = verified.accessTargetUid,
+            accessType = verified.accessType,
+            role = verified.role,
+            isCoachFlag = verified.isCoachFlag
+        )
+    }
+
+    val displayUsers = result + remainingLegacy
+
+    val displayGroups = displayUsers.groupBy { user ->
+        val email = normalizedEmail(user)
+        val phone = normalizedPhone(user)
+
+        if (email.isNotBlank() && phone.isNotBlank()) {
+            "contact:$email|$phone"
+        } else {
+            "document:${user.id}"
+        }
+    }
+
+    return displayGroups.values.map { records ->
+        if (records.size == 1) {
+            return@map records.first()
+        }
+
+        val merged = mergeAdminUserRecords(records)
+
+        val uniqueUids = records
+            .mapNotNull { it.accessTargetUid }
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
+            .distinct()
+
+        val safeUid = uniqueUids.singleOrNull()
+
+        val explicitAccessTypes = records
+            .mapNotNull { it.accessType }
+            .map { it.trim().lowercase() }
+            .filter {
+                it in setOf("trainee", "coach", "both")
+            }
+            .distinct()
+
+        merged.copy(
+            accessTargetUid = safeUid,
+            uidField = if (safeUid != null) {
+                safeUid
+            } else {
+                null
+            },
+            accessType = explicitAccessTypes.singleOrNull()
+        )
+    }
 }
 
 private fun AdminUserRecord.hasRealAdminUserContent(): Boolean {
@@ -1067,8 +1340,14 @@ private fun DocumentSnapshot.toAdminUserRecord(): AdminUserRecord {
         get("createdAtMillis") ?: get("createdAt")
     )
 
+    val accessType = stringOrNull("accessType")
     val role = stringOrNull("role", "userType", "type")
-    val isCoachFlag = boolOrNull("isCoach", "coach", "isTrainer", "trainer")
+    val isCoachFlag = boolOrNull(
+        "isCoach",
+        "coach",
+        "isTrainer",
+        "trainer"
+    )
 
     val branchValue = stringOrNull(
         "branch",
@@ -1098,6 +1377,16 @@ private fun DocumentSnapshot.toAdminUserRecord(): AdminUserRecord {
     return AdminUserRecord(
         id = id,
         uidField = uidField,
+        accessTargetUid =
+            id.trim()
+                .takeIf { documentUid ->
+                    Regex("^[A-Za-z0-9_-]{10,128}$")
+                        .matches(documentUid) &&
+                            (
+                                    uidField.isNullOrBlank() ||
+                                            uidField.trim() == documentUid
+                                    )
+                },
         fullName = name,
         gender = stringOrNull("gender", "sex"),
         birthDay = birthDay,
@@ -1137,7 +1426,7 @@ private fun DocumentSnapshot.toAdminUserRecord(): AdminUserRecord {
         phone = stringOrNull("phone", "phoneNumber"),
         email = stringOrNull("email"),
 
-        // ✅ חדש
+        accessType = accessType,
         role = role,
         isCoachFlag = isCoachFlag,
 
@@ -1292,6 +1581,41 @@ object AdminUsersPreloadCache {
                             user.hasRealAdminUserContent()
                         }
 
+                val duplicateGroups = rawUsers
+                    .groupBy { user ->
+                        user.fullName.trim()
+                            .replace(Regex("\\s+"), " ")
+                            .lowercase()
+                    }
+                    .filter { (name, records) ->
+                        name.isNotBlank() && records.size > 1
+                    }
+
+                Log.d(
+                    "KMI_ADMIN_DEDUP",
+                    "duplicateNameGroups=${duplicateGroups.size}"
+                )
+
+                duplicateGroups.forEach { (name, records) ->
+                    Log.d(
+                        "KMI_ADMIN_DEDUP",
+                        "name=$name count=${records.size}"
+                    )
+
+                    records.forEach { record ->
+                        Log.d(
+                            "KMI_ADMIN_DEDUP",
+                            "docSuffix=${record.id.takeLast(6)} " +
+                                    "uidSuffix=${record.uidField?.takeLast(6)} " +
+                                    "accessSuffix=${record.accessTargetUid?.takeLast(6)} " +
+                                    "age=${record.age} " +
+                                    "hasEmail=${!record.email.isNullOrBlank()} " +
+                                    "hasPhone=${!record.phone.isNullOrBlank()} " +
+                                    "accessType=${record.accessType}"
+                        )
+                    }
+                }
+
                 mergeDuplicateAdminUsers(rawUsers)
                     .sortedWith(
                         compareBy<AdminUserRecord> { user ->
@@ -1414,6 +1738,7 @@ private fun createAdminUsersPdf(
     users: List<AdminUserRecord>,
     traineeUsers: List<AdminUserRecord>,
     coachUsers: List<AdminUserRecord>,
+    bothUsers: List<AdminUserRecord>,
     beltCounts: List<Pair<String, Int>>,
     filtersSummary: String,
     totalUsers: Int,
@@ -2267,38 +2592,67 @@ private fun createAdminUsersPdf(
 
     y += 8f
 
-    drawSectionTitle(
-        tr(
-            "מתאמנים (${traineeUsers.size})",
-            "Trainees (${traineeUsers.size})"
+    if (traineeUsers.isNotEmpty()) {
+        drawSectionTitle(
+            tr(
+                "מתאמנים (${traineeUsers.size})",
+                "Trainees (${traineeUsers.size})"
+            )
         )
-    )
 
-    traineeUsers.forEachIndexed { index, user ->
-        drawUserCard(
-            user = user,
-            roleTitle = tr("מתאמן", "Trainee"),
-            roleColor = infoBlue,
-            demoIndex = index
-        )
+        traineeUsers.forEachIndexed { index, user ->
+            drawUserCard(
+                user = user,
+                roleTitle = tr("מתאמן", "Trainee"),
+                roleColor = infoBlue,
+                demoIndex = index
+            )
+        }
+
+        y += 8f
     }
 
-    y += 8f
-
-    drawSectionTitle(
-        tr(
-            "מאמנים (${coachUsers.size})",
-            "Coaches (${coachUsers.size})"
+    if (coachUsers.isNotEmpty()) {
+        drawSectionTitle(
+            tr(
+                "מאמנים (${coachUsers.size})",
+                "Coaches (${coachUsers.size})"
+            )
         )
-    )
 
-    coachUsers.forEachIndexed { index, user ->
-        drawUserCard(
-            user = user,
-            roleTitle = tr("מאמן", "Coach"),
-            roleColor = coachPurple,
-            demoIndex = index
+        coachUsers.forEachIndexed { index, user ->
+            drawUserCard(
+                user = user,
+                roleTitle = tr("מאמן", "Coach"),
+                roleColor = coachPurple,
+                demoIndex = index
+            )
+        }
+
+        y += 8f
+    }
+
+    if (bothUsers.isNotEmpty()) {
+        drawSectionTitle(
+            tr(
+                "מתאמנים + מאמנים (${bothUsers.size})",
+                "Trainees + Coaches (${bothUsers.size})"
+            )
         )
+
+        bothUsers.forEachIndexed { index, user ->
+            drawUserCard(
+                user = user,
+                roleTitle = tr(
+                    "מתאמן + מאמן",
+                    "Trainee + Coach"
+                ),
+                roleColor = successGreen,
+                demoIndex = index
+            )
+        }
+
+        y += 8f
     }
 
     if (unlikeQuestions.isNotEmpty()) {
@@ -2400,8 +2754,6 @@ fun AdminUsersScreen(
         langManager.getCurrentLanguage() ==
                 AppLanguage.ENGLISH
 
-    val screenTextAlign = TextAlign.Start
-
     // --- מצב נתונים מ-Firestore / Cache מוקדם ממסך הטעינה ---
     var users by remember {
         mutableStateOf(AdminUsersPreloadCache.usersSnapshot)
@@ -2437,6 +2789,126 @@ fun AdminUsersScreen(
         unlikeQuestions = result.unlikeQuestions
         errorMsg = result.errorMessage
         loading = false
+    }
+
+    // -------- ניהול הרשאות משתמשים --------
+    val accessScope = rememberCoroutineScope()
+
+    var accessUser by remember {
+        mutableStateOf<AdminUserRecord?>(null)
+    }
+
+    var accessDemoIndex by remember {
+        mutableStateOf(0)
+    }
+
+    var selectedAccessType by remember {
+        mutableStateOf("trainee")
+    }
+
+    var savingAccess by remember {
+        mutableStateOf(false)
+    }
+
+    var accessError by remember {
+        mutableStateOf<String?>(null)
+    }
+
+    fun openUserAccess(
+        user: AdminUserRecord,
+        demoIndex: Int
+    ) {
+        accessUser = user
+        accessDemoIndex = demoIndex
+
+        selectedAccessType =
+            user.accessType
+                ?.trim()
+                ?.lowercase()
+                ?.takeIf {
+                    it in setOf("trainee", "coach", "both")
+                }
+                ?: if (user.isCoach) "coach" else "trainee"
+
+        accessError = null
+    }
+
+    fun saveUserAccess() {
+        val user = accessUser ?: return
+
+        if (savingAccess) return
+
+        val targetUid =
+            user.accessTargetUid
+                ?.trim()
+                .orEmpty()
+
+        if (!Regex("^[A-Za-z0-9_-]{10,128}$").matches(targetUid)) {
+            accessError = adminTr(
+                isEnglish,
+                "לא ניתן לאמת באופן חד-משמעי את UID המשתמש. ההרשאה לא שונתה.",
+                "The user's UID could not be verified unambiguously. Access was not changed."
+            )
+            return
+        }
+
+        savingAccess = true
+        accessError = null
+
+        accessScope.launch {
+            try {
+                val result = FirebaseFunctions
+                    .getInstance("europe-west1")
+                    .getHttpsCallable("setKamiUserAccess")
+                    .call(
+                        mapOf(
+                            "uid" to targetUid,
+                            "accessType" to selectedAccessType
+                        )
+                    )
+                    .await()
+
+                val response = result.data as? Map<*, *>
+
+                if (response?.get("accepted") != true) {
+                    throw IllegalStateException(
+                        "Access update was not accepted"
+                    )
+                }
+
+                val refreshed =
+                    AdminUsersPreloadCache.refresh(isEnglish)
+
+                users = refreshed.users
+                unlikeQuestions = refreshed.unlikeQuestions
+                errorMsg = refreshed.errorMessage
+
+                accessUser = null
+
+                android.widget.Toast.makeText(
+                    contextLang,
+                    adminTr(
+                        isEnglish,
+                        "הרשאת המשתמש נשמרה בהצלחה",
+                        "User access saved successfully"
+                    ),
+                    android.widget.Toast.LENGTH_SHORT
+                ).show()
+
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+
+            } catch (_: Exception) {
+                accessError = adminTr(
+                    isEnglish,
+                    "שמירת ההרשאה נכשלה. בדוק את החיבור והרשאות המנהל.",
+                    "Failed to save access. Check the connection and administrator permissions."
+                )
+
+            } finally {
+                savingAccess = false
+            }
+        }
     }
 
     // -------- פילטרים --------
@@ -2495,15 +2967,30 @@ fun AdminUsersScreen(
             }
         }
 
-    val coachUsers = remember(filteredUsers) { filteredUsers.filter { it.isCoach } }
-    val traineeUsers = remember(filteredUsers) { filteredUsers.filter { !it.isCoach } }
-
-    val traineeUiUsers = remember(traineeUsers) {
-        traineeUsers
+    // סינון תצוגה בלבד, ללא שינוי בהרשאות Firestore.
+    var userCategoryFilter by rememberSaveable {
+        mutableStateOf("all")
     }
 
-    val coachUiUsers = remember(coachUsers) {
-        coachUsers
+    fun userCategory(user: AdminUserRecord): String {
+        return when (user.accessType?.trim()?.lowercase()) {
+            "both" -> "both"
+            "coach" -> "coach"
+            "trainee" -> "trainee"
+            else -> if (user.isCoach) "coach" else "trainee"
+        }
+    }
+
+    val traineeOnlyUiUsers = remember(filteredUsers) {
+        filteredUsers.filter { userCategory(it) == "trainee" }
+    }
+
+    val coachOnlyUiUsers = remember(filteredUsers) {
+        filteredUsers.filter { userCategory(it) == "coach" }
+    }
+
+    val bothUiUsers = remember(filteredUsers) {
+        filteredUsers.filter { userCategory(it) == "both" }
     }
 
     // -------- סטטיסטיקות כלליות --------
@@ -2613,6 +3100,33 @@ fun AdminUsersScreen(
                 )
             )
         }
+
+        if (userCategoryFilter != "all") {
+            val categoryLabel = when (userCategoryFilter) {
+                "trainee" -> adminTr(
+                    isEnglish, "מתאמנים", "Trainees"
+                )
+                "coach" -> adminTr(
+                    isEnglish, "מאמנים", "Coaches"
+                )
+                "both" -> adminTr(
+                    isEnglish,
+                    "מתאמנים + מאמנים",
+                    "Trainees + Coaches"
+                )
+                else -> ""
+            }
+
+            if (categoryLabel.isNotBlank()) {
+                add(
+                    adminTr(
+                        isEnglish,
+                        "הרשאה: $categoryLabel",
+                        "Access: $categoryLabel"
+                    )
+                )
+            }
+        }
     }.joinToString(" • ").ifBlank {
         adminTr(
             isEnglish,
@@ -2621,8 +3135,64 @@ fun AdminUsersScreen(
         )
     }
 
-    val pdfBeltCounts = beltCountsOrdered.map { (label, count, _) ->
-        label to count
+    val pdfUsers = remember(
+        filteredUsers,
+        userCategoryFilter
+    ) {
+        when (userCategoryFilter) {
+            "trainee" -> traineeOnlyUiUsers
+            "coach" -> coachOnlyUiUsers
+            "both" -> bothUiUsers
+            else -> filteredUsers
+        }
+    }
+
+    val pdfBeltCounts = traineeRankOrderedIds().map { rawId ->
+        val count = pdfUsers.count { user ->
+            user.currentBeltId
+                ?.trim()
+                .orEmpty() == rawId
+        }
+
+        traineeRankLabelFromOrderedId(
+            rawId,
+            isEnglish
+        ) to count
+    }
+
+    val pdfBranchCount = pdfUsers
+        .flatMap { user ->
+            buildList {
+                user.branch
+                    ?.trim()
+                    ?.takeIf { it.isNotBlank() }
+                    ?.let { add(it) }
+
+                addAll(user.branches)
+            }
+        }
+        .map { it.trim() }
+        .filter {
+            it.isNotBlank() &&
+                    !it.equals("לא ידוע", true) &&
+                    !it.equals("unknown", true) &&
+                    !it.equals("null", true) &&
+                    it != "—"
+        }
+        .distinctBy { it.lowercase() }
+        .size
+
+    val pdfAverageAge = pdfUsers
+        .mapNotNull { it.age }
+        .takeIf { it.isNotEmpty() }
+        ?.average()
+
+    val pdfTotalAppOpens = pdfUsers.sumOf {
+        it.appOpenCount
+    }
+
+    val pdfActiveUsersWithUsage = pdfUsers.count {
+        it.appOpenCount > 0
     }
 
     val onExportUsersPdf: () -> Unit = {
@@ -2641,16 +3211,23 @@ fun AdminUsersScreen(
                 val pdfFile = createAdminUsersPdf(
                     context = contextLang,
                     isEnglish = isEnglish,
-                    users = filteredUsers,
-                    traineeUsers = traineeUiUsers,
-                    coachUsers = coachUiUsers,
+                    users = pdfUsers,
+                    traineeUsers = traineeOnlyUiUsers.filter {
+                        it in pdfUsers
+                    },
+                    coachUsers = coachOnlyUiUsers.filter {
+                        it in pdfUsers
+                    },
+                    bothUsers = bothUiUsers.filter {
+                        it in pdfUsers
+                    },
                     beltCounts = pdfBeltCounts,
                     filtersSummary = activeFiltersSummary,
                     totalUsers = totalUsers,
-                    branchCount = branchCount,
-                    averageAge = avgAge,
-                    totalAppOpens = totalAppOpens,
-                    activeUsersWithUsage = activeUsersWithUsage,
+                    branchCount = pdfBranchCount,
+                    averageAge = pdfAverageAge,
+                    totalAppOpens = pdfTotalAppOpens,
+                    activeUsersWithUsage = pdfActiveUsersWithUsage,
                     unlikeQuestions = unlikeQuestions
                 )
 
@@ -2723,6 +3300,144 @@ fun AdminUsersScreen(
     KmiLanguageDirection(
         isEnglish = isEnglish
     ) {
+
+        val selectedUser = accessUser
+
+        if (selectedUser != null) {
+            AlertDialog(
+                onDismissRequest = {
+                    if (!savingAccess) {
+                        accessUser = null
+                        accessError = null
+                    }
+                },
+                title = {
+                    Text(
+                        text = adminTr(
+                            isEnglish,
+                            "ניהול הרשאת משתמש",
+                            "Manage user access"
+                        ),
+                        style = KmiTypography.cardTitle
+                    )
+                },
+                text = {
+                    Column(
+                        verticalArrangement =
+                            Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            text = selectedUser.demoSafeName(
+                                isEnglish = isEnglish,
+                                demoIndex = accessDemoIndex
+                            ),
+                            style = KmiTypography.body,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+
+                        listOf(
+                            "trainee" to adminTr(
+                                isEnglish,
+                                "מתאמן בלבד",
+                                "Trainee only"
+                            ),
+                            "coach" to adminTr(
+                                isEnglish,
+                                "מאמן בלבד",
+                                "Coach only"
+                            ),
+                            "both" to adminTr(
+                                isEnglish,
+                                "מתאמן ומאמן",
+                                "Trainee and coach"
+                            )
+                        ).forEach { (value, label) ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .clickable(enabled = !savingAccess) {
+                                        selectedAccessType = value
+                                    }
+                                    .padding(vertical = 4.dp),
+                                verticalAlignment =
+                                    Alignment.CenterVertically
+                            ) {
+                                RadioButton(
+                                    selected =
+                                        selectedAccessType == value,
+                                    onClick = {
+                                        selectedAccessType = value
+                                    },
+                                    enabled = !savingAccess
+                                )
+
+                                Spacer(Modifier.width(8.dp))
+
+                                Text(
+                                    text = label,
+                                    style = KmiTypography.body,
+                                    color =
+                                        MaterialTheme.colorScheme.onSurface
+                                )
+                            }
+                        }
+
+                        if (savingAccess) {
+                            AdminUsersPremiumLoading(
+                                text = adminTr(
+                                    isEnglish,
+                                    "שומר הרשאה…",
+                                    "Saving access…"
+                                )
+                            )
+                        }
+
+                        if (accessError != null) {
+                            Text(
+                                text = accessError.orEmpty(),
+                                style = KmiTypography.caption,
+                                color = MaterialTheme.colorScheme.error
+                            )
+                        }
+                    }
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            saveUserAccess()
+                        },
+                        enabled = !savingAccess
+                    ) {
+                        Text(
+                            adminTr(
+                                isEnglish,
+                                "שמור הרשאה",
+                                "Save access"
+                            )
+                        )
+                    }
+                },
+                dismissButton = {
+                    TextButton(
+                        onClick = {
+                            accessUser = null
+                            accessError = null
+                        },
+                        enabled = !savingAccess
+                    ) {
+                        Text(
+                            adminTr(
+                                isEnglish,
+                                "ביטול",
+                                "Cancel"
+                            )
+                        )
+                    }
+                }
+            )
+        }
+
         Scaffold(
             topBar = {
                 KmiTopBar(
@@ -3000,8 +3715,54 @@ fun AdminUsersScreen(
                         ageBuckets = allAgeBuckets
                     )
 
+                    Spacer(Modifier.height(10.dp))
+
+                    val categoryOptions = listOf(
+                        adminTr(isEnglish, "כל המשתמשים", "All users"),
+                        adminTr(isEnglish, "מתאמנים", "Trainees"),
+                        adminTr(isEnglish, "מאמנים", "Coaches"),
+                        adminTr(isEnglish, "מתאמנים + מאמנים", "Trainees + Coaches")
+                    )
+
+                    val categoryKeys = listOf(
+                        "all",
+                        "trainee",
+                        "coach",
+                        "both"
+                    )
+
+                    KmiPremiumDropdown(
+                        title = adminTr(
+                            isEnglish,
+                            "סינון לפי הרשאה",
+                            "Filter by access"
+                        ),
+                        options = categoryOptions,
+                        selectedValue = categoryOptions[
+                            categoryKeys.indexOf(userCategoryFilter)
+                                .coerceAtLeast(0)
+                        ],
+                        isEnglish = isEnglish,
+                        placeholder = adminTr(
+                            isEnglish,
+                            "בחר סוג משתמש",
+                            "Select user type"
+                        ),
+                        onSelected = { selected ->
+                            val index = categoryOptions.indexOf(selected)
+                            if (index >= 0) {
+                                userCategoryFilter = categoryKeys[index]
+                            }
+                        }
+                    )
+
+                    Spacer(Modifier.height(10.dp))
+
 // ---------- משתמשים – מתאמנים ----------
-                    Card(
+                    if (userCategoryFilter == "all" ||
+                        userCategoryFilter == "trainee"
+                    ) {
+                        Card(
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(24.dp),
                         colors =
@@ -3024,8 +3785,8 @@ fun AdminUsersScreen(
                             Text(
                                 text = adminTr(
                                     isEnglish,
-                                    "משתמשים – מתאמנים (${traineeUiUsers.size})",
-                                    "Users – trainees (${traineeUiUsers.size})"
+                                    "משתמשים – מתאמנים (${traineeOnlyUiUsers.size})",
+                                    "Users – trainees (${traineeOnlyUiUsers.size})"
                                 ),
                                 style = KmiTypography.cardTitle.copy(
                                     fontWeight = FontWeight.Bold
@@ -3055,7 +3816,7 @@ fun AdminUsersScreen(
                                     textAlign = TextAlign.Start,
                                     modifier = Modifier.fillMaxWidth()
                                 )
-                            } else if (traineeUiUsers.isEmpty()) {
+                            } else if (traineeOnlyUiUsers.isEmpty()) {
                                 Text(
                                     text = adminTr(
                                         isEnglish,
@@ -3075,11 +3836,17 @@ fun AdminUsersScreen(
                                     modifier = Modifier.fillMaxWidth(),
                                     verticalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
-                                    traineeUiUsers.forEachIndexed { index, user ->
+                                    traineeOnlyUiUsers.forEachIndexed { index, user ->
                                         UserRowCard(
                                             user = user,
                                             isEnglish = isEnglish,
-                                            demoIndex = index
+                                            demoIndex = index,
+                                            onManageAccess = {
+                                                openUserAccess(
+                                                    user = user,
+                                                    demoIndex = index
+                                                )
+                                            }
                                         )
                                     }
                                 }
@@ -3087,10 +3854,14 @@ fun AdminUsersScreen(
                         }
                     }
 
-                    Spacer(Modifier.height(12.dp))
+                        Spacer(Modifier.height(12.dp))
+                    }
 
 // ---------- משתמשים – מאמנים ----------
-                    Card(
+                    if (userCategoryFilter == "all" ||
+                        userCategoryFilter == "coach"
+                    ) {
+                        Card(
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(24.dp),
                         colors =
@@ -3113,8 +3884,8 @@ fun AdminUsersScreen(
                             Text(
                                 text = adminTr(
                                     isEnglish,
-                                    "משתמשים – מאמנים (${coachUiUsers.size})",
-                                    "Users – coaches (${coachUiUsers.size})"
+                                    "משתמשים – מאמנים (${coachOnlyUiUsers.size})",
+                                    "Users – coaches (${coachOnlyUiUsers.size})"
                                 ),
                                 style =
                                     KmiTypography.cardTitle.copy(
@@ -3146,7 +3917,7 @@ fun AdminUsersScreen(
                                     textAlign = TextAlign.Start,
                                     modifier = Modifier.fillMaxWidth()
                                 )
-                            } else if (coachUiUsers.isEmpty()) {
+                            } else if (coachOnlyUiUsers.isEmpty()) {
                                 Text(
                                     text = adminTr(
                                         isEnglish,
@@ -3166,19 +3937,109 @@ fun AdminUsersScreen(
                                     modifier = Modifier.fillMaxWidth(),
                                     verticalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
-                                    coachUiUsers.forEachIndexed { index, user ->
+                                    coachOnlyUiUsers.forEachIndexed { index, user ->
                                         UserRowCard(
                                             user = user,
                                             isEnglish = isEnglish,
-                                            demoIndex = index
+                                            demoIndex = index,
+                                            onManageAccess = {
+                                                openUserAccess(
+                                                    user = user,
+                                                    demoIndex = index
+                                                )
+                                            }
                                         )
                                     }
                                 }
                             }
                         }
-                    } // ✅ סגירת ה-Card
+                        } // ✅ סגירת ה-Card
 
-                    Spacer(Modifier.height(12.dp))
+                        Spacer(Modifier.height(12.dp))
+                    }
+
+                    // ---------- משתמשים בעלי הרשאה כפולה ----------
+                    if (userCategoryFilter == "all" ||
+                        userCategoryFilter == "both"
+                    ) {
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(24.dp),
+                            colors = CardDefaults.cardColors(
+                                containerColor =
+                                    MaterialTheme.colorScheme.surface
+                            ),
+                            elevation = CardDefaults.cardElevation(
+                                defaultElevation = 0.dp
+                            )
+                        ) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(12.dp)
+                            ) {
+                                Text(
+                                    text = adminTr(
+                                        isEnglish,
+                                        "משתמשים – מתאמנים + מאמנים (${bothUiUsers.size})",
+                                        "Users – trainees + coaches (${bothUiUsers.size})"
+                                    ),
+                                    style = KmiTypography.cardTitle.copy(
+                                        fontWeight = FontWeight.Bold
+                                    ),
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                    textAlign = TextAlign.Start,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+
+                                Spacer(Modifier.height(8.dp))
+
+                                if (loading) {
+                                    Text(
+                                        text = adminTr(
+                                            isEnglish,
+                                            "טוען משתמשים…",
+                                            "Loading users…"
+                                        ),
+                                        style = KmiTypography.body,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                } else if (bothUiUsers.isEmpty()) {
+                                    Text(
+                                        text = adminTr(
+                                            isEnglish,
+                                            "אין משתמשים בעלי הרשאה כפולה התואמים לסינון.",
+                                            "No dual-access users match the filters."
+                                        ),
+                                        style = KmiTypography.body,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                } else {
+                                    Column(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        verticalArrangement =
+                                            Arrangement.spacedBy(8.dp)
+                                    ) {
+                                        bothUiUsers.forEachIndexed { index, user ->
+                                            UserRowCard(
+                                                user = user,
+                                                isEnglish = isEnglish,
+                                                demoIndex = index,
+                                                onManageAccess = {
+                                                    openUserAccess(
+                                                        user = user,
+                                                        demoIndex = index
+                                                    )
+                                                }
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        Spacer(Modifier.height(12.dp))
+                    }
 
                     // ---------- שאלות שסומנו UNLIKE מהעוזר הקולי ----------
                     if (unlikeQuestions.isNotEmpty()) {
@@ -4294,7 +5155,8 @@ private fun AdminUserRecord.displayAppTenureText(isEnglish: Boolean): String {
 private fun UserRowCard(
     user: AdminUserRecord,
     isEnglish: Boolean,
-    demoIndex: Int
+    demoIndex: Int,
+    onManageAccess: () -> Unit
 ) {
     val beltText = traineeRankDisplayName(user.currentBeltId, isEnglish).ifBlank {
         adminTr(isEnglish, "ללא חגורה", "No belt")
@@ -4302,11 +5164,28 @@ private fun UserRowCard(
 
     val beltColor = traineeRankColor(user.currentBeltId)
 
-    val roleLabel = if (user.isCoach) {
-        adminTr(isEnglish, "מאמן", "Coach")
-    } else {
-        adminTr(isEnglish, "מתאמן", "Trainee")
-    }
+    val roleLabel =
+        when (user.accessType?.trim()?.lowercase()) {
+            "trainee" ->
+                adminTr(isEnglish, "מתאמן", "Trainee")
+
+            "coach" ->
+                adminTr(isEnglish, "מאמן", "Coach")
+
+            "both" ->
+                adminTr(
+                    isEnglish,
+                    "מתאמן ומאמן",
+                    "Trainee & Coach"
+                )
+
+            else ->
+                adminTr(
+                    isEnglish,
+                    "הרשאה טרם הוגדרה",
+                    "Access not configured"
+                )
+        }
 
     val displayName =
         user.demoSafeName(
@@ -4442,6 +5321,27 @@ private fun UserRowCard(
                     UserActivityBadge(
                         label = activityStatusLabel,
                         color = activityStatusColor
+                    )
+                }
+
+                TextButton(
+                    onClick = onManageAccess,
+                    modifier = Modifier
+                        .align(Alignment.Start)
+                        .heightIn(min = 36.dp),
+                    contentPadding = PaddingValues(
+                        horizontal = 4.dp,
+                        vertical = 0.dp
+                    )
+                ) {
+                    Text(
+                        text = adminTr(
+                            isEnglish,
+                            "ניהול הרשאה",
+                            "Manage access"
+                        ),
+                        style = KmiTypography.secondary,
+                        color = MaterialTheme.colorScheme.primary
                     )
                 }
 

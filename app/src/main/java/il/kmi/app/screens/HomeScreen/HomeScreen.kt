@@ -77,6 +77,7 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import il.kmi.app.favorites.FavoritesStore
 import android.app.Activity
+import android.widget.Toast
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.material.icons.filled.History
 import androidx.compose.material.icons.rounded.NearMe
@@ -90,6 +91,7 @@ import il.kmi.app.database.KmiDatabaseProvider
 import il.kmi.app.domain.ExerciseExplanationResolver
 import il.kmi.app.privacy.DemoPrivacy
 import il.kmi.app.training.TrainingCatalog
+import il.kmi.app.screens.registration.CoachBranchAssignmentsCodec
 import il.kmi.app.messages.ui.MessageCenterViewModel
 import il.kmi.app.ui.FloatingQuickMenu
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -404,6 +406,7 @@ fun HomeScreen(
     onOpenTrainingManagement: () -> Unit,
     onOpenMessageCenter: () -> Unit,
     onOpenAttendanceQrScan: () -> Unit = {},
+    onOpenAttendanceQrGenerate: ((String, String, String) -> Unit)? = null,
     onOpenStretching: () -> Unit = {}
 ) {
     val haptic = rememberHapticsGlobal()
@@ -492,7 +495,18 @@ fun HomeScreen(
     val langManager = remember { AppLanguageManager(contextLang) }
     val isEnglish = langManager.getCurrentLanguage() == AppLanguage.ENGLISH
     val userSpRole = remember { ctxRole.getSharedPreferences("kmi_user", Context.MODE_PRIVATE) }
-    var userRole by remember { mutableStateOf(userSpRole.getString("user_role", "trainee")) }
+
+    // מצב העבודה הפעיל קובע איזה מסך בית יוצג.
+    // user_role נשאר תפקיד קבוע לצורכי תאימות.
+    fun readHomeActiveRole(): String =
+        userSpRole.getString("active_user_mode", null)
+            ?: userSpRole.getString("last_active_app_role", null)
+            ?: userSpRole.getString("user_role", "trainee")
+            ?: "trainee"
+
+    var userRole by remember(userSpRole) {
+        mutableStateOf(readHomeActiveRole())
+    }
 
     var homePdfTrainings by remember {
         mutableStateOf<List<HomePdfTraining>>(emptyList())
@@ -534,15 +548,26 @@ fun HomeScreen(
     var freeNameUi by rememberSaveable { mutableStateOf("") }
 
     DisposableEffect(userSpRole) {
-        val l = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
-            if (key == "user_role") userRole = userSpRole.getString("user_role", "trainee")
+        val listener =
+            SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+                if (
+                    key == "active_user_mode" ||
+                    key == "last_active_app_role" ||
+                    key == "user_role"
+                ) {
+                    userRole = readHomeActiveRole()
+                }
+            }
+
+        userSpRole.registerOnSharedPreferenceChangeListener(listener)
+
+        onDispose {
+            userSpRole.unregisterOnSharedPreferenceChangeListener(listener)
         }
-        userSpRole.registerOnSharedPreferenceChangeListener(l)
-        onDispose { userSpRole.unregisterOnSharedPreferenceChangeListener(l) }
     }
 
     val isCoach = remember(userRole) {
-        when (userRole?.trim()?.lowercase()) {
+        when (userRole.trim().lowercase()) {
             "coach", "trainer", "מאמן" -> true
             else -> false
         }
@@ -1013,8 +1038,36 @@ fun HomeScreen(
                     val coachFromPrefs =
                         coachAssignmentsState.coachName
 
+                    // במצב מתאמן משתמשים בשיוכי המתאמן
+                    // ולא בקבוצות שהמשתמש מדריך כמאמן.
+                    val traineeAssignmentsJson =
+                        if (!isCoach) {
+                            userSp.getString(
+                                "trainee_branch_assignments_json",
+                                null
+                            ) ?: legacySp.getString(
+                                "trainee_branch_assignments_json",
+                                null
+                            )
+                        } else {
+                            null
+                        }
+
                     val branchGroupPairsEffective =
-                        coachAssignmentsState.branchGroupPairs
+                        if (!isCoach && traineeAssignmentsJson != null) {
+                            CoachBranchAssignmentsCodec
+                                .decode(traineeAssignmentsJson)
+                                .flatMap { assignment ->
+                                    assignment.groups.map { group ->
+                                        assignment.branch to group
+                                    }
+                                }
+                                .distinct()
+                        } else {
+                            // תאימות למשתמשים ותיקים שאין להם
+                            // עדיין שיוכי מתאמן נפרדים.
+                            coachAssignmentsState.branchGroupPairs
+                        }
 
                     val isAbroadBranch =
                         coachAssignmentsState.isAbroadBranch
@@ -2184,6 +2237,30 @@ fun HomeScreen(
                                         item.activeOverride,
                                     onAttendanceQrScan =
                                         onOpenAttendanceQrScan,
+                                    onAttendanceQrGenerate =
+                                        onOpenAttendanceQrGenerate?.let { open ->
+                                            {
+                                                val startMillis =
+                                                    item.activeOverride
+                                                        ?.effectiveStartMillis
+                                                        ?.takeIf { it > 0L }
+                                                        ?: item.training.startMillis
+
+                                                val sessionDate =
+                                                    Instant.ofEpochMilli(startMillis)
+                                                        .atZone(
+                                                            ZoneId.of("Asia/Jerusalem")
+                                                        )
+                                                        .toLocalDate()
+                                                        .toString()
+
+                                                open(
+                                                    item.branch,
+                                                    item.group,
+                                                    sessionDate
+                                                )
+                                            }
+                                        },
                                     onManageTraining = {
                                         openHomeCoachTrainingManagement(
                                             training =
@@ -3047,6 +3124,7 @@ private fun TrainingCardCompact(
     nowMillis: Long,
     activeOverride: TrainingOverride?,
     onAttendanceQrScan: () -> Unit,
+    onAttendanceQrGenerate: (() -> Unit)?,
     onManageTraining: () -> Unit
 ) {
     val ctx = LocalContext.current
@@ -3877,6 +3955,60 @@ private fun TrainingCardCompact(
 
                 if (
                     isCoach &&
+                    !isTrainingCancelled &&
+                    onAttendanceQrGenerate != null
+                ) {
+                    Spacer(Modifier.height(8.dp))
+
+                    Surface(
+                        onClick = {
+                            clickSound()
+                            haptic(true)
+                            onAttendanceQrGenerate()
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 44.dp),
+                        shape = RoundedCornerShape(14.dp),
+                        color = MaterialTheme.colorScheme.primaryContainer,
+                        border = BorderStroke(
+                            width = 0.75.dp,
+                            color = MaterialTheme.colorScheme.primary
+                                .copy(alpha = 0.30f)
+                        ),
+                        tonalElevation = 0.dp,
+                        shadowElevation = 0.dp
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(
+                                    horizontal = 12.dp,
+                                    vertical = 10.dp
+                                ),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text =
+                                    if (isEnglish) {
+                                        "Generate attendance QR"
+                                    } else {
+                                        "הנפקת QR לנוכחות"
+                                    },
+                                style = KmiTypography.secondary.copy(
+                                    fontWeight = FontWeight.Bold
+                                ),
+                                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                textAlign = TextAlign.Center
+                            )
+                        }
+                    }
+
+                    Spacer(Modifier.height(8.dp))
+                }
+
+                if (
+                    isCoach &&
                     !isTrainingCancelled
                 ) {
                     HomeCoachAttendanceForecastContent(
@@ -3887,10 +4019,12 @@ private fun TrainingCardCompact(
                     )
                 }
 
+                // הכפתורים מוצגים לכל אימון של מתאמן.
+                // אפשרות השמירה עדיין תלויה בזיהוי
+                // המתאמן ובמועד תחילת האימון.
                 if (
                     !isCoach &&
-                    !isTrainingCancelled &&
-                    resolvedAttendanceMemberId != null
+                    !isTrainingCancelled
                 ) {
                     Spacer(Modifier.height(8.dp))
 
@@ -3931,17 +4065,31 @@ private fun TrainingCardCompact(
                                     .heightIn(min = 44.dp)
                                     .clickable(
                                         enabled =
-                                            canEditTraineeAttendance
+                                            !attendanceLocked &&
+                                                    !attendanceSaving &&
+                                                    authUid.isNotBlank()
                                     ) {
                                         clickSound()
                                         haptic(true)
 
-                                        saveTraineeAttendance(
-                                            statusToSave =
-                                                AttendanceStatus.ABSENT,
-                                            choiceToShow =
-                                                "not_coming"
-                                        )
+                                        if (resolvedAttendanceMemberId == null) {
+                                            Toast.makeText(
+                                                ctx,
+                                                if (isEnglish) {
+                                                    "Your trainee membership was not found in this group"
+                                                } else {
+                                                    "לא נמצא שיוך מתאמן לקבוצה זו"
+                                                },
+                                                Toast.LENGTH_LONG
+                                            ).show()
+                                        } else {
+                                            saveTraineeAttendance(
+                                                statusToSave =
+                                                    AttendanceStatus.ABSENT,
+                                                choiceToShow =
+                                                    "not_coming"
+                                            )
+                                        }
                                     },
                                 shape = RoundedCornerShape(16.dp),
                                 color =
@@ -4021,17 +4169,31 @@ private fun TrainingCardCompact(
                                     .heightIn(min = 44.dp)
                                     .clickable(
                                         enabled =
-                                            canEditTraineeAttendance
+                                            !attendanceLocked &&
+                                                    !attendanceSaving &&
+                                                    authUid.isNotBlank()
                                     ) {
                                         clickSound()
                                         haptic(true)
 
-                                        saveTraineeAttendance(
-                                            statusToSave =
-                                                AttendanceStatus.PRESENT,
-                                            choiceToShow =
-                                                "coming"
-                                        )
+                                        if (resolvedAttendanceMemberId == null) {
+                                            Toast.makeText(
+                                                ctx,
+                                                if (isEnglish) {
+                                                    "Your trainee membership was not found in this group"
+                                                } else {
+                                                    "לא נמצא שיוך מתאמן לקבוצה זו"
+                                                },
+                                                Toast.LENGTH_LONG
+                                            ).show()
+                                        } else {
+                                            saveTraineeAttendance(
+                                                statusToSave =
+                                                    AttendanceStatus.PRESENT,
+                                                choiceToShow =
+                                                    "coming"
+                                            )
+                                        }
                                     },
                                 shape = RoundedCornerShape(16.dp),
 
@@ -4162,10 +4324,8 @@ private fun TrainingCardCompact(
 
         if (isCoach) {
             HomeCoachTrainingEditButton(
-                isEnglish =
-                    isEnglish,
-                onManageTraining =
-                    onManageTraining
+                isEnglish = isEnglish,
+                onManageTraining = onManageTraining
             )
         }
     }

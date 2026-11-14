@@ -368,7 +368,8 @@ fun AttendanceScreen(
     onOpenMemberStats: (memberId: Long?, name: String) -> Unit,
     onOpenGroupStats: (branch: String, groupKey: String) -> Unit,
     onOpenDatePicker: () -> Unit,
-    onHomeClick: () -> Unit = {}
+    onHomeClick: () -> Unit = {},
+    openQrOnStart: Boolean = false
 ) {
     // הקשר למסך
     LaunchedEffect(branch, groupKey, date) {
@@ -575,6 +576,36 @@ fun AttendanceScreen(
 
     var showAttendanceQrDialog by rememberSaveable {
         mutableStateOf(false)
+    }
+
+    var qrAutoOpenConsumed by rememberSaveable(
+        openQrOnStart,
+        date,
+        branch,
+        groupKey
+    ) {
+        mutableStateOf(false)
+    }
+
+    LaunchedEffect(
+        openQrOnStart,
+        date,
+        branch,
+        groupKey,
+        state.date,
+        state.branch,
+        state.groupKey
+    ) {
+        if (
+            openQrOnStart &&
+            !qrAutoOpenConsumed &&
+            state.date == date &&
+            state.branch.trim() == branch.trim() &&
+            state.groupKey.trim() == groupKey.trim()
+        ) {
+            qrAutoOpenConsumed = true
+            showAttendanceQrDialog = true
+        }
     }
 
     var attendanceQrPayload by remember {
@@ -2184,6 +2215,9 @@ fun AttendanceScreen(
                 AlertDialog(
                     onDismissRequest = {
                         showAttendanceQrDialog = false
+                        if (openQrOnStart) {
+                            onHomeClick()
+                        }
                     },
                     icon = {
                         if (attendanceQrError == null) {
@@ -2672,6 +2706,9 @@ fun AttendanceScreen(
                         TextButton(
                             onClick = {
                                 showAttendanceQrDialog = false
+                                if (openQrOnStart) {
+                                    onHomeClick()
+                                }
                             }
                         ) {
                             Text(

@@ -885,11 +885,27 @@ fun MainNavHost(
 // רשימת המתאמנים נטענת רק בכניסה למסך CoachTraineesScreen,
 // כדי לא להעמיס על כל המסכים ועל תגובת הלחיצות.
 
-    val ownerUid = remember {
-        FirebaseAuth.getInstance()
-            .currentUser
-            ?.uid
-            .orEmpty()
+    var ownerUid by remember {
+        mutableStateOf(
+            FirebaseAuth.getInstance()
+                .currentUser
+                ?.uid
+                .orEmpty()
+        )
+    }
+
+    DisposableEffect(Unit) {
+        val auth = FirebaseAuth.getInstance()
+
+        val listener = FirebaseAuth.AuthStateListener { currentAuth ->
+            ownerUid = currentAuth.currentUser?.uid.orEmpty()
+        }
+
+        auth.addAuthStateListener(listener)
+
+        onDispose {
+            auth.removeAuthStateListener(listener)
+        }
     }
 
     fun savedActiveRoleValue(): String {
@@ -999,10 +1015,33 @@ fun MainNavHost(
         }
     }
 
+    var verifiedCoachCapability by remember(ownerUid) {
+        mutableStateOf(false)
+    }
+
+    var grantedAccessType by remember(ownerUid) {
+        mutableStateOf<String?>(null)
+    }
+
     var isCoach by remember(ownerUid) {
-        mutableStateOf(
-            readSavedCoachMode()
-        )
+        mutableStateOf(false)
+    }
+
+    fun resolvedCoachMode(): Boolean {
+        return when (grantedAccessType) {
+            "trainee" -> false
+
+            "coach" ->
+                verifiedCoachCapability
+
+            "both" ->
+                verifiedCoachCapability &&
+                        isCoachRole(savedActiveRoleValue())
+
+            else ->
+                verifiedCoachCapability &&
+                        readSavedCoachMode()
+        }
     }
 
     /*
@@ -1026,8 +1065,7 @@ fun MainNavHost(
                         key == "role" ||
                         key == "isCoach"
                     ) {
-                        isCoach =
-                            readSavedCoachMode()
+                        isCoach = resolvedCoachMode()
                     }
                 }
 
@@ -1053,37 +1091,27 @@ fun MainNavHost(
     }
 
     /*
-     * Firestore משמש לאימות הרשאת מאמן בלבד.
-     * אם כבר נשמר מצב משתמש פעיל, לא דורסים אותו.
-     * כשל רשת גם אינו מחזיר אוטומטית למתאמן.
+     * accessType הוא הרשאת המנהל.
+     * active_user_mode הוא בחירת התצוגה של המשתמש.
+     *
+     * הרשאת מאמן מאומתת בנפרד מול authorizedCoaches.
      */
     LaunchedEffect(ownerUid) {
+        verifiedCoachCapability = false
+        grantedAccessType = null
+        isCoach = false
+
         if (ownerUid.isBlank()) {
-            isCoach =
-                readSavedCoachMode()
-
             return@LaunchedEffect
         }
 
-        val savedActiveRole =
-            savedActiveRoleValue()
-
-        if (savedActiveRole.isNotBlank()) {
-            isCoach =
-                isCoachRole(
-                    savedActiveRole
-                )
-
-            return@LaunchedEffect
-        }
-
-        val coachDoc = try {
-            com.google.firebase.firestore
-                .FirebaseFirestore
+        val firestore =
+            com.google.firebase.firestore.FirebaseFirestore
                 .getInstance()
-                .collection(
-                    "authorizedCoaches"
-                )
+
+        val userDoc = try {
+            firestore
+                .collection("users")
                 .document(ownerUid)
                 .get()
                 .await()
@@ -1092,67 +1120,100 @@ fun MainNavHost(
         } catch (error: Exception) {
             Log.e(
                 "KMI_COACH_AUTH",
-                "MainNavHost authorization read failed",
+                "User access type read failed",
                 error
             )
             null
         }
 
-        Log.d(
-            "KMI_COACH_AUTH",
-            "MainNavHost authorization: " +
-                    "exists=${coachDoc?.exists()} " +
-                    "active=${coachDoc?.getBoolean("active")} " +
-                    "role=${coachDoc?.getString("role")} " +
-                    "fromCache=${coachDoc?.metadata?.isFromCache}"
-        )
+        val coachDoc = try {
+            firestore
+                .collection("authorizedCoaches")
+                .document(ownerUid)
+                .get()
+                .await()
+        } catch (cancelled: kotlinx.coroutines.CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            Log.e(
+                "KMI_COACH_AUTH",
+                "Coach authorization read failed",
+                error
+            )
+            null
+        }
 
-        if (coachDoc?.exists() == true) {
-            val verifiedCoach =
-                coachDoc.getBoolean(
-                    "active"
-                ) == true &&
-                        coachDoc.getString(
-                            "role"
-                        )
-                            .orEmpty()
-                            .equals(
-                                "coach",
-                                ignoreCase = true
-                            )
+        if (FirebaseAuth.getInstance().currentUser?.uid != ownerUid) {
+            return@LaunchedEffect
+        }
 
-            isCoach =
-                verifiedCoach
-
-            val verifiedRole =
-                if (verifiedCoach) {
-                    "coach"
-                } else {
-                    "trainee"
+        val explicitAccessType =
+            userDoc
+                ?.getString("accessType")
+                ?.trim()
+                ?.lowercase()
+                ?.takeIf {
+                    it in setOf("trainee", "coach", "both")
                 }
 
+        val authorizedCoach =
+            coachDoc?.exists() == true &&
+                    coachDoc.getBoolean("active") == true &&
+                    coachDoc.getBoolean(
+                        "accessRevokedByAdmin"
+                    ) != true &&
+                    coachDoc.getString("role")
+                        .orEmpty()
+                        .equals("coach", ignoreCase = true) &&
+                    coachDoc.getBoolean(
+                        "canOpenCoachDrawer"
+                    ) == true
+
+        grantedAccessType = explicitAccessType
+
+        verifiedCoachCapability =
+            authorizedCoach &&
+                    explicitAccessType != "trainee"
+
+        isCoach = resolvedCoachMode()
+
+        /*
+         * רק הרשאה מפורשת של המנהל יכולה לכפות
+         * מצב יחיד. בהרשאה כפולה שומרים את בחירת המשתמש.
+         */
+        val forcedMode =
+            when (explicitAccessType) {
+                "trainee" -> "trainee"
+
+                "coach" ->
+                    if (verifiedCoachCapability) {
+                        "coach"
+                    } else {
+                        null
+                    }
+
+                else -> null
+            }
+
+        if (forcedMode != null) {
             userPrefsForEntry.edit {
-                putBoolean(
-                    "isCoach",
-                    verifiedCoach
-                )
-                putString(
-                    "last_active_app_role",
-                    verifiedRole
-                )
+                putString("active_user_mode", forcedMode)
+                putString("last_active_app_role", forcedMode)
             }
 
             sp.edit {
-                putBoolean(
-                    "isCoach",
-                    verifiedCoach
-                )
-                putString(
-                    "last_active_app_role",
-                    verifiedRole
-                )
+                putString("active_user_mode", forcedMode)
+                putString("last_active_app_role", forcedMode)
             }
         }
+
+        Log.d(
+            "KMI_COACH_AUTH",
+            "Navigation role verified: " +
+                    "accessType=$explicitAccessType " +
+                    "coachAuthorized=$verifiedCoachCapability " +
+                    "activeCoachMode=$isCoach"
+        )
     }
 
     val ownerRole = remember(isCoach) {
@@ -1858,7 +1919,9 @@ fun MainNavHost(
                             .getInstance()
                             .collection("authorizedCoaches")
                             .document(uid)
-                            .get()
+                            .get(
+                                com.google.firebase.firestore.Source.SERVER
+                            )
                             .await()
                     } catch (cancelled: kotlinx.coroutines.CancellationException) {
                         throw cancelled
@@ -1885,6 +1948,9 @@ fun MainNavHost(
                     val isActiveCoach =
                         coachDoc?.exists() == true &&
                                 coachDoc.getBoolean("active") == true &&
+                                coachDoc.getBoolean(
+                                    "accessRevokedByAdmin"
+                                ) != true &&
                                 coachDoc.getString("role")
                                     .orEmpty()
                                     .equals(
@@ -2363,9 +2429,8 @@ fun MainNavHost(
                 }
 
                 when (adminAuthorized) {
-                    null -> {
-                        CircularProgressIndicator()
-                    }
+                    // ממתינים לאימות מנהל ללא אנימציה מקומית.
+                    null -> Unit
 
                     false -> {
                         LaunchedEffect(Unit) {
@@ -2426,9 +2491,8 @@ fun MainNavHost(
                 }
 
                 when (adminDiagnosticsAuthorized) {
-                    null -> {
-                        CircularProgressIndicator()
-                    }
+                    // ממתינים לאימות מנהל ללא אנימציה מקומית.
+                    null -> Unit
 
                     false -> {
                         LaunchedEffect(Unit) {
@@ -2634,7 +2698,9 @@ fun MainNavHost(
                             .getInstance()
                             .collection("authorizedCoaches")
                             .document(uid)
-                            .get()
+                            .get(
+                                com.google.firebase.firestore.Source.SERVER
+                            )
                             .await()
                     } catch (cancelled: kotlinx.coroutines.CancellationException) {
                         throw cancelled
@@ -2661,6 +2727,9 @@ fun MainNavHost(
                     paymentsReportAuthorized =
                         coachDoc?.exists() == true &&
                                 coachDoc.getBoolean("active") == true &&
+                                coachDoc.getBoolean(
+                                    "accessRevokedByAdmin"
+                                ) != true &&
                                 coachDoc.getString("role")
                                     .orEmpty()
                                     .equals(
@@ -3740,7 +3809,7 @@ fun MainNavHost(
 
                             if (
                                 isProtectedCoachDestination &&
-                                !isCoach
+                                !verifiedCoachCapability
                             ) {
                                 speakVoiceCommandFeedback(
                                     hebrewText =
@@ -3757,7 +3826,8 @@ fun MainNavHost(
                                     spokenText = spokenText,
                                     alternatives = listOf(
                                         "destination=$destinationName",
-                                        "isCoach=false"
+                                        "coachAuthorized=false",
+                                        "activeCoachMode=$isCoach"
                                     ),
                                     screenName =
                                         nav.currentBackStackEntry

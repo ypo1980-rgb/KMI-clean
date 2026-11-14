@@ -11,6 +11,21 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    // נרמול גלובלי של מקפים בשמות סניפים וקבוצות.
+    // אינו משנה מסמכים קיימים ב-Firestore.
+    function normalizeAttendanceName(value) {
+      return value is string
+        ? value.trim().replace("[־‐‑‒–—−]", "-")
+        : "";
+    }
+
+    function sameAttendanceName(first, second) {
+      return first is string
+        && second is string
+        && normalizeAttendanceName(first) ==
+           normalizeAttendanceName(second);
+    }
+
     // זה הדוקומנט של המשתמש עצמו?
     // זה הדוקומנט של המשתמש עצמו?
     function isSelf(uid) {
@@ -891,11 +906,14 @@ match /trainingOccurrences/{occurrenceId} {
                      "coach_authorized", false
                    ) == false
 
-                // שיוכי מאמן מנוהלים במקור האמת המאובטח.
+                // הרשאות ותפקידי משתמש נקבעים על ידי מנהל בלבד.
                 && !request.resource.data.keys().hasAny([
                      "coachBranchAssignments",
                      "roleLockedBy",
-                     "role_locked_by"
+                     "role_locked_by",
+                     "allowedModes",
+                     "accessType",
+                     "roleUpdatedAt"
                    ])
               );
 
@@ -952,6 +970,9 @@ match /trainingOccurrences/{occurrenceId} {
              "isCoach",
              "roleLockedBy",
              "role_locked_by",
+             "roleUpdatedAt",
+             "allowedModes",
+             "accessType",
              "coachAuthorized",
              "coach_authorized",
              "branch",
@@ -995,6 +1016,21 @@ match /trainingOccurrences/{occurrenceId} {
 
       // UID חייב להישאר זהה למשתמש המחובר.
       && request.resource.data.uid == uid
+
+      // השלמת רישום עצמית מותרת רק למשתמש
+      // שתפקידו הקיים הוא מתאמן.
+      // אין לאפשר דריסה של הרשאת מאמן
+      // או הרשאה כפולה שקבע מנהל.
+      && resource.data.get("role", "trainee") == "trainee"
+      && resource.data.get("user_role", "trainee") == "trainee"
+
+      && resource.data.get(
+           "accessType", "trainee"
+         ) == "trainee"
+
+      && resource.data.get(
+           "allowedModes", ["trainee"]
+         ) == ["trainee"]
 
       // ברישום עצמי אי אפשר להעניק הרשאת מאמן.
       && request.resource.data.role == "trainee"
@@ -1628,21 +1664,25 @@ function isValidTraineeAttendanceData() {
 
         && attendanceGroupExists()
 
-        && get(
-          /databases/$(database)/documents/trainingOccurrences/$(request.resource.data.occurrenceId)
-        ).data.branch ==
-           attendanceGroupBranch()
+        && sameAttendanceName(
+          get(
+            /databases/$(database)/documents/trainingOccurrences/$(request.resource.data.occurrenceId)
+          ).data.branch,
+          attendanceGroupBranch()
+        )
 
-        && get(
-          /databases/$(database)/documents/trainingOccurrences/$(request.resource.data.occurrenceId)
-        ).data.group ==
-           attendanceGroupKey()
+        && sameAttendanceName(
+          get(
+            /databases/$(database)/documents/trainingOccurrences/$(request.resource.data.occurrenceId)
+          ).data.group,
+          attendanceGroupKey()
+        )
 
-             /*
-               * זהות המתאמן נבדקת מול מסמך ה-member.
-           * מסמכי member ישנים אינם מחויבים להכיל
-           * branch ו-groupKey ולכן לא משווים אליהם.
-           */
+        /*
+         * זהות המתאמן נבדקת מול מסמך ה-member.
+         * מסמכי member ישנים אינם מחויבים להכיל
+         * branch ו-groupKey ולכן לא משווים אליהם.
+         */
 
     /*
      * אימון שבוטל אינו פתוח לסימון.
@@ -1813,22 +1853,28 @@ function isValidTraineeAttendanceData() {
               *
               * אין להסתמך על התאריך בלבד.
               */
-             && attendanceGroupExists()
+                     && attendanceGroupExists()
 
-             && get(
-               /databases/$(database)/documents/trainingOccurrences/$(request.resource.data.occurrenceId)
-             ).data.branch ==
-                attendanceGroupBranch()
+                                 && attendanceGroupExists()
 
-             && get(
-               /databases/$(database)/documents/trainingOccurrences/$(request.resource.data.occurrenceId)
-             ).data.group ==
-                attendanceGroupKey()
+                                 && sameAttendanceName(
+                                   get(
+                                     /databases/$(database)/documents/trainingOccurrences/$(request.resource.data.occurrenceId)
+                                   ).data.branch,
+                                   attendanceGroupBranch()
+                                 )
 
-             /*
-              * תאימות למסמכי member ישנים שאינם כוללים
-              * את השדות branch ו-groupKey.
-              */
+                                 && sameAttendanceName(
+                                   get(
+                                     /databases/$(database)/documents/trainingOccurrences/$(request.resource.data.occurrenceId)
+                                   ).data.group,
+                                   attendanceGroupKey()
+                                 )
+
+                                 /*
+                                  * תאימות למסמכי member ישנים שאינם כוללים
+                                  * את השדות branch ו-groupKey.
+                                  */
 
              && get(
                /databases/$(database)/documents/trainingOccurrences/$(request.resource.data.occurrenceId)

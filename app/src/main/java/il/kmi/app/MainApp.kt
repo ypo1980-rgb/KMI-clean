@@ -146,9 +146,18 @@ internal suspend fun verifyKmiCoachViaRest(
                                 false
                             ) == true
 
+                    val revokedByAdmin =
+                        fields
+                            ?.optJSONObject("accessRevokedByAdmin")
+                            ?.optBoolean(
+                                "booleanValue",
+                                false
+                            ) == true
+
                     val authorized =
                         document.optString("name") == expectedName &&
                                 active &&
+                                !revokedByAdmin &&
                                 role.equals(
                                     "coach",
                                     ignoreCase = true
@@ -518,18 +527,21 @@ fun MainApp(
                 )
             }
 
-        val sdkCoachAuthorized =
-            coachDoc?.exists() == true &&
-                    coachDoc.getBoolean("active") == true &&
-                    coachDoc.getString("role")
-                        .orEmpty()
-                        .equals(
-                            "coach",
-                            ignoreCase = true
-                        ) &&
-                    coachDoc.getBoolean(
-                        "canOpenCoachDrawer"
-                    ) == true
+            val sdkCoachAuthorized =
+                coachDoc?.exists() == true &&
+                        coachDoc.getBoolean("active") == true &&
+                        coachDoc.getBoolean(
+                            "accessRevokedByAdmin"
+                        ) != true &&
+                        coachDoc.getString("role")
+                            .orEmpty()
+                            .equals(
+                                "coach",
+                                ignoreCase = true
+                            ) &&
+                        coachDoc.getBoolean(
+                            "canOpenCoachDrawer"
+                        ) == true
 
         // מונע שימוש בתשובת בדיקה שהסתיימה לאחר החלפת משתמש.
         val sameAuthenticatedUser =

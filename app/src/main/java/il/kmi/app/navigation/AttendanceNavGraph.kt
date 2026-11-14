@@ -78,11 +78,18 @@ fun NavGraphBuilder.attendanceNavGraph(
         )
     }
 
-    fun defaultAttendanceContextFromPrefs(context: android.content.Context): Pair<String, String> {
-        val sp = context.getSharedPreferences("kmi_user", android.content.Context.MODE_PRIVATE)
+    fun defaultAttendanceContextFromPrefs(
+        context: android.content.Context
+    ): Pair<String, String> {
+        val sp = context.getSharedPreferences(
+            "kmi_user",
+            android.content.Context.MODE_PRIVATE
+        )
 
         val branch = firstAttendanceValue(
-            sp.getString("active_branch", null)
+            sp.getString("coach_active_branch", null)
+                ?.takeIf { it.isNotBlank() }
+                ?: sp.getString("active_branch", null)
                 ?: sp.getString("branch", null)
                 ?: sp.getString("branches", null)
                 ?: sp.getString("coach_branch", null)
@@ -91,7 +98,9 @@ fun NavGraphBuilder.attendanceNavGraph(
         )
 
         val group = firstAttendanceValue(
-            sp.getString("active_group", null)
+            sp.getString("coach_active_group", null)
+                ?.takeIf { it.isNotBlank() }
+                ?: sp.getString("active_group", null)
                 ?: sp.getString("groupKey", null)
                 ?: sp.getString("group", null)
                 ?: sp.getString("groups", null)
@@ -282,6 +291,35 @@ fun NavGraphBuilder.attendanceNavGraph(
                     key = vmKey
                 )
 
+                // בקשת QR חד-פעמית שנשלחה ממסך הבית.
+                // אין צורך ליצור מסלול ניווט נוסף.
+                val qrLaunchRequest = remember(e) {
+                    val sourceState =
+                        nav.previousBackStackEntry
+                            ?.savedStateHandle
+
+                    val requestedDate =
+                        sourceState?.remove<String>(
+                            "attendance_qr_launch_date"
+                        )
+
+                    val autoOpen =
+                        sourceState?.remove<Boolean>(
+                            "attendance_qr_auto_open"
+                        ) == true
+
+                    requestedDate to autoOpen
+                }
+
+                val qrLaunchDate =
+                    remember(qrLaunchRequest.first) {
+                        qrLaunchRequest.first?.let { rawDate ->
+                            runCatching {
+                                LocalDate.parse(rawDate)
+                            }.getOrNull()
+                        }
+                    }
+
                 val selectedAttendanceDateRaw by
                 e.savedStateHandle
                     .getStateFlow<String?>(
@@ -297,6 +335,7 @@ fun NavGraphBuilder.attendanceNavGraph(
                                 LocalDate.parse(rawDate)
                             }.getOrNull()
                         }
+                        ?: qrLaunchDate
                         ?: LocalDate.now()
 
                 AttendanceScreen(
@@ -304,6 +343,9 @@ fun NavGraphBuilder.attendanceNavGraph(
                     date = selectedAttendanceDate,
                     branch = branch,
                     groupKey = groupKey,
+                    openQrOnStart =
+                        qrLaunchRequest.second &&
+                                qrLaunchDate != null,
 
                     onOpenMemberStats = {
                             memberId: Long?,

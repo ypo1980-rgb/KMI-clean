@@ -300,6 +300,48 @@ fun NavGraphBuilder.homeNavGraph(
                     }
                 },
 
+                onOpenAttendanceQrGenerate = { branch, group, sessionDate ->
+                    val cleanBranch = branch.trim()
+                    val cleanGroup = group.trim()
+
+                    val validDate =
+                        runCatching {
+                            java.time.LocalDate.parse(sessionDate)
+                        }.getOrNull()
+
+                    if (
+                        cleanBranch.isNotBlank() &&
+                        cleanGroup.isNotBlank() &&
+                        validDate != null
+                    ) {
+                        val route =
+                            Route.AttendanceMark.make(
+                                branch = android.net.Uri.encode(cleanBranch),
+                                groupKey = android.net.Uri.encode(cleanGroup)
+                            )
+
+                        // מעבירים את תאריך האימון ובקשת
+                        // הפתיחה הישירה למסך הנוכחות.
+                        nav.currentBackStackEntry
+                            ?.savedStateHandle
+                            ?.apply {
+                                set(
+                                    "attendance_qr_launch_date",
+                                    validDate.toString()
+                                )
+                                set(
+                                    "attendance_qr_auto_open",
+                                    true
+                                )
+                            }
+
+                        nav.navigate(route) {
+                            launchSingleTop = true
+                            restoreState = false
+                        }
+                    }
+                },
+
                 onOpenStretching = {
                     nav.navigate(
                         StretchingRoute.ROOT

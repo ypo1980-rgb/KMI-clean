@@ -1010,12 +1010,7 @@ fun KmiTopBar(
     // ✅ גובה הכותרת מותאם אוטומטית למספר השורות.
 // כותרות רגילות נשארות בדיוק בגובה הקיים.
 // כותרת של 2 שורות מקבלת מקום אמיתי לשתי השורות.
-    val topBarHeight =
-        if (shouldShowRolePillBelowTitle) {
-            68.dp
-        } else {
-            64.dp
-        }
+    val topBarHeight = 64.dp
 
     /*
      * צבעי הכותרת מגיעים מערכת הנושא הפעילה,
@@ -1167,7 +1162,10 @@ fun KmiTopBar(
                     if (showMenu) {
                         Box(
                             modifier =
-                                Modifier.offset(x = (-6).dp),
+                                Modifier.offset(
+                                    x = (-6).dp,
+                                    y = (-6).dp
+                                ),
                             contentAlignment =
                                 Alignment.Center
                         ) {
@@ -1243,14 +1241,6 @@ fun KmiTopBar(
                         )
                     }
                 )
-                .padding(
-                    bottom =
-                        if (shouldShowRolePillBelowTitle) {
-                            4.dp
-                        } else {
-                            0.dp
-                        }
-                )
                 .zIndex(12f),
             contentAlignment =
                 if (alignTitleEnd) {
@@ -1287,7 +1277,7 @@ fun KmiTopBar(
                 modifier = Modifier
                     .fillMaxWidth()
                     .offset(
-                        y = titleVerticalOffset
+                        y = titleVerticalOffset - 6.dp
                     )
                     .then(
                         if (alignTitleEnd && titleMaxLines == 1) {
@@ -1335,11 +1325,7 @@ fun KmiTopBar(
                             },
                         bottom =
                             topBeltIconBottomPadding
-                                ?: if (shouldShowRolePillBelowTitle) {
-                                    22.dp
-                                } else {
-                                    9.dp
-                                }
+                                ?: 9.dp
                     )
                     .zIndex(30f)
             ) {
@@ -1387,6 +1373,20 @@ fun KmiTopBar(
             }
         }
 
+        if (shouldShowRolePillBelowTitle && showModePill) {
+            Box(
+                modifier = Modifier
+                    .align(AbsoluteAlignment.BottomLeft)
+                    .padding(start = 4.dp)
+                    .zIndex(35f)
+            ) {
+                RoleInlinePill(
+                    isCoach = isCoachForPill,
+                    isEnglish = isEnglish
+                )
+            }
+        }
+
         if (shouldShowGlobalBack) {
             val backIconAlignment =
                 if (isEnglish) {
@@ -1426,27 +1426,6 @@ fun KmiTopBar(
                         quickActionsExpanded = false
                         performBackSafe()
                     }
-                )
-            }
-        }
-
-        if (shouldShowRolePillBelowTitle) {
-            val roleBadgeAlignment =
-                if (isEnglish) AbsoluteAlignment.BottomRight else AbsoluteAlignment.BottomLeft
-
-            Box(
-                modifier = Modifier
-                    .align(roleBadgeAlignment)
-                    .padding(
-                        start = if (isEnglish) 0.dp else 8.dp,
-                        end = if (isEnglish) 8.dp else 0.dp,
-                        bottom = 3.dp
-                    )
-                    .zIndex(25f)
-            ) {
-                RoleInlinePill(
-                    isCoach = isCoachForPill,
-                    isEnglish = isEnglish
                 )
             }
         }
@@ -2850,7 +2829,7 @@ private fun VerticalQuickActionItem(
     }
 }
 
-/** תג תפקיד קטן בכותרת */
+/** תג מצב גלובלי — עיצוב משלים לידית המיקרופון */
 @Composable
 private fun RoleInlinePill(
     isCoach: Boolean,
@@ -2861,69 +2840,53 @@ private fun RoleInlinePill(
             isCoach = isCoach
         )
 
-    val backgroundColor =
-        roleColors.background
-
-    val accentColor =
-        roleColors.content
-
     val label =
         when {
-            isEnglish && isCoach ->
-                "Coach"
-
-            isEnglish ->
-                "Trainee"
-
-            isCoach ->
-                "מאמן"
-
-            else ->
-                "מתאמן"
+            isEnglish && isCoach -> "Coach"
+            isEnglish -> "Trainee"
+            isCoach -> "מאמן"
+            else -> "מתאמן"
         }
 
+    val handleShape =
+        AbsoluteRoundedCornerShape(
+            topLeft = 0.dp,
+            topRight = 18.dp,
+            bottomLeft = 0.dp,
+            bottomRight = 0.dp
+        )
+
     Surface(
-        color =
-            backgroundColor.copy(
-                alpha = 0.96f
-            ),
-        contentColor = accentColor,
-        shape = RoundedCornerShape(999.dp),
-        shadowElevation = 2.dp,
+        modifier = Modifier
+            .width(66.dp)
+            .height(26.dp)
+            .clip(handleShape),
+        shape = handleShape,
+        color = roleColors.background.copy(alpha = 0.96f),
+        contentColor = roleColors.content,
+        shadowElevation = 0.dp,
+        tonalElevation = 0.dp,
         border = BorderStroke(
-            width = 1.dp,
-            color =
-                accentColor.copy(
-                    alpha = 0.28f
-                )
+            width = 1.4.dp,
+            color = Color.White.copy(alpha = 0.70f)
         )
     ) {
         Row(
-            modifier = Modifier.padding(
-                horizontal = 7.dp,
-                vertical = 2.dp
-            ),
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement =
-                Arrangement.spacedBy(4.dp)
+            horizontalArrangement = Arrangement.Center
         ) {
-            Icon(
-                imageVector = Icons.Filled.Person,
-                contentDescription = null,
-                tint = accentColor,
-                modifier = Modifier.size(13.dp)
-            )
-
             Text(
                 text = label,
+                style = KmiTypography.caption.copy(
+                    fontWeight = FontWeight.Bold
+                ),
+                color = roleColors.content,
                 textAlign = TextAlign.Center,
-                color = accentColor,
-                style =
-                    KmiTypography.caption.copy(
-                        fontWeight =
-                            FontWeight.Bold
-                    ),
                 maxLines = 1,
+                softWrap = false,
                 overflow = TextOverflow.Ellipsis
             )
         }

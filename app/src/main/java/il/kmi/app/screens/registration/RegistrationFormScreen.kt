@@ -69,7 +69,6 @@ import il.kmi.app.KmiCalendarSync
 import il.kmi.app.auth.GoogleAuthManager
 import il.kmi.app.database.KmiDatabaseProvider
 import il.kmi.app.hasCalendarPermission
-import il.kmi.app.screens.admin.AdminAccess
 import il.kmi.app.training.TrainingAlarmReceiver
 import il.kmi.app.training.TrainingCatalog
 import il.kmi.app.ui.KmiTypography
@@ -84,6 +83,20 @@ import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.time.Duration.Companion.seconds
 
 private const val TAG_REG = "KMI_REGISTRATION"
+
+// מצב עריכה זמני לכל תפקיד.
+// אינו משנה את Firestore או את ההרשאות.
+private data class RegistrationRoleDraft(
+    val regions: List<String>,
+    val branches: List<String>,
+    val groups: List<String>,
+    val assignments: List<CoachBranchAssignment>,
+    val selectedBranch: String,
+    val selectedGroup: String,
+    val activeBranch: String,
+    val activeGroup: String,
+    val branchType: String
+)
 
 private fun regAuthStateForLog(): String {
     val user = FirebaseAuth.getInstance().currentUser
@@ -144,9 +157,17 @@ fun RegistrationFormScreen(
         ) {
             if (startAtProfile) {
                 userSp.getString(
-                    "last_active_app_role",
+                    "active_user_mode",
                     null
                 )
+                    ?: sp.getString(
+                        "active_user_mode",
+                        null
+                    )
+                    ?: userSp.getString(
+                        "last_active_app_role",
+                        null
+                    )
                     ?: sp.getString(
                         "last_active_app_role",
                         null
@@ -242,18 +263,23 @@ fun RegistrationFormScreen(
         }
     }
 
-    // הרשאת מאמן אמיתית לעריכת פרופיל:
-// מקור האמת הוא authorizedCoaches/{uid} ב-Firestore.
+    // הרשאות הפרופיל נקבעות על ידי המנהל ב-Firestore.
     var profileCoachAuthorized by remember {
         mutableStateOf(false)
+    }
+
+    var profileAccessType by remember {
+        mutableStateOf<String?>(null)
     }
 
     LaunchedEffect(
         startAtProfile,
         FirebaseAuth.getInstance().currentUser?.uid
     ) {
+        profileCoachAuthorized = false
+        profileAccessType = null
+
         if (!startAtProfile) {
-            profileCoachAuthorized = false
             return@LaunchedEffect
         }
 
@@ -264,9 +290,35 @@ fun RegistrationFormScreen(
                 .orEmpty()
 
         if (uid.isBlank()) {
-            profileCoachAuthorized = false
             return@LaunchedEffect
         }
+
+        val userDoc = try {
+            FirebaseFirestore.getInstance()
+                .collection("users")
+                .document(uid)
+                .get(Source.SERVER)
+                .await()
+        } catch (cancelled: kotlinx.coroutines.CancellationException) {
+            throw cancelled
+        } catch (error: Exception) {
+            Log.e(
+                TAG_REG,
+                "profile_access_type_read_failed",
+                error
+            )
+            null
+        }
+
+        val accessType = userDoc
+            ?.getString("accessType")
+            ?.trim()
+            ?.lowercase()
+
+        profileAccessType =
+            accessType?.takeIf {
+                it in setOf("trainee", "coach", "both")
+            }
 
         val coachDoc =
             runCatching {
@@ -289,6 +341,9 @@ fun RegistrationFormScreen(
         val sdkCoachAuthorized =
             coachDoc?.exists() == true &&
                     coachDoc.getBoolean("active") == true &&
+                    coachDoc.getBoolean(
+                        "accessRevokedByAdmin"
+                    ) != true &&
                     coachDoc.getString("role")
                         .orEmpty()
                         .equals(
@@ -332,80 +387,24 @@ fun RegistrationFormScreen(
                 )
             }
 
-        // אין לאשר הרשאה אם המשתמש התחלף בזמן הבדיקה.
+        // הרשאת מאמן מחייבת גם אישור מנהל מפורש
+        // וגם מסמך מאמן פעיל.
         profileCoachAuthorized =
             FirebaseAuth.getInstance().currentUser?.uid == uid &&
+                    profileAccessType in setOf("coach", "both") &&
+                    coachDoc?.getBoolean(
+                        "accessRevokedByAdmin"
+                    ) != true &&
                     (sdkCoachAuthorized || restCoachAuthorized)
     }
 
-    var profileAdminAuthorized by remember {
-        mutableStateOf(false)
-    }
-    val profileRoleScope = rememberCoroutineScope()
-
-    LaunchedEffect(
-        startAtProfile,
-        FirebaseAuth.getInstance().currentUser?.uid
-    ) {
-        profileAdminAuthorized =
-            startAtProfile && AdminAccess.isCurrentUserAdmin()
-    }
-
     val profileAllowsCoach =
-        remember(
-            startAtProfile,
-            profileCoachAuthorized,
-            profileAdminAuthorized
-        ) {
-            startAtProfile &&
-                    (
-                            profileCoachAuthorized ||
-                                    profileAdminAuthorized
-                            )
-        }
+        startAtProfile &&
+                profileCoachAuthorized &&
+                profileAccessType in setOf("coach", "both")
 
-    LaunchedEffect(
-        startAtProfile,
-        profileCoachAuthorized,
-        profileAdminAuthorized
-    ) {
-        if (!startAtProfile) {
-            selectedTab = 0
-            return@LaunchedEffect
-        }
-
-        val currentRole =
-            userSp.getString(
-                "last_active_app_role",
-                null
-            )
-                ?: sp.getString(
-                    "last_active_app_role",
-                    null
-                )
-                ?: userSp.getString(
-                    "user_role",
-                    null
-                )
-                ?: sp.getString(
-                    "user_role",
-                    "trainee"
-                )
-                ?: "trainee"
-
-        selectedTab =
-            if (
-                currentRole.equals(
-                    "coach",
-                    ignoreCase = true
-                ) &&
-                profileAllowsCoach
-            ) {
-                1
-            } else {
-                0
-            }
-    }
+    // סנכרון הטאב לאחר אימות ההרשאות
+    // יתבצע בהמשך דרך switchRegistrationRole.
 
     var username by rememberSaveable {
         mutableStateOf(
@@ -465,14 +464,76 @@ fun RegistrationFormScreen(
     var selectedBranch by rememberSaveable { mutableStateOf(sp.getString("branch", "") ?: "") }
     var selectedGroup by rememberSaveable { mutableStateOf(sp.getString("age_group", "") ?: "") }
 
-// ✅ סוג הסניף שנבחר בטופס: israel / abroad
-    var branchType by rememberSaveable {
-        mutableStateOf(sp.getString("branch_type", "israel") ?: "israel")
+    // סוג סניף נפרד למאמן ולמתאמן.
+    var branchType by rememberSaveable(
+        startAtProfile,
+        initialIsCoach
+    ) {
+        val roleKey =
+            if (initialIsCoach) {
+                "coach_branch_type"
+            } else {
+                "trainee_branch_type"
+            }
+
+        mutableStateOf(
+            if (startAtProfile) {
+                sp.getString(roleKey, null)
+                    ?: userSp.getString(roleKey, null)
+                    ?: sp.getString("branch_type", "israel")
+                    ?: "israel"
+            } else {
+                sp.getString("branch_type", "israel") ?: "israel"
+            }
+        )
     }
 
-    // ✅ חדש: סניף/קבוצה פעילים (ערך יחיד)
-    var activeBranch by rememberSaveable { mutableStateOf(sp.getString("active_branch", "") ?: "") }
-    var activeGroup by rememberSaveable { mutableStateOf(sp.getString("active_group", "") ?: "") }
+    // סניף פעיל נפרד למאמן ולמתאמן.
+    var activeBranch by rememberSaveable(
+        startAtProfile,
+        initialIsCoach
+    ) {
+        mutableStateOf(
+            if (startAtProfile) {
+                val key =
+                    if (initialIsCoach) {
+                        "coach_active_branch"
+                    } else {
+                        "trainee_active_branch"
+                    }
+
+                sp.getString(key, null)
+                    ?: userSp.getString(key, null)
+                    ?: sp.getString("active_branch", "")
+                    ?: ""
+            } else {
+                sp.getString("active_branch", "") ?: ""
+            }
+        )
+    }
+
+    var activeGroup by rememberSaveable(
+        startAtProfile,
+        initialIsCoach
+    ) {
+        mutableStateOf(
+            if (startAtProfile) {
+                val key =
+                    if (initialIsCoach) {
+                        "coach_active_group"
+                    } else {
+                        "trainee_active_group"
+                    }
+
+                sp.getString(key, null)
+                    ?: userSp.getString(key, null)
+                    ?: sp.getString("active_group", "")
+                    ?: ""
+            } else {
+                sp.getString("active_group", "") ?: ""
+            }
+        )
+    }
 
     fun readSavedListFromPrefs(
         vararg keys: String
@@ -547,6 +608,47 @@ fun RegistrationFormScreen(
         }
     }
 
+    // שיוך ריק שנשמר במפורש אינו זהה לשדה חסר.
+    val hasSeparateInitialAssignments =
+        if (!startAtProfile) {
+            false
+        } else {
+            val key =
+                if (initialIsCoach) {
+                    "coach_branch_assignments_json"
+                } else {
+                    "trainee_branch_assignments_json"
+                }
+
+            sp.contains(key) || userSp.contains(key)
+        }
+
+    // שיוכים נפרדים לפי התפקיד שבו נפתח הפרופיל.
+    val initialProfileAssignments = remember(
+        startAtProfile,
+        initialIsCoach
+    ) {
+        if (!startAtProfile) {
+            emptyList()
+        } else {
+            val key = if (initialIsCoach) {
+                "coach_branch_assignments_json"
+            } else {
+                "trainee_branch_assignments_json"
+            }
+
+            val savedJson =
+                sp.getString(key, null)
+                    ?: userSp.getString(key, null)
+
+            if (savedJson != null) {
+                CoachBranchAssignmentsCodec.decode(savedJson)
+            } else {
+                emptyList()
+            }
+        }
+    }
+
     // --- סניפים נבחרים (עד 3) — מקור אמת יחיד ---
     val selectedBranches = rememberSaveable(
         saver = listSaver(
@@ -554,12 +656,23 @@ fun RegistrationFormScreen(
             restore = { it.toMutableStateList() }
         )
     ) {
-        val saved = readSavedListFromPrefs(
-            "branches_json",
-            "selected_branches",
-            "branches",
-            "branch"
-        )
+        val saved =
+            if (
+                initialProfileAssignments.isNotEmpty() ||
+                hasSeparateInitialAssignments
+            ) {
+                initialProfileAssignments
+                    .map { it.branch.trim() }
+                    .filter { it.isNotBlank() }
+                    .distinct()
+            } else {
+                readSavedListFromPrefs(
+                    "branches_json",
+                    "selected_branches",
+                    "branches",
+                    "branch"
+                )
+            }
 
         mutableStateListOf<String>().apply {
             addAll(saved)
@@ -573,14 +686,24 @@ fun RegistrationFormScreen(
             restore = { it.toMutableStateList() }
         )
     ) {
-        val saved = readSavedListFromPrefs(
-            "groups_json",
-            "selected_groups",
-            "groups",
-            "age_groups",
-            "age_group",
-            "group"
-        )
+        val saved =
+            if (
+                initialProfileAssignments.isNotEmpty() ||
+                hasSeparateInitialAssignments
+            ) {
+                CoachBranchAssignmentsCodec.flattenGroups(
+                    initialProfileAssignments
+                )
+            } else {
+                readSavedListFromPrefs(
+                    "groups_json",
+                    "selected_groups",
+                    "groups",
+                    "age_groups",
+                    "age_group",
+                    "group"
+                )
+            }
 
         mutableStateListOf<String>().apply {
             addAll(saved)
@@ -601,17 +724,30 @@ fun RegistrationFormScreen(
         mutableStateOf(false)
     }
 
-    // ✅ שמירה אוטומטית של activeBranch/activeGroup
-    LaunchedEffect(selectedBranches.toList(), selectedGroups.toList()) {
-        val branchesNow = selectedBranches.map { it.trim() }.filter { it.isNotBlank() }
-        val groupsNow = selectedGroups.map { it.trim() }.filter { it.isNotBlank() }
+    // הסניף והקבוצה הפעילים חייבים להשתייך
+    // לבחירות של הפרופיל שנטען.
+    LaunchedEffect(
+        selectedBranches.toList(),
+        selectedGroups.toList(),
+        selectedGroupsByBranch.toMap(),
+        didInitializeBranchAssignments
+    ) {
+        val branchesNow = selectedBranches
+            .map { it.trim() }
+            .filter { it.isNotBlank() }
 
-        if (activeBranch.isBlank() || activeBranch !in branchesNow) {
+        if (activeBranch !in branchesNow) {
             activeBranch = branchesNow.firstOrNull().orEmpty()
         }
 
-        if (activeGroup.isBlank() || activeGroup !in groupsNow) {
-            activeGroup = groupsNow.firstOrNull().orEmpty()
+        if (didInitializeBranchAssignments) {
+            val groupsForActiveBranch =
+                selectedGroupsByBranch[activeBranch].orEmpty()
+
+            if (activeGroup !in groupsForActiveBranch) {
+                activeGroup =
+                    groupsForActiveBranch.firstOrNull().orEmpty()
+            }
         }
     }
 
@@ -736,12 +872,16 @@ fun RegistrationFormScreen(
 
         if (!didInitializeBranchAssignments) {
             val savedAssignments =
-                CoachBranchAssignmentsCodec.decode(
-                    sp.getString(
-                        "coach_branch_assignments_json",
-                        ""
+                if (startAtProfile) {
+                    initialProfileAssignments
+                } else {
+                    CoachBranchAssignmentsCodec.decode(
+                        sp.getString(
+                            "coach_branch_assignments_json",
+                            ""
+                        )
                     )
-                )
+                }
 
             if (savedAssignments.isNotEmpty()) {
                 selectedGroupsByBranch.clear()
@@ -860,23 +1000,301 @@ fun RegistrationFormScreen(
     // ✅ גם מאמן בוחר דרגת חגורה.
     // לכן לא מאפסים currentBeltId במעבר לטאב מאמן.
 
-    LaunchedEffect(branchType, selectedBranches.toList(), groupsByBranch) {
+    LaunchedEffect(
+        branchType,
+        selectedBranches.toList(),
+        selectedGroupsByBranch.toMap(),
+        didInitializeBranchAssignments,
+        groupsByBranch
+    ) {
         if (branchType == "abroad") {
             return@LaunchedEffect
         }
 
-        val unionGroups = selectedBranches
-            .flatMap { branch ->
-                val normalized = branch.trim().replace("’", "'").replace("־", "-")
-                groupsByBranch[normalized].orEmpty()
+        val unionGroups =
+            if (didInitializeBranchAssignments) {
+                selectedBranches
+                    .flatMap { branch ->
+                        selectedGroupsByBranch[branch].orEmpty()
+                    }
+                    .distinct()
+            } else {
+                selectedBranches
+                    .flatMap { branch ->
+                        groupsByBranch[branch].orEmpty()
+                    }
+                    .distinct()
             }
-            .distinct()
 
-        val filtered = selectedGroups.filter { it in unionGroups }
+        val filtered =
+            selectedGroups.filter { group ->
+                group in unionGroups
+            }
+
         if (filtered.size != selectedGroups.size) {
             selectedGroups.clear()
             selectedGroups.addAll(filtered)
         }
+    }
+
+    // מצבי עריכה נפרדים לשני הטאבים.
+    val roleDrafts = remember(
+        startAtProfile,
+        FirebaseAuth.getInstance().currentUser?.uid
+    ) {
+        mutableStateMapOf<Int, RegistrationRoleDraft>()
+    }
+
+    var userManuallySelectedRole by remember {
+        mutableStateOf(false)
+    }
+
+    var pendingCoachSelection by remember {
+        mutableStateOf(false)
+    }
+
+    fun switchRegistrationRole(targetTab: Int) {
+        if (!startAtProfile || targetTab == selectedTab) {
+            return
+        }
+
+        if (targetTab == 1 && !profileAllowsCoach) {
+            return
+        }
+
+        // שומרים בחירות שטרם נשלחו לשרת.
+        roleDrafts[selectedTab] = RegistrationRoleDraft(
+            regions = selectedRegions.toList(),
+            branches = selectedBranches.toList(),
+            groups = selectedGroups.toList(),
+            assignments = selectedBranches.map { branch ->
+                CoachBranchAssignment(
+                    branch = branch,
+                    groups =
+                        selectedGroupsByBranch[branch].orEmpty()
+                ).sanitized()
+            },
+            selectedBranch = selectedBranch,
+            selectedGroup = selectedGroup,
+            activeBranch = activeBranch,
+            activeGroup = activeGroup,
+            branchType = branchType
+        )
+
+        val targetDraft = roleDrafts[targetTab]
+            ?: run {
+                val key =
+                    if (targetTab == 1) {
+                        "coach_branch_assignments_json"
+                    } else {
+                        "trainee_branch_assignments_json"
+                    }
+
+                val savedJson =
+                    sp.getString(key, null)
+                        ?: userSp.getString(key, null)
+
+                // כאשר אין שיוך נפרד, לא מעתיקים
+                // אוטומטית את קבוצות התפקיד האחר.
+                val assignments =
+                    if (savedJson != null) {
+                        CoachBranchAssignmentsCodec.decode(
+                            savedJson
+                        )
+                    } else {
+                        emptyList()
+                    }
+
+                val branches = assignments
+                    .map { it.branch.trim() }
+                    .filter { it.isNotBlank() }
+                    .distinct()
+
+                val groups =
+                    CoachBranchAssignmentsCodec.flattenGroups(
+                        assignments
+                    )
+
+                val regions = branchesByRegion
+                    .filterValues { availableBranches ->
+                        availableBranches.any { branch ->
+                            branch in branches
+                        }
+                    }
+                    .keys
+                    .toList()
+
+                val activeBranchKey =
+                    if (targetTab == 1) {
+                        "coach_active_branch"
+                    } else {
+                        "trainee_active_branch"
+                    }
+
+                val savedActiveBranch =
+                    sp.getString(
+                        activeBranchKey,
+                        null
+                    ) ?: userSp.getString(
+                        activeBranchKey,
+                        null
+                    )
+
+                val targetActiveBranch =
+                    savedActiveBranch
+                        ?.takeIf { it in branches }
+                        ?: branches.firstOrNull().orEmpty()
+
+                val groupsForActiveBranch =
+                    assignments.firstOrNull {
+                        it.branch == targetActiveBranch
+                    }?.groups.orEmpty()
+
+                val activeGroupKey =
+                    if (targetTab == 1) {
+                        "coach_active_group"
+                    } else {
+                        "trainee_active_group"
+                    }
+
+                val savedActiveGroup =
+                    sp.getString(
+                        activeGroupKey,
+                        null
+                    ) ?: userSp.getString(
+                        activeGroupKey,
+                        null
+                    )
+
+                val targetActiveGroup =
+                    savedActiveGroup
+                        ?.takeIf {
+                            it in groupsForActiveBranch
+                        }
+                        ?: groupsForActiveBranch
+                            .firstOrNull()
+                            .orEmpty()
+
+                RegistrationRoleDraft(
+                    regions = regions,
+                    branches = branches,
+                    groups = groups,
+                    assignments = assignments,
+                    selectedBranch = branches.joinToString(", "),
+                    selectedGroup = groups.joinToString(", "),
+                    activeBranch = targetActiveBranch,
+                    activeGroup = targetActiveGroup,
+                    branchType =
+                        (
+                                sp.getString(
+                                    if (targetTab == 1) {
+                                        "coach_branch_type"
+                                    } else {
+                                        "trainee_branch_type"
+                                    },
+                                    null
+                                ) ?: userSp.getString(
+                                    if (targetTab == 1) {
+                                        "coach_branch_type"
+                                    } else {
+                                        "trainee_branch_type"
+                                    },
+                                    null
+                                ) ?: "israel"
+                                )
+                )
+            }
+
+        // מונעים מהאתחול הישן לטעון מחדש
+        // שיוכים של התפקיד הקודם.
+        didInitializeBranchAssignments = true
+
+        selectedRegions.clear()
+        selectedRegions.addAll(targetDraft.regions)
+
+        selectedBranches.clear()
+        selectedBranches.addAll(targetDraft.branches)
+
+        selectedGroups.clear()
+        selectedGroups.addAll(targetDraft.groups)
+
+        selectedGroupsByBranch.clear()
+        targetDraft.assignments.forEach { assignment ->
+            selectedGroupsByBranch[assignment.branch] =
+                assignment.groups
+        }
+
+        selectedBranch = targetDraft.selectedBranch
+        selectedGroup = targetDraft.selectedGroup
+        activeBranch = targetDraft.activeBranch
+        activeGroup = targetDraft.activeGroup
+        branchType = targetDraft.branchType
+
+        // רק לאחר שחזור הנתונים מחליפים את הטאב.
+        selectedTab = targetTab
+
+        regionError = false
+        branchError = false
+        groupError = false
+        scrollToMissingField = null
+    }
+
+    // סנכרון ראשוני בלבד.
+    // בחירה ידנית בטאב מקבלת עדיפות לאחר מכן.
+    LaunchedEffect(
+        startAtProfile,
+        profileCoachAuthorized,
+        profileAccessType,
+        pendingCoachSelection
+    ) {
+        if (!startAtProfile) {
+            pendingCoachSelection = false
+            selectedTab = 0
+            return@LaunchedEffect
+        }
+
+        if (pendingCoachSelection) {
+            if (profileAllowsCoach) {
+                pendingCoachSelection = false
+                switchRegistrationRole(1)
+                userManuallySelectedRole = true
+            }
+            return@LaunchedEffect
+        }
+
+        if (userManuallySelectedRole) {
+            return@LaunchedEffect
+        }
+
+        val savedMode =
+            userSp.getString(
+                "active_user_mode",
+                null
+            ) ?: sp.getString(
+                "active_user_mode",
+                null
+            ) ?: userSp.getString(
+                "last_active_app_role",
+                null
+            ) ?: sp.getString(
+                "last_active_app_role",
+                null
+            ) ?: "trainee"
+
+        val targetTab =
+            if (
+                savedMode.equals(
+                    "coach",
+                    ignoreCase = true
+                ) &&
+                profileAllowsCoach
+            ) {
+                1
+            } else {
+                0
+            }
+
+        switchRegistrationRole(targetTab)
     }
 
     // רקע לפי הטאב
@@ -1304,14 +1722,37 @@ fun RegistrationFormScreen(
                 activeGroupFinal
             )
 
-            /*
-             * מקור האמת החדש לקשר בין
-             * סניפים לקבוצות.
-             */
-            putString(
-                "coach_branch_assignments_json",
-                branchAssignmentsJson
-            )
+            // נתוני המאמן נשמרים בנפרד מנתוני המתאמן.
+            if (isCoach && profileAllowsCoach) {
+                putString(
+                    "coach_branch_assignments_json",
+                    branchAssignmentsJson
+                )
+                putString(
+                    "coach_active_branch",
+                    activeBranchFinal
+                )
+                putString(
+                    "coach_active_group",
+                    activeGroupFinal
+                )
+            }
+
+            // שיוכי מתאמן נפרדים משיוכי המאמן.
+            if (!isCoach) {
+                putString(
+                    "trainee_branch_assignments_json",
+                    branchAssignmentsJson
+                )
+                putString(
+                    "trainee_active_branch",
+                    activeBranchFinal
+                )
+                putString(
+                    "trainee_active_group",
+                    activeGroupFinal
+                )
+            }
 
             putString(
                 "username",
@@ -1326,16 +1767,22 @@ fun RegistrationFormScreen(
             remove("user_password")
             remove("remember_password")
             putBoolean("subscribeSms", subscribeSms)
-            putString("user_role", roleFinal)
+
+            // מצב העבודה מתעדכן גם בעריכת פרופיל.
+            // הרשאות ותפקיד קבוע משתנים רק בהרשמה חדשה.
             putString(
                 "active_user_mode",
                 roleFinal
             )
+
             putString(
                 "last_active_app_role",
                 roleFinal
             )
-            putString("role_locked_by", roleLockedBy)
+
+            if (!startAtProfile) {
+                putString("user_role", roleFinal)
+                putString("role_locked_by", roleLockedBy)
             putBoolean(
                 "coach_authorized",
                 roleFinal == "coach"
@@ -1368,13 +1815,22 @@ fun RegistrationFormScreen(
                 "can_manage_payments",
                 roleFinal == "coach"
             )
-            putBoolean(
-                "can_send_broadcasts",
-                roleFinal == "coach"
-            )
+                putBoolean(
+                    "can_send_broadcasts",
+                    roleFinal == "coach"
+                )
+            }
 
             putString("gender", gender)
             putString("branch_type", branchType)
+            putString(
+                if (isCoach) {
+                    "coach_branch_type"
+                } else {
+                    "trainee_branch_type"
+                },
+                branchType
+            )
             putString("current_belt", beltFinal)
             putString("belt_current", beltFinal)
             putBoolean("profile_completed", true)
@@ -1405,16 +1861,21 @@ fun RegistrationFormScreen(
             putString("phone_number", phoneFinal)
             putString("email", email.trim())
 
-            putString("user_role", roleFinal)
+            // שמירת מצב העבודה עבור מנגנון הניווט.
             putString(
                 "active_user_mode",
                 roleFinal
             )
+
             putString(
                 "last_active_app_role",
                 roleFinal
             )
-            putString("role_locked_by", roleLockedBy)
+
+            // אין לשנות תפקיד קבוע או הרשאות בעריכת פרופיל.
+            if (!startAtProfile) {
+                putString("user_role", roleFinal)
+                putString("role_locked_by", roleLockedBy)
 
             putBoolean(
                 "coach_authorized",
@@ -1448,10 +1909,11 @@ fun RegistrationFormScreen(
                 "can_manage_payments",
                 roleFinal == "coach"
             )
-            putBoolean(
-                "can_send_broadcasts",
-                roleFinal == "coach"
-            )
+                putBoolean(
+                    "can_send_broadcasts",
+                    roleFinal == "coach"
+                )
+            }
 
             // ✅ אזורים — שומרים גם תאימות ישנה וגם מקור אמת רשימתי
             putString("region", primaryRegion)
@@ -1477,10 +1939,36 @@ fun RegistrationFormScreen(
                 "active_group",
                 activeGroupFinal
             )
-            putString(
-                "coach_branch_assignments_json",
-                branchAssignmentsJson
-            )
+
+            if (isCoach && profileAllowsCoach) {
+                putString(
+                    "coach_branch_assignments_json",
+                    branchAssignmentsJson
+                )
+                putString(
+                    "coach_active_branch",
+                    activeBranchFinal
+                )
+                putString(
+                    "coach_active_group",
+                    activeGroupFinal
+                )
+            }
+
+            if (!isCoach) {
+                putString(
+                    "trainee_branch_assignments_json",
+                    branchAssignmentsJson
+                )
+                putString(
+                    "trainee_active_branch",
+                    activeBranchFinal
+                )
+                putString(
+                    "trainee_active_group",
+                    activeGroupFinal
+                )
+            }
 
             // תאריך לידה
             putString("birth_day", birthDay.toString())
@@ -1489,6 +1977,14 @@ fun RegistrationFormScreen(
 
             putString("gender", gender)
             putString("branch_type", branchType)
+            putString(
+                if (isCoach) {
+                    "coach_branch_type"
+                } else {
+                    "trainee_branch_type"
+                },
+                branchType
+            )
             putBoolean("profile_completed", true)
             putBoolean("registration_complete", true)
             putBoolean("registration_form_completed", true)
@@ -1545,8 +2041,6 @@ fun RegistrationFormScreen(
 
             val firestoreData = hashMapOf(
                 "uid" to finalUid,
-                "role" to roleFinal,
-                "user_role" to roleFinal,
                 "fullName" to fullName,
                 "phone" to phoneFinal,
                 "phoneNumber" to phoneFinal,
@@ -1574,16 +2068,6 @@ fun RegistrationFormScreen(
                 "group" to activeGroupFinal,
                 "age_group" to activeGroupFinal,
 
-                /*
-                 * מקור האמת החדש:
-                 * כל סניף והקבוצות שלו.
-                 */
-                "coachBranchAssignments" to
-                        CoachBranchAssignmentsCodec
-                            .toFirestoreList(
-                                branchAssignmentsFinal
-                            ),
-
                 "birthDate" to birthDate,
                 "gender" to gender,
                 "belt" to beltFinal,
@@ -1604,6 +2088,38 @@ fun RegistrationFormScreen(
                 "createdAt" to System.currentTimeMillis(),
                 "updatedAt" to System.currentTimeMillis()
             )
+
+            // נתוני השתייכות המתאמן נשמרים בנפרד.
+            if (!isCoach) {
+                firestoreData["traineeBranchAssignments"] =
+                    CoachBranchAssignmentsCodec.toFirestoreList(
+                        branchAssignmentsFinal
+                    )
+
+                firestoreData["traineeActiveBranch"] =
+                    activeBranchFinal
+
+                firestoreData["traineeActiveGroup"] =
+                    activeGroupFinal
+            }
+
+            if (!startAtProfile) {
+                firestoreData["role"] = roleFinal
+                firestoreData["user_role"] = roleFinal
+            } else {
+                // שדות מערכת ושיוכים מוגנים אינם
+                // ניתנים לעדכון עצמי ב-users.
+                listOf(
+                    "branch",
+                    "branches",
+                    "activeBranch",
+                    "isActive",
+                    "archived",
+                    "createdAt"
+                ).forEach { key ->
+                    firestoreData.remove(key)
+                }
+            }
 
             Log.e(
                 TAG_REG,
@@ -1646,17 +2162,6 @@ fun RegistrationFormScreen(
                     )
                 }
 
-                Toast.makeText(
-                    ctx,
-                    if (isEnglish) {
-                        "Profile saved ✅"
-                    } else {
-                        "הפרופיל נשמר ✅"
-                    },
-                    Toast.LENGTH_SHORT
-                ).show()
-
-                finishRegistrationFlow()
             }
 
             firestoreWrite
@@ -1665,6 +2170,21 @@ fun RegistrationFormScreen(
                         TAG_REG,
                         "stage=firestore_persist_success, finalUid=$finalUid, ${regAuthStateForLog()}"
                     )
+
+                    // חוזרים למסך הבית רק אחרי אישור השמירה.
+                    if (startAtProfile) {
+                        Toast.makeText(
+                            ctx,
+                            if (isEnglish) {
+                                "Profile saved ✅"
+                            } else {
+                                "הפרופיל נשמר ✅"
+                            },
+                            Toast.LENGTH_SHORT
+                        ).show()
+
+                        finishRegistrationFlow()
+                    }
 
                     /*
                      * ברישום חדש עדיין מחכים לאישור Firestore
@@ -2001,39 +2521,27 @@ fun RegistrationFormScreen(
 
                     if (startAtProfile) {
                         if (newTab == 0) {
-                            selectedTab = 0
+                            switchRegistrationRole(0)
+                            userManuallySelectedRole = true
                             return@RegistrationTabsBilingual
                         }
 
                         if (profileAllowsCoach) {
-                            selectedTab = 1
+                            switchRegistrationRole(1)
+                            userManuallySelectedRole = true
                             return@RegistrationTabsBilingual
                         }
 
-                        profileRoleScope.launch {
-                            val adminAuthorized =
-                                AdminAccess.isCurrentUserAdmin()
-
-                            profileAdminAuthorized =
-                                adminAuthorized
-
-                            if (
-                                adminAuthorized ||
-                                profileCoachAuthorized
-                            ) {
-                                selectedTab = 1
+                        Toast.makeText(
+                            ctx,
+                            if (isEnglish) {
+                                "Coach mode is not permitted by your current access"
                             } else {
-                                Toast.makeText(
-                                    ctx,
-                                    if (isEnglish) {
-                                        "Coach mode is allowed only after server authorization"
-                                    } else {
-                                        "מצב מאמן זמין רק לאחר הרשאה מהשרת"
-                                    },
-                                    Toast.LENGTH_SHORT
-                                ).show()
-                            }
-                        }
+                                "הרשאת מאמן אינה מאושרת למשתמש זה"
+                            },
+                            Toast.LENGTH_SHORT
+                        ).show()
+
                         return@RegistrationTabsBilingual
                     }
 
@@ -2304,13 +2812,6 @@ fun RegistrationFormScreen(
                 branchType = branchType,
                 onBranchTypeChange = { newType ->
                     branchType = newType
-
-                    sp.edit {
-                        putString(
-                            "branch_type",
-                            newType
-                        )
-                    }
                 },
                 submitButtonText = if (startAtProfile) {
                     if (isEnglish) "Save profile" else "שמירת פרופיל"
