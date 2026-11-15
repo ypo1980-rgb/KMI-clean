@@ -67,6 +67,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import il.kmi.app.KmiViewModel
+import il.kmi.app.navigation.KmiRoleModeSelectionBridge
 import il.kmi.shared.domain.Belt
 import il.kmi.app.domain.color
 import il.kmi.app.R
@@ -172,6 +173,12 @@ fun KmiTopBar(
     showBottomShare: Boolean = true,
     showModePill: Boolean = true,
     modePillIsCoach: Boolean? = null,
+
+    // בחירת מצב מהתג הגלובלי.
+    // ללא callback התג נשאר לתצוגה בלבד.
+    canSelectCoachMode: Boolean = false,
+    onRoleModeSelected: ((Boolean) -> Unit)? = null,
+
     onShare: (() -> Unit)? = null,
     onOpenExercise: ((String) -> Unit)? = null,   // ← חדש (אופציונלי)
     onShareWhatsApp: (() -> Unit)? = null,
@@ -1465,6 +1472,30 @@ fun KmiTopBar(
         }
 
         if (shouldShowRolePillBelowTitle && showModePill) {
+
+            // למסך הרישום יש callback עצמאי שמחליף טאבים.
+            // בשאר המסכים משתמשים במנגנון הגלובלי.
+            val effectiveRoleModeSelection =
+                onRoleModeSelected
+                    ?: if (KmiRoleModeSelectionBridge.isAvailable()) {
+                        { selectCoach: Boolean ->
+                            KmiRoleModeSelectionBridge.selectMode(
+                                selectCoach
+                            )
+                        }
+                    } else {
+                        null
+                    }
+
+            // הרשאת מאמן מגיעה מהמסך הקורא או
+            // ממנגנון ההרשאות הגלובלי המאומת.
+            val effectiveCanSelectCoach =
+                if (onRoleModeSelected != null) {
+                    canSelectCoachMode
+                } else {
+                    KmiRoleModeSelectionBridge.canSwitchToCoach()
+                }
+
             Box(
                 modifier = Modifier
                     .align(AbsoluteAlignment.BottomLeft)
@@ -1473,7 +1504,9 @@ fun KmiTopBar(
             ) {
                 RoleInlinePill(
                     isCoach = isCoachForPill,
-                    isEnglish = isEnglish
+                    isEnglish = isEnglish,
+                    canSelectCoach = effectiveCanSelectCoach,
+                    onModeSelected = effectiveRoleModeSelection
                 )
             }
         }
@@ -2920,65 +2953,118 @@ private fun VerticalQuickActionItem(
     }
 }
 
-/** תג מצב גלובלי — עיצוב משלים לידית המיקרופון */
+/** תג מצב גלובלי — תצוגה ובחירת מצב מאמן/מתאמן. */
 @Composable
 private fun RoleInlinePill(
     isCoach: Boolean,
-    isEnglish: Boolean
+    isEnglish: Boolean,
+    canSelectCoach: Boolean,
+    onModeSelected: ((Boolean) -> Unit)?
 ) {
-    val roleColors =
-        kmiRolePillColors(
-            isCoach = isCoach
-        )
+    var expanded by remember { mutableStateOf(false) }
 
-    val label =
-        when {
-            isEnglish && isCoach -> "Coach"
-            isEnglish -> "Trainee"
-            isCoach -> "מאמן"
-            else -> "מתאמן"
+    val roleColors = kmiRolePillColors(
+        isCoach = isCoach
+    )
+
+    val label = when {
+        isEnglish && isCoach -> "Coach"
+        isEnglish -> "Trainee"
+        isCoach -> "מאמן"
+        else -> "מתאמן"
+    }
+
+    val traineeLabel =
+        if (isEnglish) "Trainee" else "מתאמן"
+
+    val coachLabel =
+        if (isEnglish) "Coach" else "מאמן"
+
+    val handleShape = AbsoluteRoundedCornerShape(
+        topLeft = 0.dp,
+        topRight = 18.dp,
+        bottomLeft = 0.dp,
+        bottomRight = 0.dp
+    )
+
+    Box {
+        Surface(
+            modifier = Modifier
+                .width(66.dp)
+                .height(26.dp)
+                .clip(handleShape)
+                .then(
+                    if (onModeSelected != null) {
+                        Modifier.clickable {
+                            expanded = true
+                        }
+                    } else {
+                        Modifier
+                    }
+                ),
+            shape = handleShape,
+            color = roleColors.background.copy(alpha = 0.96f),
+            contentColor = roleColors.content,
+            shadowElevation = 0.dp,
+            tonalElevation = 0.dp,
+            border = BorderStroke(
+                width = 1.4.dp,
+                color = Color.White.copy(alpha = 0.70f)
+            )
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 8.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = label,
+                    style = KmiTypography.caption.copy(
+                        fontWeight = FontWeight.Bold
+                    ),
+                    color = roleColors.content,
+                    textAlign = TextAlign.Center,
+                    maxLines = 1,
+                    softWrap = false,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
         }
 
-    val handleShape =
-        AbsoluteRoundedCornerShape(
-            topLeft = 0.dp,
-            topRight = 18.dp,
-            bottomLeft = 0.dp,
-            bottomRight = 0.dp
-        )
-
-    Surface(
-        modifier = Modifier
-            .width(66.dp)
-            .height(26.dp)
-            .clip(handleShape),
-        shape = handleShape,
-        color = roleColors.background.copy(alpha = 0.96f),
-        contentColor = roleColors.content,
-        shadowElevation = 0.dp,
-        tonalElevation = 0.dp,
-        border = BorderStroke(
-            width = 1.4.dp,
-            color = Color.White.copy(alpha = 0.70f)
-        )
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = 8.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.Center
+        DropdownMenu(
+            expanded = expanded && onModeSelected != null,
+            onDismissRequest = {
+                expanded = false
+            }
         ) {
-            Text(
-                text = label,
-                style = KmiTypography.caption.copy(
-                    fontWeight = FontWeight.Bold
-                ),
-                color = roleColors.content,
-                textAlign = TextAlign.Center,
-                maxLines = 1,
-                softWrap = false,
-                overflow = TextOverflow.Ellipsis
+            DropdownMenuItem(
+                text = {
+                    Text(
+                        text = traineeLabel,
+                        style = KmiTypography.cardTitle
+                    )
+                },
+                onClick = {
+                    expanded = false
+                    onModeSelected?.invoke(false)
+                }
+            )
+
+            DropdownMenuItem(
+                text = {
+                    Text(
+                        text = coachLabel,
+                        style = KmiTypography.cardTitle
+                    )
+                },
+                enabled = canSelectCoach,
+                onClick = {
+                    if (canSelectCoach) {
+                        expanded = false
+                        onModeSelected?.invoke(true)
+                    }
+                }
             )
         }
     }

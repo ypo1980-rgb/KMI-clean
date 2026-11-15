@@ -95,6 +95,43 @@ private const val PROFILE_ACCOUNT_RECOVERY_ROUTE =
 
 private const val TAG_NAV = "KMI_NAV"
 
+/**
+ * גשר בין התג הגלובלי לבין מנגנון מצב המשתמש ב-MainNavHost.
+ * אינו מחזיק הרשאות או מצב משתמש משלו.
+ */
+object KmiRoleModeSelectionBridge {
+
+    private var onSelectMode: ((Boolean) -> Unit)? = null
+    private var canSelectCoach: (() -> Boolean)? = null
+
+    fun bind(
+        onSelect: (Boolean) -> Unit,
+        canSelectCoachMode: () -> Boolean
+    ) {
+        onSelectMode = onSelect
+        canSelectCoach = canSelectCoachMode
+    }
+
+    fun unbind() {
+        onSelectMode = null
+        canSelectCoach = null
+    }
+
+    fun isAvailable(): Boolean =
+        onSelectMode != null
+
+    fun canSwitchToCoach(): Boolean =
+        canSelectCoach?.invoke() == true
+
+    fun selectMode(isCoach: Boolean) {
+        if (isCoach && !canSwitchToCoach()) {
+            return
+        }
+
+        onSelectMode?.invoke(isCoach)
+    }
+}
+
 private fun authStateForLog(): String {
     val user = FirebaseAuth.getInstance().currentUser
 
@@ -1031,12 +1068,9 @@ fun MainNavHost(
         return when (grantedAccessType) {
             "trainee" -> false
 
-            "coach" ->
-                verifiedCoachCapability
-
-            "both" ->
+            "coach", "both" ->
                 verifiedCoachCapability &&
-                        isCoachRole(savedActiveRoleValue())
+                        readSavedCoachMode()
 
             else ->
                 verifiedCoachCapability &&
@@ -1178,20 +1212,16 @@ fun MainNavHost(
         isCoach = resolvedCoachMode()
 
         /*
-         * רק הרשאה מפורשת של המנהל יכולה לכפות
-         * מצב יחיד. בהרשאה כפולה שומרים את בחירת המשתמש.
+         * הרשאת מתאמן בלבד אינה מאפשרת מצב מאמן.
+         *
+         * מאמן מורשה רשאי לבחור בין מצב מאמן למתאמן,
+         * גם כאשר accessType הוא coach ולא both.
+         *
+         * הבחירה אינה משנה את הרשאות Firestore.
          */
         val forcedMode =
             when (explicitAccessType) {
                 "trainee" -> "trainee"
-
-                "coach" ->
-                    if (verifiedCoachCapability) {
-                        "coach"
-                    } else {
-                        null
-                    }
-
                 else -> null
             }
 
@@ -1214,6 +1244,72 @@ fun MainNavHost(
                     "coachAuthorized=$verifiedCoachCapability " +
                     "activeCoachMode=$isCoach"
         )
+    }
+
+    // חיבור הגשר למנגנון המצב הפעיל הקיים.
+    // הרשאת מאמן אינה משתנה בעקבות בחירת מצב תצוגה.
+    DisposableEffect(
+        ownerUid,
+        verifiedCoachCapability,
+        grantedAccessType,
+        nav,
+        userPrefsForEntry,
+        sp
+    ) {
+        KmiRoleModeSelectionBridge.bind(
+            canSelectCoachMode = {
+                ownerUid.isNotBlank() &&
+                        FirebaseAuth.getInstance().currentUser?.uid == ownerUid &&
+                        verifiedCoachCapability &&
+                        grantedAccessType != "trainee"
+            },
+            onSelect = { selectCoach ->
+                val sameUser =
+                    ownerUid.isNotBlank() &&
+                            FirebaseAuth.getInstance().currentUser?.uid == ownerUid
+
+                val allowed =
+                    sameUser &&
+                            (
+                                    !selectCoach ||
+                                            (
+                                                    verifiedCoachCapability &&
+                                                            grantedAccessType != "trainee"
+                                                    )
+                                    )
+
+                if (allowed) {
+                    val targetMode =
+                        if (selectCoach) "coach" else "trainee"
+
+                    userPrefsForEntry.edit {
+                        putString("active_user_mode", targetMode)
+                        putString("last_active_app_role", targetMode)
+                    }
+
+                    sp.edit {
+                        putString("active_user_mode", targetMode)
+                        putString("last_active_app_role", targetMode)
+                    }
+
+                    // עדכון מיידי של מצב ה-UI.
+                    isCoach = resolvedCoachMode()
+
+                    // מעבר לבית כדי להציג את המסך במצב שנבחר.
+                    nav.navigate(Route.Home.route) {
+                        launchSingleTop = true
+                        restoreState = false
+                        popUpTo(Route.Home.route) {
+                            inclusive = false
+                        }
+                    }
+                }
+            }
+        )
+
+        onDispose {
+            KmiRoleModeSelectionBridge.unbind()
+        }
     }
 
     val ownerRole = remember(isCoach) {

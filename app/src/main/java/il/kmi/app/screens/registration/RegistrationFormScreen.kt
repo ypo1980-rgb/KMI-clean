@@ -2748,10 +2748,33 @@ fun RegistrationFormScreen(
                 showMenu = true,
                 onOpenDrawer = onOpenDrawer,
 
-                // ✅ מצב מתאמן / מאמן הגלובלי
+                // מצב מתאמן / מאמן הגלובלי.
+                // התג מתעדכן מיד לפי הטאב הנבחר,
+                // ללא שינוי בהרשאות או בנתוני Firestore.
                 showRoleStatus = true,
                 showRoleBadge = true,
                 showModePill = true,
+                modePillIsCoach = isCoach,
+
+                // הרשאת מעבר למצב מאמן לאחר אימות Firestore.
+                canSelectCoachMode =
+                    startAtProfile &&
+                            !profileAccessChecking &&
+                            profileAllowsCoach,
+
+                // סנכרון בחירת התג עם הטאב במסך.
+                onRoleModeSelected = { selectCoach ->
+                    val targetTab = if (selectCoach) 1 else 0
+
+                    if (startAtProfile) {
+                        if (targetTab == 0 || profileAllowsCoach) {
+                            switchRegistrationRole(targetTab)
+                            userManuallySelectedRole = true
+                        }
+                    } else {
+                        selectedTab = 0
+                    }
+                },
 
                 // ✅ סרגל האייקונים הגלובלי המוסתר
                 showBottomActions = true,
