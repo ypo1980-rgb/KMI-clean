@@ -1,6 +1,7 @@
 package il.kmi.app.attendance.ui
 
 import android.Manifest
+import android.content.Context
 import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -10,16 +11,31 @@ import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Groups
+import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -33,6 +49,8 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.text.style.TextAlign
@@ -48,6 +66,7 @@ import com.google.mlkit.vision.barcode.BarcodeScannerOptions
 import com.google.mlkit.vision.barcode.BarcodeScanning
 import com.google.mlkit.vision.barcode.common.Barcode
 import com.google.mlkit.vision.common.InputImage
+import il.kmi.app.privacy.TraineeDisplayNameMapper
 import il.kmi.app.ui.KmiTopBar
 import il.kmi.app.ui.KmiTypography
 import il.kmi.app.ui.loading.KmiLoadingRings
@@ -129,9 +148,60 @@ fun AttendanceQrScannerScreen(
         mutableStateOf(false)
     }
 
+    var scanUsedAdminQr by remember {
+        mutableStateOf(false)
+    }
+
     var alreadyRecorded by remember {
         mutableStateOf(false)
     }
+
+    var confirmedBranch by remember {
+        mutableStateOf("")
+    }
+
+    var confirmedGroup by remember {
+        mutableStateOf("")
+    }
+
+    val traineePrefs = remember(context) {
+        context.getSharedPreferences(
+            "kmi_user",
+            Context.MODE_PRIVATE
+        )
+    }
+
+    val traineeRealName = remember(traineePrefs) {
+        traineePrefs.getString("fullName", null)
+            ?.trim()
+            .orEmpty()
+            .ifBlank {
+                FirebaseAuth.getInstance()
+                    .currentUser
+                    ?.displayName
+                    ?.trim()
+                    .orEmpty()
+            }
+    }
+
+    val traineeDisplayName =
+        TraineeDisplayNameMapper.displayName(
+            realName = traineeRealName,
+            stableKey = FirebaseAuth.getInstance()
+                .currentUser
+                ?.uid
+                .orEmpty(),
+            demoIndex = 1,
+            isEnglish = isEnglish
+        )
+
+    val traineeFirstName =
+        traineeDisplayName
+            .trim()
+            .substringBefore(" ")
+            .ifBlank {
+                if (isEnglish) "Trainee" else "מתאמן"
+            }
 
     var scanError by remember {
         mutableStateOf<String?>(null)
@@ -215,10 +285,68 @@ fun AttendanceQrScannerScreen(
                             error("Invalid attendance response")
                         }
 
+                        // השרת כבר אימת את הסריקה ואת
+                        // רישום הנוכחות האמיתי.
+                        scanUsedAdminQr =
+                            response["testMode"] == true
+
                         alreadyRecorded =
                             response["alreadyRecorded"] == true
 
+                        confirmedBranch =
+                            (response["branch"] as? String)
+                                ?.trim()
+                                .orEmpty()
+
+                        confirmedGroup =
+                            (response["group"] as? String)
+                                ?.trim()
+                                .orEmpty()
+
                         scanCompleted = true
+
+                        // פרטי האימון נקראים לפי occurrenceId
+                        // שהשרת כבר אישר. אין כתיבה נוספת.
+                        // תאימות לתשובות ישנות של השרת.
+                        // בגרסה החדשה הפרטים כבר מוחזרים
+                        // ישירות מתוך scanKamiAttendanceQr.
+                        if (
+                            confirmedBranch.isBlank() ||
+                            confirmedGroup.isBlank()
+                        ) {
+                            val occurrenceDocument =
+                                runCatching {
+                                    com.google.firebase.firestore
+                                        .FirebaseFirestore
+                                        .getInstance()
+                                        .collection("trainingOccurrences")
+                                        .document(returnedOccurrenceId)
+                                        .get()
+                                        .await()
+                                }.getOrNull()
+
+                            if (occurrenceDocument?.exists() == true) {
+                                if (confirmedBranch.isBlank()) {
+                                    confirmedBranch =
+                                        occurrenceDocument
+                                            .getString("branch")
+                                            ?.trim()
+                                            .orEmpty()
+                                }
+
+                                if (confirmedGroup.isBlank()) {
+                                    confirmedGroup =
+                                        (
+                                                occurrenceDocument
+                                                    .getString("group")
+                                                    ?: occurrenceDocument
+                                                        .getString("groupKey")
+                                                )
+                                            ?.trim()
+                                            .orEmpty()
+                                }
+                            }
+                        }
 
                     } catch (cancelled: CancellationException) {
                         throw cancelled
@@ -526,19 +654,21 @@ fun AttendanceQrScannerScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
 
-            Text(
-                text = if (isEnglish) {
-                    "Scan training attendance QR"
-                } else {
-                    "סריקת QR לנוכחות באימון"
-                },
-                style = KmiTypography.cardTitle,
-                color = MaterialTheme.colorScheme.onBackground,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.fillMaxWidth()
-            )
+                if (!scanCompleted) {
+                    Text(
+                        text = if (isEnglish) {
+                            "Scan training attendance QR"
+                        } else {
+                            "סריקת QR לנוכחות באימון"
+                        },
+                        style = KmiTypography.cardTitle,
+                        color = MaterialTheme.colorScheme.onBackground,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
 
-        when {
+                when {
             scanInProgress -> {
                 Box(
                     modifier = Modifier
@@ -558,33 +688,274 @@ fun AttendanceQrScannerScreen(
             }
 
             scanCompleted -> {
-                Text(
-                    text =
-                        if (alreadyRecorded) {
-                            if (isEnglish) {
-                                "Your attendance has already been registered."
-                            } else {
-                                "הנוכחות שלך כבר נרשמה לאימון."
-                            }
-                        } else {
-                            if (isEnglish) {
-                                "Your attendance was registered successfully!"
-                            } else {
-                                "הנוכחות שלך נרשמה בהצלחה!"
-                            }
-                        },
-                    color = MaterialTheme.colorScheme.primary,
-                    style = KmiTypography.cardTitle,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.fillMaxWidth()
-                )
+                val successColor = Color(0xFF16A34A)
+                val cardBackground = MaterialTheme.colorScheme.surface
+                val primaryText = MaterialTheme.colorScheme.onSurface
+                val secondaryText =
+                    MaterialTheme.colorScheme.onSurfaceVariant
 
-                Button(
-                    onClick = onAttendanceRegistered
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f)
+                        .verticalScroll(rememberScrollState()),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
                 ) {
-                    Text(
-                        if (isEnglish) "Done" else "סיום"
-                    )
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(26.dp),
+                        color = cardBackground,
+                        tonalElevation = 2.dp,
+                        shadowElevation = 2.dp,
+                        border = BorderStroke(
+                            1.dp,
+                            MaterialTheme.colorScheme.outlineVariant
+                        )
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(
+                                    horizontal = 22.dp,
+                                    vertical = 28.dp
+                                ),
+                            horizontalAlignment =
+                                Alignment.CenterHorizontally,
+                            verticalArrangement =
+                                Arrangement.spacedBy(14.dp)
+                        ) {
+
+                            Box(
+                                modifier = Modifier
+                                    .size(94.dp)
+                                    .background(
+                                        brush = Brush.radialGradient(
+                                            colors = listOf(
+                                                successColor.copy(alpha = 0.20f),
+                                                successColor.copy(alpha = 0.04f)
+                                            )
+                                        ),
+                                        shape = CircleShape
+                                    ),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Surface(
+                                    modifier = Modifier.size(70.dp),
+                                    shape = CircleShape,
+                                    color = successColor.copy(alpha = 0.12f)
+                                ) {
+                                    Box(
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        androidx.compose.material3.Icon(
+                                            imageVector =
+                                                Icons.Filled.CheckCircle,
+                                            contentDescription =
+                                                if (isEnglish) {
+                                                    "Attendance confirmed"
+                                                } else {
+                                                    "נוכחות אושרה"
+                                                },
+                                            tint = successColor,
+                                            modifier = Modifier.size(54.dp)
+                                        )
+                                    }
+                                }
+                            }
+
+                            Text(
+                                text = if (isEnglish) {
+                                    "Hello, $traineeFirstName!"
+                                } else {
+                                    "שלום $traineeFirstName!"
+                                },
+                                style = KmiTypography.screenTitle,
+                                color = primaryText,
+                                textAlign = TextAlign.Center
+                            )
+
+                            Text(
+                                text =
+                                    when {
+                                        alreadyRecorded ->
+                                            if (isEnglish) {
+                                                "Your attendance is already confirmed!"
+                                            } else {
+                                                "הנוכחות שלך כבר אושרה!"
+                                            }
+
+                                        else ->
+                                            if (isEnglish) {
+                                                "Your attendance is confirmed!"
+                                            } else {
+                                                "הנוכחות שלך אושרה בהצלחה!"
+                                            }
+                                    },
+                                style = KmiTypography.cardTitle,
+                                color = successColor,
+                                textAlign = TextAlign.Center
+                            )
+
+                            Text(
+                                text =
+                                    if (scanUsedAdminQr) {
+                                        if (isEnglish) {
+                                            "Your attendance was verified and recorded using an authorized admin QR."
+                                        } else {
+                                            "הנוכחות שלך אומתה ונרשמה באמצעות QR בהרשאת מנהל."
+                                        }
+                                    } else {
+                                        if (isEnglish) {
+                                            "Your training attendance has been verified in K.M.I"
+                                        } else {
+                                            "הנוכחות שלך באימון אומתה ונרשמה במערכת K.M.I"
+                                        }
+                                    },
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = secondaryText,
+                                textAlign = TextAlign.Center
+                            )
+
+                            if (
+                                confirmedBranch.isNotBlank() ||
+                                confirmedGroup.isNotBlank()
+                            ) {
+                                Spacer(Modifier.height(4.dp))
+
+                                Surface(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    shape = RoundedCornerShape(18.dp),
+                                    color = MaterialTheme.colorScheme
+                                        .surfaceVariant
+                                        .copy(alpha = 0.55f)
+                                ) {
+                                    Column(
+                                        modifier = Modifier.padding(16.dp),
+                                        verticalArrangement =
+                                            Arrangement.spacedBy(14.dp)
+                                    ) {
+                                        if (confirmedBranch.isNotBlank()) {
+                                            Row(
+                                                verticalAlignment =
+                                                    Alignment.CenterVertically
+                                            ) {
+                                                androidx.compose.material3.Icon(
+                                                    imageVector =
+                                                        Icons.Filled.LocationOn,
+                                                    contentDescription = null,
+                                                    tint = successColor,
+                                                    modifier = Modifier.size(24.dp)
+                                                )
+
+                                                Spacer(Modifier.width(12.dp))
+
+                                                Column {
+                                                    Text(
+                                                        text =
+                                                            if (isEnglish) "Branch"
+                                                            else "סניף",
+                                                        style =
+                                                            MaterialTheme.typography.labelMedium,
+                                                        color = secondaryText
+                                                    )
+
+                                                    Text(
+                                                        text = confirmedBranch,
+                                                        style = KmiTypography.cardTitle,
+                                                        color = primaryText
+                                                    )
+                                                }
+                                            }
+                                        }
+
+                                        if (confirmedGroup.isNotBlank()) {
+                                            Row(
+                                                verticalAlignment =
+                                                    Alignment.CenterVertically
+                                            ) {
+                                                androidx.compose.material3.Icon(
+                                                    imageVector =
+                                                        Icons.Filled.Groups,
+                                                    contentDescription = null,
+                                                    tint = successColor,
+                                                    modifier = Modifier.size(24.dp)
+                                                )
+
+                                                Spacer(Modifier.width(12.dp))
+
+                                                Column {
+                                                    Text(
+                                                        text =
+                                                            if (isEnglish) "Training group"
+                                                            else "קבוצת אימון",
+                                                        style =
+                                                            MaterialTheme.typography.labelMedium,
+                                                        color = secondaryText
+                                                    )
+
+                                                    Text(
+                                                        text = confirmedGroup,
+                                                        style = KmiTypography.cardTitle,
+                                                        color = primaryText
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            Spacer(Modifier.height(4.dp))
+
+                            Surface(
+                                shape = RoundedCornerShape(50.dp),
+                                color = successColor.copy(alpha = 0.10f)
+                            ) {
+                                Text(
+                                    text =
+                                        if (scanUsedAdminQr) {
+                                            if (isEnglish) {
+                                                "✓ Attendance recorded · Admin QR"
+                                            } else {
+                                                "✓ נוכחות נרשמה · QR מנהל"
+                                            }
+                                        } else {
+                                            if (isEnglish) {
+                                                "✓ Verified by K.M.I"
+                                            } else {
+                                                "✓ אומת על ידי K.M.I"
+                                            }
+                                        },
+                                    modifier = Modifier.padding(
+                                        horizontal = 16.dp,
+                                        vertical = 8.dp
+                                    ),
+                                    style = KmiTypography.caption,
+                                    color = successColor
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(Modifier.height(22.dp))
+
+                    Button(
+                        onClick = onAttendanceRegistered,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(52.dp),
+                        shape = RoundedCornerShape(16.dp)
+                    ) {
+                        Text(
+                            text = if (isEnglish) {
+                                "Back to home"
+                            } else {
+                                "חזרה למסך הבית"
+                            },
+                            style = KmiTypography.action
+                        )
+                    }
                 }
             }
 
@@ -672,17 +1043,19 @@ fun AttendanceQrScannerScreen(
             }
         }
 
-                TextButton(
-                    onClick = onBack
-                ) {
-                    Text(
-                        text = if (isEnglish) {
-                            "Back"
-                        } else {
-                            "חזרה"
-                        },
-                        style = KmiTypography.action
-                    )
+                if (!scanCompleted) {
+                    TextButton(
+                        onClick = onBack
+                    ) {
+                        Text(
+                            text = if (isEnglish) {
+                                "Back"
+                            } else {
+                                "חזרה"
+                            },
+                            style = KmiTypography.action
+                        )
+                    }
                 }
             }
         }

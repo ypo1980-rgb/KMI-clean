@@ -1736,6 +1736,11 @@ exports.createKamiAttendanceQr =
       const occurrenceId =
         String(data?.occurrenceId || "").trim();
 
+      // מצב בדיקה מחייב בקשה מפורשת.
+      // ברירת המחדל נשארת QR רגיל.
+      const testMode =
+        data?.testMode === true;
+
       if (
         !/^[a-f0-9]{64}$/.test(occurrenceId)
       ) {
@@ -1911,6 +1916,153 @@ exports.createKamiAttendanceQr =
           "failed-precondition",
           "Training schedule is invalid."
         );
+      }
+
+      /*
+       * QR בדיקה למנהל בלבד.
+       *
+       * אינו מחליף QR רגיל ואינו מאפשר
+       * רישום נוכחות אמיתי.
+       */
+      if (testMode) {
+        if (!isAdmin) {
+          throw new functions.https.HttpsError(
+            "permission-denied",
+            "Admin access is required for QR testing."
+          );
+        }
+
+        const testToken =
+          crypto.randomBytes(32).toString("hex");
+
+        const testTokenHash =
+          crypto.createHash("sha256")
+            .update(testToken)
+            .digest("hex");
+
+        const testQrRef =
+          db.collection("attendanceQrTestTokens")
+            .doc(occurrenceId);
+
+        const testOccurrenceRef =
+          db.collection("trainingOccurrences")
+            .doc(occurrenceId);
+
+        const testOverrideRef =
+          db.collection("trainingOverrides")
+            .doc(occurrenceId);
+
+        let testExpiresAtMillis = 0;
+
+        await db.runTransaction(async (transaction) => {
+          const [
+            currentAdminSnapshot,
+            currentOccurrenceSnapshot,
+            currentOverrideSnapshot,
+          ] = await Promise.all([
+            transaction.get(
+              db.collection("admins").doc(uid)
+            ),
+            transaction.get(testOccurrenceRef),
+            transaction.get(testOverrideRef),
+          ]);
+
+          if (
+            !currentAdminSnapshot.exists ||
+            currentAdminSnapshot.data()?.enabled !== true
+          ) {
+            throw new functions.https.HttpsError(
+              "permission-denied",
+              "Admin access was revoked."
+            );
+          }
+
+          if (!currentOccurrenceSnapshot.exists) {
+            throw new functions.https.HttpsError(
+              "not-found",
+              "Training occurrence is unavailable."
+            );
+          }
+
+          const currentOccurrence =
+            currentOccurrenceSnapshot.data() || {};
+
+          const currentOverride =
+            currentOverrideSnapshot.exists
+              ? currentOverrideSnapshot.data() || {}
+              : {};
+
+          if (
+            currentOccurrence.occurrenceId !== occurrenceId ||
+            currentOccurrence.occurrenceKey !== occurrenceKey ||
+            currentOccurrence.branch !== branch ||
+            currentOccurrence.group !== group ||
+            currentOccurrence.sessionDate !==
+              occurrence.sessionDate
+          ) {
+            throw new functions.https.HttpsError(
+              "failed-precondition",
+              "Training identity has changed."
+            );
+          }
+
+          if (
+            currentOverrideSnapshot.exists &&
+            currentOverride.occurrenceKey !== occurrenceKey
+          ) {
+            throw new functions.https.HttpsError(
+              "failed-precondition",
+              "Training override identity mismatch."
+            );
+          }
+
+          if (
+            currentOccurrence.isCancelled === true ||
+            (
+              currentOverride.isActive === true &&
+              currentOverride.type === "cancelled"
+            )
+          ) {
+            throw new functions.https.HttpsError(
+              "failed-precondition",
+              "Training has been cancelled."
+            );
+          }
+
+          const testCreatedAtMillis = Date.now();
+
+          testExpiresAtMillis =
+            testCreatedAtMillis + 30 * 60 * 1000;
+
+          transaction.set(testQrRef, {
+            occurrenceId,
+            occurrenceKey,
+            branch,
+            group,
+            sessionDate: occurrence.sessionDate,
+            tokenHash: testTokenHash,
+            createdByUid: uid,
+            testMode: true,
+            createdAtMillis: testCreatedAtMillis,
+            expiresAtMillis: testExpiresAtMillis,
+            updatedAt:
+              admin.firestore.FieldValue.serverTimestamp(),
+          });
+        });
+
+        console.log("KAMI_ATTENDANCE_QR_ADMIN_TEST_CREATED", {
+          occurrenceId,
+          adminUid: uid,
+        });
+
+        return {
+          accepted: true,
+          occurrenceId,
+          token: testToken,
+          testMode: true,
+          windowStartMillis: Date.now(),
+          windowEndMillis: testExpiresAtMillis,
+        };
       }
 
       const windowStartMillis =
@@ -2270,6 +2422,13 @@ exports.scanKamiAttendanceQr =
         db.collection("attendanceQrTokens")
           .doc(occurrenceId);
 
+      const adminQrRef =
+        db.collection("attendanceQrTestTokens")
+          .doc(occurrenceId);
+
+      const adminRef =
+        db.collection("admins").doc(uid);
+
       const occurrenceRef =
         db.collection("trainingOccurrences")
           .doc(occurrenceId);
@@ -2283,42 +2442,88 @@ exports.scanKamiAttendanceQr =
 
           const [
             qrSnapshot,
+            adminQrSnapshot,
+            adminSnapshot,
             occurrenceSnapshot,
             overrideSnapshot,
           ] = await Promise.all([
             transaction.get(qrRef),
+            transaction.get(adminQrRef),
+            transaction.get(adminRef),
             transaction.get(occurrenceRef),
             transaction.get(overrideRef),
           ]);
 
-          if (
-            !qrSnapshot.exists ||
-            !occurrenceSnapshot.exists
-          ) {
+          if (!occurrenceSnapshot.exists) {
             throw new functions.https.HttpsError(
               "not-found",
-              "Attendance QR is unavailable."
+              "Training occurrence is unavailable."
             );
           }
 
-          const qr = qrSnapshot.data() || {};
+          const normalQr =
+            qrSnapshot.exists
+              ? qrSnapshot.data() || {}
+              : {};
+
+          const adminQr =
+            adminQrSnapshot.exists
+              ? adminQrSnapshot.data() || {}
+              : {};
+
           const occurrence =
             occurrenceSnapshot.data() || {};
 
-          const storedHash =
-            String(qr.tokenHash || "");
-
-          if (
-            !/^[a-f0-9]{64}$/.test(storedHash) ||
-            !crypto.timingSafeEqual(
+          const hashMatches = (storedHash) =>
+            /^[a-f0-9]{64}$/.test(storedHash) &&
+            crypto.timingSafeEqual(
               Buffer.from(tokenHash, "hex"),
               Buffer.from(storedHash, "hex")
-            )
-          ) {
+            );
+
+          const matchesAdminQr =
+            adminQrSnapshot.exists &&
+            hashMatches(
+              String(adminQr.tokenHash || "")
+            );
+
+          const matchesNormalQr =
+            qrSnapshot.exists &&
+            hashMatches(
+              String(normalQr.tokenHash || "")
+            );
+
+          if (!matchesAdminQr && !matchesNormalQr) {
             throw new functions.https.HttpsError(
               "permission-denied",
               "Invalid attendance QR token."
             );
+          }
+
+          const isAdminQr = matchesAdminQr;
+
+          const qr =
+            isAdminQr ? adminQr : normalQr;
+
+          /*
+           * חריגה מחלון האימון מותרת רק
+           * למנהל מאומת שיצר את הקוד.
+           */
+          if (isAdminQr) {
+            const adminData =
+              adminSnapshot.data() || {};
+
+            if (
+              !adminSnapshot.exists ||
+              adminData.enabled !== true ||
+              adminQr.testMode !== true ||
+              adminQr.createdByUid !== uid
+            ) {
+              throw new functions.https.HttpsError(
+                "permission-denied",
+                "Admin QR is valid only for its verified creator."
+              );
+            }
           }
 
           const branch =
@@ -2417,11 +2622,30 @@ exports.scanKamiAttendanceQr =
           const windowEnd =
             endMillis + 30 * 60 * 1000;
 
+          const adminQrCreatedAt =
+            Number(adminQr.createdAtMillis);
+
+          const adminQrExpiresAt =
+            Number(adminQr.expiresAtMillis);
+
+          const adminQrExpired =
+            !Number.isSafeInteger(adminQrCreatedAt) ||
+            !Number.isSafeInteger(adminQrExpiresAt) ||
+            adminQrCreatedAt <= 0 ||
+            adminQrExpiresAt <= adminQrCreatedAt ||
+            adminQrExpiresAt - adminQrCreatedAt >
+              30 * 60 * 1000 ||
+            nowMillis < adminQrCreatedAt ||
+            nowMillis > adminQrExpiresAt;
+
           if (
-            nowMillis < windowStart ||
-            nowMillis > windowEnd ||
-            nowMillis < Number(qr.windowStartMillis) ||
-            nowMillis > Number(qr.windowEndMillis)
+            (isAdminQr && adminQrExpired) ||
+            (!isAdminQr && (
+              nowMillis < windowStart ||
+              nowMillis > windowEnd ||
+              nowMillis < Number(qr.windowStartMillis) ||
+              nowMillis > Number(qr.windowEndMillis)
+            ))
           ) {
             throw new functions.https.HttpsError(
               "failed-precondition",
@@ -2604,6 +2828,9 @@ exports.scanKamiAttendanceQr =
               accepted: true,
               alreadyRecorded: true,
               occurrenceId,
+              testMode: isAdminQr,
+              branch,
+              group,
             };
           }
 
@@ -2633,6 +2860,10 @@ exports.scanKamiAttendanceQr =
               qrVerifiedTraineeUid: uid,
               qrVerifiedAtMillis: nowMillis,
 
+              // מתעד אם בוצעה חריגת זמן
+              // באישור מנהל מאומת.
+              qrAdminTimeOverride: isAdminQr,
+
               markedAtMillis: nowMillis,
               updatedAtMillis: nowMillis,
               updatedAt:
@@ -2648,6 +2879,9 @@ exports.scanKamiAttendanceQr =
             accepted: true,
             alreadyRecorded: false,
             occurrenceId,
+            testMode: isAdminQr,
+            branch,
+            group,
           };
         }
       );
