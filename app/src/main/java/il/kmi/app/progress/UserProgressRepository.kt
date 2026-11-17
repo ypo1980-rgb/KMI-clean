@@ -5,6 +5,7 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.functions.FirebaseFunctions
+import android.util.Log
 import il.kmi.app.KmiViewModel
 import il.kmi.shared.domain.Belt
 import il.kmi.shared.domain.ContentRepo
@@ -23,6 +24,17 @@ object UserProgressRepository {
         UNKNOWN("unknown"),
         UNMARKED("unmarked")
     }
+
+    data class CoachExerciseMark(
+        val selectedStatuses: Set<String> = emptySet(),
+        val updatedAtByStatus: Map<String, Long> = emptyMap()
+    )
+
+    private val selectableCoachStatuses = setOf(
+        "taught",
+        "practiced",
+        "needs_reinforcement"
+    )
 
     fun exerciseMarkDocumentId(
         belt: Belt,
@@ -95,12 +107,151 @@ object UserProgressRepository {
             canonicalExerciseId = canonicalExerciseId
         )
 
-        exerciseMarksCollection(uid)
+        val document = exerciseMarksCollection(uid)
+            .document(documentId)
+
+        Log.d(
+            "KMI_EXERCISE_MARKS",
+            "Firestore write started: " +
+                    "path=${document.path} " +
+                    "belt=${belt.id} " +
+                    "status=${mark.firestoreValue}"
+        )
+
+        document.set(
+            mapOf(
+                "beltId" to belt.id,
+                "status" to mark.firestoreValue,
+                "updatedAt" to FieldValue.serverTimestamp()
+            )
+        ).await()
+
+        Log.d(
+            "KMI_EXERCISE_MARKS",
+            "Firestore write completed: " +
+                    "path=${document.path} " +
+                    "status=${mark.firestoreValue}"
+        )
+    }
+
+    private fun coachExerciseMarksCollection(uid: String) =
+        FirebaseFirestore.getInstance()
+            .collection("users")
+            .document(uid)
+            .collection("coachExerciseMarks")
+
+    fun observeCoachExerciseMarks(
+        uid: String
+    ): Flow<Map<String, CoachExerciseMark>> = callbackFlow {
+
+        val auth = FirebaseAuth.getInstance()
+
+        check(auth.currentUser?.uid == uid) {
+            "Coach exercise mark account changed"
+        }
+
+        val registration =
+            coachExerciseMarksCollection(uid)
+                .addSnapshotListener { snapshot, error ->
+
+                    if (error != null) {
+                        close(error)
+                        return@addSnapshotListener
+                    }
+
+                    if (
+                        snapshot == null ||
+                        auth.currentUser?.uid != uid
+                    ) {
+                        return@addSnapshotListener
+                    }
+
+                    val marks = snapshot.documents.associate { document ->
+
+                        val selected =
+                            (document.get("selectedStatuses") as? List<*>)
+                                .orEmpty()
+                                .mapNotNull { it as? String }
+                                .filter { it in selectableCoachStatuses }
+                                .take(2)
+                                .toSet()
+
+                        val rawDates =
+                            document.get("updatedAtByStatus")
+                                    as? Map<*, *>
+
+                        val dates = rawDates
+                            .orEmpty()
+                            .mapNotNull { (key, value) ->
+
+                                val status = key as? String
+                                val timestamp = value as? Number
+
+                                if (
+                                    status in selected &&
+                                    timestamp != null &&
+                                    timestamp.toLong() > 0L
+                                ) {
+                                    status!! to timestamp.toLong()
+                                } else {
+                                    null
+                                }
+                            }
+                            .toMap()
+
+                        document.id to CoachExerciseMark(
+                            selectedStatuses = selected,
+                            updatedAtByStatus = dates
+                        )
+                    }
+
+                    trySend(marks)
+                }
+
+        awaitClose {
+            registration.remove()
+        }
+    }
+
+    suspend fun saveCoachExerciseMark(
+        uid: String,
+        belt: Belt,
+        canonicalTopicKey: String,
+        canonicalExerciseId: String,
+        progress: CoachExerciseMark
+    ) {
+        check(FirebaseAuth.getInstance().currentUser?.uid == uid) {
+            "Coach exercise mark account changed"
+        }
+
+        require(
+            progress.selectedStatuses.size <= 2 &&
+                    progress.selectedStatuses.all {
+                        it in selectableCoachStatuses
+                    }
+        ) {
+            "Invalid coach exercise statuses"
+        }
+
+        val documentId = exerciseMarkDocumentId(
+            belt = belt,
+            canonicalTopicKey = canonicalTopicKey,
+            canonicalExerciseId = canonicalExerciseId
+        )
+
+        val selected = progress.selectedStatuses
+
+        val dates = progress.updatedAtByStatus
+            .filterKeys { it in selected }
+            .filterValues { it > 0L }
+
+        coachExerciseMarksCollection(uid)
             .document(documentId)
             .set(
                 mapOf(
                     "beltId" to belt.id,
-                    "status" to mark.firestoreValue,
+                    "selectedStatuses" to selected.sorted(),
+                    "updatedAtByStatus" to dates,
                     "updatedAt" to FieldValue.serverTimestamp()
                 )
             )

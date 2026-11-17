@@ -57,6 +57,8 @@ import android.app.Activity
 import android.content.Context
 import android.content.Intent
 import android.content.SharedPreferences
+import android.util.Log
+import com.google.firebase.auth.FirebaseAuth
 import android.graphics.Canvas
 import android.graphics.Color as AndroidColor
 import android.graphics.Paint
@@ -101,6 +103,8 @@ import il.yuval.ui.theme.kmiWarningContainerColor
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import java.net.URLDecoder
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -448,6 +452,25 @@ fun MaterialsScreen(
     }
 
     val scope = rememberCoroutineScope()
+
+    val remoteCoachMarks by
+    vm.remoteCoachExerciseMarks.collectAsState()
+
+    val pendingCoachMarks = remember(
+        belt.id,
+        topic,
+        subTopicFilter
+    ) {
+        mutableStateMapOf<String, CoachMaterialProgress>()
+    }
+
+    val coachWriteMutexes = remember(
+        belt.id,
+        topic,
+        subTopicFilter
+    ) {
+        mutableMapOf<String, Mutex>()
+    }
 
     /*
      * הסנכרון ל-Firestore מושהה מעט לאחר לחיצה.
@@ -1075,6 +1098,69 @@ fun MaterialsScreen(
         )
     }
 
+    fun syncCoachProgressToFirestore(
+        statusId: String,
+        progress: CoachMaterialProgress
+    ) {
+        val uid = FirebaseAuth.getInstance()
+            .currentUser?.uid
+
+        if (uid.isNullOrBlank()) {
+            Log.w(
+                "KMI_COACH_MARKS",
+                "Coach mark not synced: no authenticated user"
+            )
+            return
+        }
+
+        pendingCoachMarks[statusId] = progress
+
+        val writeMutex = coachWriteMutexes.getOrPut(statusId) {
+            Mutex()
+        }
+
+        scope.launch {
+            writeMutex.withLock {
+                val result = runCatching {
+                    UserProgressRepository.saveCoachExerciseMark(
+                        uid = uid,
+                        belt = belt,
+                        canonicalTopicKey = topicKey,
+                        canonicalExerciseId = statusId,
+                        progress = UserProgressRepository.CoachExerciseMark(
+                            selectedStatuses =
+                                progress.selectedStatuses.map {
+                                    it.storageValue
+                                }.toSet(),
+                            updatedAtByStatus =
+                                progress.updatedAtByStatus.mapKeys {
+                                    it.key.storageValue
+                                }
+                        )
+                    )
+                }
+
+                if (result.isSuccess) {
+                    Log.d(
+                        "KMI_COACH_MARKS",
+                        "Coach mark saved: belt=${belt.id} " +
+                                "topic=$topicKey exercise=$statusId"
+                    )
+                } else {
+                    Log.e(
+                        "KMI_COACH_MARKS",
+                        "Coach mark sync failed",
+                        result.exceptionOrNull()
+                    )
+                }
+
+                if (pendingCoachMarks[statusId] == progress) {
+                    pendingCoachMarks.remove(statusId)
+                }
+            }
+        }
+    }
+
     fun saveCoachProgress(
         statusId: String,
         status: CoachMaterialStatus
@@ -1116,6 +1202,11 @@ fun MaterialsScreen(
                 remove("${key}_status")
                 remove("${key}_updated_at")
             }
+
+            syncCoachProgressToFirestore(
+                statusId = statusId,
+                progress = CoachMaterialProgress()
+            )
 
             return
         }
@@ -1210,6 +1301,11 @@ fun MaterialsScreen(
             remove("${key}_status")
             remove("${key}_updated_at")
         }
+
+        syncCoachProgressToFirestore(
+            statusId = statusId,
+            progress = nextProgress
+        )
     }
 
     /*
@@ -1219,7 +1315,8 @@ fun MaterialsScreen(
         effectiveIsCoach,
         belt.id,
         topicKey,
-        itemList
+        itemList,
+        remoteCoachMarks
     ) {
         if (
             !effectiveIsCoach ||
@@ -1232,19 +1329,48 @@ fun MaterialsScreen(
             return@LaunchedEffect
         }
 
-        val loadedProgress = buildMap {
-            itemList.forEachIndexed { index, item ->
-                val statusId = statusIdFor(index, item)
+        itemList.forEachIndexed { index, item ->
+            val statusId = statusIdFor(index, item)
 
-                put(
-                    statusId,
-                    loadCoachProgress(statusId)
+            if (!pendingCoachMarks.containsKey(statusId)) {
+
+                val remote = vm.getRemoteCoachExerciseMark(
+                    belt = belt,
+                    canonicalTopicKey = topicKey,
+                    canonicalExerciseId = statusId
                 )
+
+                val progress = if (remote != null) {
+
+                    CoachMaterialProgress(
+                        selectedStatuses =
+                            remote.selectedStatuses
+                                .map {
+                                    CoachMaterialStatus.fromStorage(it)
+                                }
+                                .filter {
+                                    it != CoachMaterialStatus.NOT_TAUGHT
+                                }
+                                .toSet(),
+                        updatedAtByStatus =
+                            remote.updatedAtByStatus
+                                .mapKeys {
+                                    CoachMaterialStatus.fromStorage(
+                                        it.key
+                                    )
+                                }
+                                .filterKeys {
+                                    it != CoachMaterialStatus.NOT_TAUGHT
+                                }
+                    )
+
+                } else {
+                    loadCoachProgress(statusId)
+                }
+
+                coachProgressStates[statusId] = progress
             }
         }
-
-        coachProgressStates.clear()
-        coachProgressStates.putAll(loadedProgress)
     }
 
 // הדגשת תרגיל (✅ בלי Reflection: זה top-level flow)
@@ -1373,13 +1499,16 @@ fun MaterialsScreen(
         topicTitle: String,
         rawItem: String
     ): Boolean {
-        val globalFavoriteId =
-            globalFavoriteIdFor(
-                topicTitle = topicTitle,
-                rawItem = rawItem
-            )
+        val identity = syncIdentityFor(
+            topicTitle = topicTitle,
+            rawItem = rawItem
+        )
 
-        return FavoritesStore.isFavorite(globalFavoriteId) ||
+        if (FirebaseAuth.getInstance().currentUser != null) {
+            return FavoritesStore.isFavorite(identity)
+        }
+
+        return FavoritesStore.isFavorite(identity) ||
                 favoriteAliasesFor(topicTitle, rawItem).any { id ->
                     favorites.contains(id)
                 }
@@ -1389,6 +1518,16 @@ fun MaterialsScreen(
         topicTitle: String,
         rawItem: String
     ) {
+        if (FirebaseAuth.getInstance().currentUser != null) {
+            val identity = syncIdentityFor(
+                topicTitle = topicTitle,
+                rawItem = rawItem
+            )
+
+            FavoritesStore.toggle(identity)
+            return
+        }
+
         val aliases = favoriteAliasesFor(
             topicTitle = topicTitle,
             rawItem = rawItem
@@ -1547,27 +1686,39 @@ fun MaterialsScreen(
    */
     fun loadNote(
         itemId: String,
-        aliases: Collection<String> =
-            emptyList()
+        aliases: Collection<String> = emptyList(),
+        noteBelt: Belt = belt
     ): String {
         return ExerciseNotesStore.loadNote(
             context = context,
-            belt = belt,
+            belt = noteBelt,
             exerciseId = itemId,
             aliases = aliases,
             allowLegacyMigration = true
         )
     }
 
+    fun observeNote(
+        itemId: String,
+        aliases: Collection<String> = emptyList(),
+        noteBelt: Belt = belt
+    ) = ExerciseNotesStore.observeNote(
+        context = context,
+        belt = noteBelt,
+        exerciseId = itemId,
+        aliases = aliases,
+        allowLegacyMigration = true
+    )
+
     fun saveNote(
         itemId: String,
         value: String,
-        aliases: Collection<String> =
-            emptyList()
+        aliases: Collection<String> = emptyList(),
+        noteBelt: Belt = belt
     ) {
         ExerciseNotesStore.saveNote(
             context = context,
-            belt = belt,
+            belt = noteBelt,
             exerciseId = itemId,
             note = value,
             aliases = aliases
@@ -2594,12 +2745,15 @@ fun MaterialsScreen(
                                         ),
                                     hasNote =
                                         loadNote(
-                                            itemId = canonicalId,
+                                            itemId = globalFavoriteIdFor(
+                                                topicTitle = materialRootTopic,
+                                                rawItem = item
+                                            ),
                                             aliases =
                                                 favoriteAliasesFor(
                                                     topicTitle = materialRootTopic,
                                                     rawItem = item
-                                                )
+                                                ) + canonicalId
                                         ).isNotBlank()
                                 )
                             },
@@ -3010,30 +3164,65 @@ fun MaterialsScreen(
                     "(${b.heb})"
                 }
 
-                val dialogNoteAliases =
+                val dialogNoteIdentity =
                     remember(
                         b,
                         t,
                         iRaw,
-                        resolvedIdentity.id
+                        materialParentSubTopic,
+                        materialRootTopic,
+                        belt
                     ) {
-                        favoriteAliasesFor(
-                            topicTitle = t,
+                        ExerciseSyncStore.resolveIdentity(
+                            belt = b,
+                            topic = t,
+                            subTopic =
+                                if (
+                                    b == belt &&
+                                    t == materialRootTopic
+                                ) {
+                                    materialParentSubTopic
+                                } else {
+                                    null
+                                },
                             rawItem = iRaw
                         )
                     }
 
-                val dialogNoteText =
+                val dialogNoteId =
+                    dialogNoteIdentity.exerciseId
+
+                val dialogNoteAliases =
                     remember(
-                        dialogActionId,
+                        dialogNoteIdentity,
+                        dialogActionId
+                    ) {
+                        dialogNoteIdentity.aliases +
+                                dialogActionId
+                    }
+
+                val dialogNoteFlow =
+                    remember(
+                        b,
+                        dialogNoteId,
                         dialogNoteAliases,
                         notesRefreshKey
                     ) {
-                        loadNote(
-                            itemId = dialogActionId,
-                            aliases = dialogNoteAliases
+                        observeNote(
+                            itemId = dialogNoteId,
+                            aliases = dialogNoteAliases,
+                            noteBelt = b
                         )
                     }
+
+                val dialogNoteText by
+                dialogNoteFlow.collectAsState(
+                    initial = loadNote(
+                        itemId = dialogNoteId,
+                        aliases = dialogNoteAliases,
+                        noteBelt = b
+                    )
+                )
 
                 ExerciseExplanationDialog(
                     title = dialogTitle,
@@ -3052,23 +3241,20 @@ fun MaterialsScreen(
                         explainNoteId = null
                     },
                     onEditNote = {
-                        noteEditorFor =
-                            dialogActionId
+                        noteDraft = dialogNoteText
 
-                        noteDraft =
-                            loadNote(
-                                itemId = dialogActionId,
-                                aliases = dialogNoteAliases
-                            )
+                        noteEditorFor = dialogNoteId
                     },
                     onDeleteNote = {
-                        noteDraft = ""
-
                         saveNote(
-                            itemId = dialogActionId,
+                            itemId = dialogNoteId,
                             value = "",
-                            aliases = dialogNoteAliases
+                            aliases = dialogNoteAliases,
+                            noteBelt = b
                         )
+
+                        noteDraft = ""
+                        noteEditorFor = null
                     },
                     onToggleFavorite = {
                         toggleFavoriteAliases(
@@ -3092,22 +3278,38 @@ fun MaterialsScreen(
                     ?.third
                     .orEmpty()
 
+            val editorBelt =
+                explainTriple?.first ?: belt
+
             val editorAliases =
                 remember(
-                    belt,
+                    editorBelt,
                     editorTopic,
-                    editorRawItem
+                    editorRawItem,
+                    materialParentSubTopic,
+                    materialRootTopic,
+                    belt
                 ) {
                     if (
                         editorTopic.isBlank() ||
                         editorRawItem.isBlank()
                     ) {
-                        emptySet()
+                        emptySet<String>()
                     } else {
-                        favoriteAliasesFor(
-                            topicTitle = editorTopic,
+                        ExerciseSyncStore.resolveIdentity(
+                            belt = editorBelt,
+                            topic = editorTopic,
+                            subTopic =
+                                if (
+                                    editorBelt == belt &&
+                                    editorTopic == materialRootTopic
+                                ) {
+                                    materialParentSubTopic
+                                } else {
+                                    null
+                                },
                             rawItem = editorRawItem
-                        )
+                        ).aliases
                     }
                 }
 
@@ -3132,23 +3334,33 @@ fun MaterialsScreen(
                     noteDraft = it
                 },
                 onDismiss = {
+                    noteDraft = ""
                     noteEditorFor = null
                 },
                 onSave = {
                     val cleanNote =
                         noteDraft.trim()
 
-                    noteDraft =
-                        cleanNote
-
                     saveNote(
                         itemId = itemId,
                         value = cleanNote,
-                        aliases = editorAliases
+                        aliases = editorAliases,
+                        noteBelt = editorBelt
                     )
 
-                    noteEditorFor =
-                        null
+                    noteDraft = ""
+                    noteEditorFor = null
+                },
+                onDelete = {
+                    saveNote(
+                        itemId = itemId,
+                        value = "",
+                        aliases = editorAliases,
+                        noteBelt = editorBelt
+                    )
+
+                    noteDraft = ""
+                    noteEditorFor = null
                 }
             )
         }
@@ -3577,9 +3789,21 @@ fun MaterialsScreen(
                                         ) {
                                             var showNoteDialog by remember { mutableStateOf(false) }
 
-                                            // ✅ מזהה אחיד להסבר / הערות / החרגות
+                                            // מזהה קיים לסימונים ולהחרגות.
                                             val canonicalId = remember(item, belt.id, topicUi) {
                                                 canonicalFor(item)
+                                            }
+
+                                            // מקור האמת להערות מסונכרנות בין מסכים ומכשירים.
+                                            val notePrimaryId = remember(
+                                                belt.id,
+                                                materialRootTopic,
+                                                item
+                                            ) {
+                                                globalFavoriteIdFor(
+                                                    topicTitle = materialRootTopic,
+                                                    rawItem = item
+                                                )
                                             }
 
                                             // ✅ מועדפים לפי כל המזהים האפשריים של אותו תרגיל,
@@ -3624,18 +3848,43 @@ fun MaterialsScreen(
                                                     )
                                                 }
 
-                                            var noteText by remember(
-                                                item,
-                                                belt.id,
-                                                excludedKeySuffix,
-                                                notesRefreshKey
-                                            ) {
-                                                mutableStateOf(
-                                                    loadNote(
-                                                        itemId = canonicalId,
-                                                        aliases = noteAliases
+                                            val exerciseNoteFlow =
+                                                remember(
+                                                    notePrimaryId,
+                                                    canonicalId,
+                                                    belt,
+                                                    noteAliases,
+                                                    notesRefreshKey
+                                                ) {
+                                                    observeNote(
+                                                        itemId = notePrimaryId,
+                                                        aliases = noteAliases + canonicalId
                                                     )
+                                                }
+
+                                            val observedNote by
+                                            exerciseNoteFlow.collectAsState(
+                                                initial = loadNote(
+                                                    itemId = notePrimaryId,
+                                                    aliases = noteAliases + canonicalId
                                                 )
+                                            )
+
+                                            var noteText by remember(
+                                                canonicalId,
+                                                belt.id,
+                                                excludedKeySuffix
+                                            ) {
+                                                mutableStateOf(observedNote)
+                                            }
+
+                                            LaunchedEffect(
+                                                observedNote,
+                                                showNoteDialog
+                                            ) {
+                                                if (!showNoteDialog) {
+                                                    noteText = observedNote
+                                                }
                                             }
 
                                             val mastered: Boolean? =
@@ -3940,6 +4189,7 @@ fun MaterialsScreen(
                                                                     )
                                                                 },
                                                                 onEditNote = {
+                                                                    noteText = observedNote
                                                                     showNoteDialog = true
                                                                 },
                                                                 onSelect = { selectedStatus ->
@@ -4015,6 +4265,7 @@ fun MaterialsScreen(
                                                                             )
                                                                         },
                                                                         onEditNote = {
+                                                                            noteText = observedNote
                                                                             showNoteDialog = true
                                                                         }
                                                                     )
@@ -4334,9 +4585,9 @@ fun MaterialsScreen(
                                                             val cleanNote = noteText.trim()
                                                             noteText = cleanNote
                                                             saveNote(
-                                                                itemId = canonicalId,
+                                                                itemId = notePrimaryId,
                                                                 value = cleanNote,
-                                                                aliases = noteAliases
+                                                                aliases = noteAliases + canonicalId
                                                             )
                                                             showNoteDialog = false
                                                         }

@@ -2587,6 +2587,216 @@ match /screen_views/{screenId} {
   }
 
   // =========================
+  // Coach Exercise Marks
+  // סימוני מאמן לפי משתמש ותרגיל
+  // users/{uid}/coachExerciseMarks/{exerciseId}
+  // =========================
+  match /users/{uid}/coachExerciseMarks/{exerciseId} {
+
+    function canAccessCoachMarks() {
+      return isSelf(uid)
+        && (isAuthorizedCoach() || isAdmin());
+    }
+
+    function validCoachExerciseMark() {
+      let data = request.resource.data;
+
+      return data.keys().hasAll([
+          "beltId",
+          "selectedStatuses",
+          "updatedAtByStatus",
+          "updatedAt"
+        ])
+
+        && data.keys().hasOnly([
+          "beltId",
+          "selectedStatuses",
+          "updatedAtByStatus",
+          "updatedAt"
+        ])
+
+        // מזהה מסמך SHA-256
+        && exerciseId.matches("[0-9a-f]{64}")
+
+        // חגורה
+        && data.beltId is string
+        && data.beltId.size() > 0
+        && data.beltId.size() <= 64
+
+        // עד שני סטטוסים פעילים
+        && data.selectedStatuses is list
+        && data.selectedStatuses.size() <= 2
+        && data.selectedStatuses.hasOnly([
+          "taught",
+          "practiced",
+          "needs_reinforcement"
+        ])
+        && data.selectedStatuses.size() ==
+           data.selectedStatuses.toSet().size()
+
+        // תאריכים לפי סטטוס
+        && data.updatedAtByStatus is map
+        && data.updatedAtByStatus.keys().hasOnly([
+          "taught",
+          "practiced",
+          "needs_reinforcement"
+        ])
+
+        // אין תאריך לסטטוס שאינו מסומן
+        && data.updatedAtByStatus.keys()
+             .hasOnly(data.selectedStatuses)
+
+        // תאריכים במילישניות
+        && data.updatedAtByStatus.get("taught", 0) is int
+        && data.updatedAtByStatus.get("practiced", 0) is int
+        && data.updatedAtByStatus.get(
+             "needs_reinforcement", 0
+           ) is int
+
+        && data.updatedAtByStatus.get("taught", 0) >= 0
+        && data.updatedAtByStatus.get("practiced", 0) >= 0
+        && data.updatedAtByStatus.get(
+             "needs_reinforcement", 0
+           ) >= 0
+
+        // זמן שרת בלבד
+        && data.updatedAt == request.time;
+    }
+
+    allow get, list: if canAccessCoachMarks();
+
+    allow create: if canAccessCoachMarks()
+      && validCoachExerciseMark();
+
+    allow update: if canAccessCoachMarks()
+      && validCoachExerciseMark()
+      && request.resource.data.beltId ==
+         resource.data.beltId;
+
+    allow delete: if false;
+  }
+
+  // =========================
+  // Favorites – מועדפים גלובליים
+  // users/{uid}/favorites/state
+  // =========================
+  match /users/{uid}/favorites/{documentId} {
+
+    function ownsFavorites() {
+      return isSelf(uid)
+        && documentId == "state";
+    }
+
+    function validFavoritesData() {
+      let data = request.resource.data;
+
+      return data.keys().hasAll([
+          "ids",
+          "updatedAt"
+        ])
+
+        && data.keys().hasOnly([
+          "ids",
+          "updatedAt"
+        ])
+
+        && data.ids is list
+        && data.ids.size() <= 1000
+
+        && data.ids.size() ==
+           data.ids.toSet().size()
+
+        && data.updatedAt == request.time;
+    }
+
+    // משתמש קורא רק את המועדפים שלו
+    allow get: if ownsFavorites();
+
+    // אין צורך בשליפת מסמכים נוספים
+    allow list: if false;
+
+    // יצירה ראשונית
+    allow create: if ownsFavorites()
+      && validFavoritesData();
+
+    // הוספה או הסרה של מועדפים
+    allow update: if ownsFavorites()
+      && validFavoritesData();
+
+    // מחיקה פיזית חסומה
+    allow delete: if false;
+  }
+
+  // =========================
+  // Exercise Notes – הערות אישיות לתרגילים
+  // users/{uid}/exerciseNotes/{documentId}
+  // =========================
+  match /users/{uid}/exerciseNotes/{documentId} {
+
+    function ownsExerciseNote() {
+      return isSelf(uid)
+        && documentId.matches("[0-9a-f]{64}");
+    }
+
+    function validExerciseNote() {
+      let data = request.resource.data;
+
+      return data.keys().hasAll([
+          "beltId",
+          "exerciseId",
+          "note",
+          "updatedAt"
+        ])
+
+        && data.keys().hasOnly([
+          "beltId",
+          "exerciseId",
+          "note",
+          "updatedAt"
+        ])
+
+        // חגורה תקינה
+        && data.beltId is string
+        && data.beltId.size() > 0
+        && data.beltId.size() <= 64
+
+        // מזהה תרגיל
+        && data.exerciseId is string
+        && data.exerciseId.size() > 0
+        && data.exerciseId.size() <= 500
+
+        // תוכן הערה
+        && data.note is string
+        && data.note.size() > 0
+        && data.note.size() <= 5000
+
+        // זמן שרת בלבד
+        && data.updatedAt == request.time;
+    }
+
+    // המשתמש רשאי לקרוא רק הערות של עצמו
+    allow get: if ownsExerciseNote();
+
+    // אין צורך ברשימת הערות בשלב זה
+    allow list: if false;
+
+    // יצירת הערה
+    allow create: if ownsExerciseNote()
+      && validExerciseNote();
+
+    // עריכת הערה קיימת
+    allow update: if ownsExerciseNote()
+      && validExerciseNote()
+      && request.resource.data.beltId ==
+         resource.data.beltId
+      && request.resource.data.exerciseId ==
+         resource.data.exerciseId;
+
+    // מחיקת הערה אישית
+    allow delete: if ownsExerciseNote();
+  }
+
+  // =========================
   // ברירת מחדל – הכל חסום
   // =========================
   match /{document=**} {

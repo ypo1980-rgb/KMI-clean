@@ -8,25 +8,24 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.firebase.auth.FirebaseAuth
-import il.kmi.shared.domain.Belt
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
+import il.kmi.app.data.training.TrainingSummaryLocalRepo
+import il.kmi.app.progress.UserProgressRepository
+import il.kmi.app.screens.BeltQuestions.ByTopic.SubjectTopicsUiLogic
 import il.kmi.app.search.AppSearchHit
 import il.kmi.app.search.KmiSearchBridge
-import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.catch
-import kotlinx.coroutines.flow.collect
-import il.kmi.app.data.training.TrainingSummaryLocalRepo
-import il.kmi.app.screens.BeltQuestions.ByTopic.SubjectTopicsUiLogic
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.async
+import il.kmi.shared.domain.Belt
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
-import il.kmi.app.progress.UserProgressRepository
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlin.math.roundToInt
 
 // ========= הדגשת תרגיל במסך הפריטים =========
@@ -93,17 +92,58 @@ class KmiViewModel(
         MutableStateFlow<Map<String, UserProgressRepository.ExerciseMark>>(emptyMap())
     val remoteExerciseMarks = _remoteExerciseMarks.asStateFlow()
 
+    private val _remoteCoachExerciseMarks =
+        MutableStateFlow<
+                Map<String, UserProgressRepository.CoachExerciseMark>
+                >(emptyMap())
+
+    val remoteCoachExerciseMarks =
+        _remoteCoachExerciseMarks.asStateFlow()
+
     private val exerciseMarksAuth = FirebaseAuth.getInstance()
     private var exerciseMarksUid: String? = null
     private var exerciseMarksJob: Job? = null
+    private var coachExerciseMarksJob: Job? = null
 
     private val exerciseMarksAuthListener = FirebaseAuth.AuthStateListener { auth ->
         val uid = auth.currentUser?.uid
         if (uid == exerciseMarksUid) return@AuthStateListener
 
         exerciseMarksJob?.cancel()
+        coachExerciseMarksJob?.cancel()
+
         exerciseMarksUid = uid
+
         _remoteExerciseMarks.value = emptyMap()
+        _remoteCoachExerciseMarks.value = emptyMap()
+
+        coachExerciseMarksJob = uid?.let { activeUid ->
+            viewModelScope.launch {
+                UserProgressRepository
+                    .observeCoachExerciseMarks(activeUid)
+                    .catch { error ->
+                        Log.w(
+                            "KMI_COACH_MARKS",
+                            "Coach exercise marks listener failed",
+                            error
+                        )
+                    }
+                    .collect { marks ->
+                        if (
+                            exerciseMarksAuth.currentUser?.uid ==
+                            activeUid
+                        ) {
+                            _remoteCoachExerciseMarks.value = marks
+
+                            Log.d(
+                                "KMI_COACH_MARKS",
+                                "Firestore coach marks received: " +
+                                        "count=${marks.size}"
+                            )
+                        }
+                    }
+            }
+        }
 
         exerciseMarksJob = uid?.let { activeUid ->
             viewModelScope.launch {
@@ -117,10 +157,84 @@ class KmiViewModel(
                     }
                     .collect { marks ->
                         if (exerciseMarksAuth.currentUser?.uid == activeUid) {
-                            _remoteExerciseMarks.value = marks
+                            if (_remoteExerciseMarks.value != marks) {
+                                _remoteExerciseMarks.value = marks
+
+                                _marksVersion.value =
+                                    _marksVersion.value + 1L
+                            }
+
+                            Log.d(
+                                "KMI_EXERCISE_MARKS",
+                                "Firestore marks received: " +
+                                        "count=${marks.size} " +
+                                        "uid=$activeUid"
+                            )
                         }
                     }
             }
+        }
+    }
+
+    fun getRemoteExerciseMark(
+        belt: Belt,
+        canonicalTopicKey: String,
+        canonicalExerciseId: String
+    ): UserProgressRepository.ExerciseMark? {
+
+        if (
+            canonicalTopicKey.isBlank() ||
+            canonicalExerciseId.isBlank()
+        ) {
+            return null
+        }
+
+        val documentId =
+            UserProgressRepository.exerciseMarkDocumentId(
+                belt = belt,
+                canonicalTopicKey = canonicalTopicKey,
+                canonicalExerciseId = canonicalExerciseId
+            )
+
+        return _remoteExerciseMarks.value[documentId]
+    }
+
+    fun getRemoteCoachExerciseMark(
+        belt: Belt,
+        canonicalTopicKey: String,
+        canonicalExerciseId: String
+    ): UserProgressRepository.CoachExerciseMark? {
+
+        if (
+            canonicalTopicKey.isBlank() ||
+            canonicalExerciseId.isBlank()
+        ) {
+            return null
+        }
+
+        val documentId =
+            UserProgressRepository.exerciseMarkDocumentId(
+                belt = belt,
+                canonicalTopicKey = canonicalTopicKey,
+                canonicalExerciseId = canonicalExerciseId
+            )
+
+        return _remoteCoachExerciseMarks.value[documentId]
+    }
+
+    private fun remoteMarkAsBoolean(
+        mark: UserProgressRepository.ExerciseMark
+    ): Boolean? {
+        return when (mark) {
+            UserProgressRepository.ExerciseMark.MASTERED ->
+                true
+
+            UserProgressRepository.ExerciseMark.PARTIALLY_KNOWN,
+            UserProgressRepository.ExerciseMark.UNKNOWN ->
+                false
+
+            UserProgressRepository.ExerciseMark.UNMARKED ->
+                null
         }
     }
 
@@ -318,11 +432,41 @@ class KmiViewModel(
         }
     }
 
-    /** ✅ NEW: Snapshot מהיר מה-cache עבור נושא מסוים (ללא IO) */
-    fun getTopicStatusSnapshot(belt: Belt, topic: String): Map<String, Boolean?> {
-        val t = canonicalTopicKey(topic)
-        val topicMap = masteredItems[belt.id]?.get(t) ?: return emptyMap()
-        return topicMap.toMap()
+    /** Snapshot משולב: Firestore + cache מקומי */
+    fun getTopicStatusSnapshot(
+        belt: Belt,
+        topic: String
+    ): Map<String, Boolean?> {
+
+        val canonicalTopic = canonicalTopicKey(topic)
+
+        val localSnapshot =
+            masteredItems[belt.id]
+                ?.get(canonicalTopic)
+                ?.toMap()
+                ?: emptyMap()
+
+        if (
+            canonicalTopic.isBlank() ||
+            localSnapshot.isEmpty()
+        ) {
+            return localSnapshot
+        }
+
+        return localSnapshot.mapValues { (item, localValue) ->
+
+            val remoteMark = getRemoteExerciseMark(
+                belt = belt,
+                canonicalTopicKey = canonicalTopic,
+                canonicalExerciseId = item
+            )
+
+            if (remoteMark != null) {
+                remoteMarkAsBoolean(remoteMark)
+            } else {
+                localValue
+            }
+        }
     }
 
     /** ✅ NEW: Snapshot מהיר של כל החגורה (ללא IO) */
@@ -564,6 +708,21 @@ class KmiViewModel(
     ): Boolean? {
         val canonicalTopic =
             canonicalTopicKey(topic)
+
+        if (
+            canonicalTopic.isNotBlank() &&
+            item.isNotBlank()
+        ) {
+            val remoteMark = getRemoteExerciseMark(
+                belt = belt,
+                canonicalTopicKey = canonicalTopic,
+                canonicalExerciseId = item
+            )
+
+            if (remoteMark != null) {
+                return remoteMarkAsBoolean(remoteMark)
+            }
+        }
 
         val cachedTopic =
             masteredItems[belt.id]
@@ -1267,6 +1426,7 @@ class KmiViewModel(
     override fun onCleared() {
         exerciseMarksAuth.removeAuthStateListener(exerciseMarksAuthListener)
         exerciseMarksJob?.cancel()
+        coachExerciseMarksJob?.cancel()
         super.onCleared()
     }
 }

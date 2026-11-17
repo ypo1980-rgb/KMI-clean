@@ -732,6 +732,8 @@ fun ExerciseExplanationDialog(
     }
 }
 
+private const val MAX_EXERCISE_NOTE_LENGTH = 5000
+
 @Composable
 fun ExerciseNoteEditorDialog(
     exerciseTitle: String = "",
@@ -773,6 +775,12 @@ fun ExerciseNoteEditorDialog(
     val secondaryTextColor =
         MaterialTheme.colorScheme.onSurfaceVariant
 
+    val noteCharacterCount =
+        noteText.length
+
+    val isNoteLengthValid =
+        noteCharacterCount <= MAX_EXERCISE_NOTE_LENGTH
+
     /*
      * בחירת גודל הכתב של המשתמש:
      * SMALL  = 0.80
@@ -800,11 +808,15 @@ fun ExerciseNoteEditorDialog(
         LocalLayoutDirection provides layoutDirection
     ) {
         AlertDialog(
-        onDismissRequest = onDismiss,
-        properties = androidx.compose.ui.window.DialogProperties(
-            dismissOnClickOutside = false,
-            dismissOnBackPress = true
-        ),
+            modifier = Modifier
+                .fillMaxWidth(0.94f)
+                .widthIn(max = 560.dp),
+            onDismissRequest = onDismiss,
+            properties = androidx.compose.ui.window.DialogProperties(
+                dismissOnClickOutside = false,
+                dismissOnBackPress = true,
+                usePlatformDefaultWidth = false
+            ),
         containerColor = Color.Transparent,
         tonalElevation = 0.dp,
         shape = RoundedCornerShape(34.dp),
@@ -912,7 +924,14 @@ fun ExerciseNoteEditorDialog(
                     ) {
                         OutlinedTextField(
                             value = noteText,
-                            onValueChange = onNoteChange,
+                            onValueChange = { updatedText ->
+                                if (
+                                    updatedText.length <=
+                                    MAX_EXERCISE_NOTE_LENGTH
+                                ) {
+                                    onNoteChange(updatedText)
+                                }
+                            },
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .heightIn(min = 170.dp)
@@ -961,6 +980,31 @@ fun ExerciseNoteEditorDialog(
                             )
                         )
                     }
+
+                    Text(
+                        text =
+                            if (isEnglish) {
+                                "$noteCharacterCount / $MAX_EXERCISE_NOTE_LENGTH characters"
+                            } else {
+                                "$noteCharacterCount / $MAX_EXERCISE_NOTE_LENGTH תווים"
+                            },
+                        modifier = Modifier.fillMaxWidth(),
+                        textAlign =
+                            if (isEnglish) {
+                                TextAlign.Left
+                            } else {
+                                TextAlign.Right
+                            },
+                        style = scaledTextStyle(
+                            KmiTypography.secondary
+                        ),
+                        color =
+                            if (isNoteLengthValid) {
+                                secondaryTextColor
+                            } else {
+                                MaterialTheme.colorScheme.error
+                            }
+                    )
 
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -1039,8 +1083,11 @@ fun ExerciseNoteEditorDialog(
                         Surface(
                             onClick = {
                                 if (noteText.isNotBlank()) {
-                                    onNoteChange("")
-                                    onDelete?.invoke()
+                                    if (onDelete != null) {
+                                        onDelete()
+                                    } else {
+                                        onNoteChange("")
+                                    }
                                 }
                             },
                             modifier = Modifier
@@ -1154,7 +1201,12 @@ fun ExerciseNoteEditorDialog(
                             }
 
                         Surface(
-                            onClick = onSave,
+                            onClick = {
+                                if (isNoteLengthValid) {
+                                    onSave()
+                                }
+                            },
+                            enabled = isNoteLengthValid,
                             modifier = Modifier
                                 .weight(1f)
                                 .heightIn(min = 50.dp),

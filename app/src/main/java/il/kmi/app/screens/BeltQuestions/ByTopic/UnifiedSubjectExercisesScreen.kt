@@ -13,6 +13,8 @@ import android.graphics.pdf.PdfDocument
 import android.util.Log
 import android.widget.Toast
 import com.google.firebase.auth.FirebaseAuth
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import androidx.core.content.FileProvider
 import androidx.core.content.edit
 import java.io.File
@@ -1682,8 +1684,14 @@ private fun SectionsContent(
 
     val favoriteCount =
         currentExercises.count { ref ->
-            statusIdFor(ref) in
-                    favoriteIds
+            favoriteIds.isNotEmpty() &&
+                    FavoritesStore.isFavorite(
+                        ExerciseSyncStore.resolveIdentity(
+                            belt = ref.belt,
+                            topic = ref.sectionTitle,
+                            rawItem = ref.rawItem
+                        )
+                    )
         }
 
     val taughtCount =
@@ -2152,6 +2160,19 @@ private fun BeltGroupsContent(
             mutableStateMapOf<String, CoachMaterialProgress>()
         }
 
+    val remoteCoachMarks by
+    vm.remoteCoachExerciseMarks.collectAsState()
+
+    val pendingCoachProgress =
+        remember(title) {
+            mutableStateMapOf<String, CoachMaterialProgress>()
+        }
+
+    val coachWriteMutexes =
+        remember(title) {
+            mutableMapOf<String, Mutex>()
+        }
+
     fun normalizeStatusPart(s: String): String =
         s.replace("\u200F", "")
             .replace("\u200E", "")
@@ -2310,6 +2331,65 @@ private fun BeltGroupsContent(
                 }
             }
         }
+
+        val pendingKey = "${belt.id}|$statusId"
+        pendingCoachProgress[pendingKey] = next
+
+        val uid = FirebaseAuth.getInstance().currentUser?.uid
+
+        if (uid.isNullOrBlank()) {
+            Log.w(
+                "KMI_COACH_MARKS",
+                "Coach mark not synced: no authenticated user"
+            )
+            return
+        }
+
+        val writeMutex =
+            coachWriteMutexes.getOrPut(pendingKey) {
+                Mutex()
+            }
+
+        persistenceScope.launch {
+            writeMutex.withLock {
+                val result = runCatching {
+                    UserProgressRepository.saveCoachExerciseMark(
+                        uid = uid,
+                        belt = belt,
+                        canonicalTopicKey = normalizeStatusPart(title),
+                        canonicalExerciseId = statusId,
+                        progress = UserProgressRepository.CoachExerciseMark(
+                            selectedStatuses =
+                                next.selectedStatuses
+                                    .map { it.storageValue }
+                                    .toSet(),
+                            updatedAtByStatus =
+                                next.updatedAtByStatus
+                                    .mapKeys { it.key.storageValue }
+                        )
+                    )
+                }
+
+                if (result.isSuccess) {
+                    Log.d(
+                        "KMI_COACH_MARKS",
+                        "Coach topic mark saved: " +
+                                "belt=${belt.id} " +
+                                "topic=$title exercise=$statusId"
+                    )
+                } else {
+                    Log.e(
+                        "KMI_COACH_MARKS",
+                        "Coach topic mark sync failed",
+                        result.exceptionOrNull()
+                    )
+                }
+
+                if (pendingCoachProgress[pendingKey] == next) {
+                    pendingCoachProgress.remove(pendingKey)
+                }
+            }
+        }
     }
 
     fun hardStatusIdFor(
@@ -2431,7 +2511,8 @@ private fun BeltGroupsContent(
     LaunchedEffect(
         groups,
         title,
-        isCoach
+        isCoach,
+        remoteCoachMarks
     ) {
         val cachedStatusesByBelt =
             groups
@@ -2579,11 +2660,46 @@ private fun BeltGroupsContent(
                         }
 
                     if (isCoach) {
-                        coachStates[statusId] =
-                            loadCoachProgress(
+                        val pendingKey =
+                            "${group.belt.id}|$statusId"
+
+                        val remote =
+                            vm.getRemoteCoachExerciseMark(
                                 belt = group.belt,
-                                statusId = statusId
+                                canonicalTopicKey =
+                                    normalizeStatusPart(title),
+                                canonicalExerciseId = statusId
                             )
+
+                        coachStates[statusId] =
+                            pendingCoachProgress[pendingKey]
+                                ?: remote?.let { mark ->
+                                    CoachMaterialProgress(
+                                        selectedStatuses =
+                                            mark.selectedStatuses
+                                                .map {
+                                                    CoachMaterialStatus.fromStorage(it)
+                                                }
+                                                .filter {
+                                                    it != CoachMaterialStatus.NOT_TAUGHT
+                                                }
+                                                .toSet(),
+                                        updatedAtByStatus =
+                                            mark.updatedAtByStatus
+                                                .mapKeys {
+                                                    CoachMaterialStatus.fromStorage(
+                                                        it.key
+                                                    )
+                                                }
+                                                .filterKeys {
+                                                    it != CoachMaterialStatus.NOT_TAUGHT
+                                                }
+                                    )
+                                }
+                                        ?: loadCoachProgress(
+                                    belt = group.belt,
+                                    statusId = statusId
+                                )
                     }
                 }
             }
@@ -2616,16 +2732,29 @@ private fun BeltGroupsContent(
         .favoritesFlow
         .collectAsState(initial = emptySet())
 
-    fun hardFavoriteIdFor(
+    fun hardFavoriteIdentityFor(
         belt: Belt,
         topic: String,
         rawItem: String
-    ): String {
-        return syncIdentityFor(
-            belt = belt,
-            topic = topic,
-            rawItem = rawItem
-        ).exerciseId
+    ) = syncIdentityFor(
+        belt = belt,
+        topic = topic,
+        rawItem = rawItem
+    )
+
+    fun isHardFavoriteFor(
+        belt: Belt,
+        topic: String,
+        rawItem: String
+    ): Boolean {
+        return favoriteIds.isNotEmpty() &&
+                FavoritesStore.isFavorite(
+                    hardFavoriteIdentityFor(
+                        belt = belt,
+                        topic = topic,
+                        rawItem = rawItem
+                    )
+                )
     }
 
     var selectedExercise by remember {
@@ -2658,6 +2787,18 @@ private fun BeltGroupsContent(
             topic = topic,
             rawItem = rawItem
         ).aliases
+    }
+
+    fun hardNotePrimaryIdFor(
+        belt: Belt,
+        topic: String,
+        rawItem: String
+    ): String {
+        return syncIdentityFor(
+            belt = belt,
+            topic = topic,
+            rawItem = rawItem
+        ).exerciseId
     }
 
     fun exclusionKeyFor(
@@ -2922,6 +3063,26 @@ private fun BeltGroupsContent(
         exclusionsRefreshKey++
     }
 
+    fun observeHardNote(
+        belt: Belt,
+        topic: String,
+        rawItem: String
+    ) = ExerciseNotesStore.observeNote(
+        context = context,
+        belt = belt,
+        exerciseId = hardNotePrimaryIdFor(
+            belt = belt,
+            topic = topic,
+            rawItem = rawItem
+        ),
+        aliases = hardNoteAliasesFor(
+            belt = belt,
+            topic = topic,
+            rawItem = rawItem
+        ),
+        allowLegacyMigration = true
+    )
+
     fun loadHardNote(
         belt: Belt,
         topic: String,
@@ -2936,7 +3097,11 @@ private fun BeltGroupsContent(
             )
 
         val primaryId =
-            aliases.firstOrNull()
+            hardNotePrimaryIdFor(
+                belt = belt,
+                topic = topic,
+                rawItem = rawItem
+            ).takeIf { it.isNotBlank() }
                 ?: return ""
 
         return ExerciseNotesStore.loadNote(
@@ -2963,7 +3128,11 @@ private fun BeltGroupsContent(
             )
 
         val primaryId =
-            aliases.firstOrNull()
+            hardNotePrimaryIdFor(
+                belt = belt,
+                topic = topic,
+                rawItem = rawItem
+            ).takeIf { it.isNotBlank() }
                 ?: return
 
         ExerciseNotesStore.saveNote(
@@ -2991,7 +3160,11 @@ private fun BeltGroupsContent(
             )
 
         val primaryId =
-            aliases.firstOrNull()
+            hardNotePrimaryIdFor(
+                belt = belt,
+                topic = topic,
+                rawItem = rawItem
+            ).takeIf { it.isNotBlank() }
                 ?: return
 
         ExerciseNotesStore.deleteNote(
@@ -3108,11 +3281,11 @@ private fun BeltGroupsContent(
 
     val currentGroupFavoriteCount =
         currentStickyExercises.count { row ->
-            hardFavoriteIdFor(
+            isHardFavoriteFor(
                 belt = row.belt,
                 topic = title,
                 rawItem = row.rawItem
-            ) in favoriteIds
+            )
         }
 
     val currentGroupUnmarkedCount =
@@ -3275,11 +3448,11 @@ private fun BeltGroupsContent(
 
                             val beltFavoriteCount =
                                 beltExercises.count { exercise ->
-                                    hardFavoriteIdFor(
+                                    isHardFavoriteFor(
                                         belt = exercise.belt,
                                         topic = title,
                                         rawItem = exercise.rawItem
-                                    ) in favoriteIds
+                                    )
                                 }
 
                             val beltUnmarkedCount =
@@ -3315,8 +3488,9 @@ private fun BeltGroupsContent(
                         val belt = row.belt
                         val rawItem = row.rawItem
                         val statusId = row.statusId
-                        val favoriteId =
-                            hardFavoriteIdFor(
+
+                        val favoriteIdentity =
+                            hardFavoriteIdentityFor(
                                 belt = belt,
                                 topic = title,
                                 rawItem = rawItem
@@ -3338,7 +3512,10 @@ private fun BeltGroupsContent(
                             }
 
                         val isFavorite =
-                            favoriteId in favoriteIds
+                            favoriteIds.isNotEmpty() &&
+                                    FavoritesStore.isFavorite(
+                                        favoriteIdentity
+                                    )
 
                         val isExcluded =
                             exclusionsRefreshKey.let {
@@ -3349,19 +3526,28 @@ private fun BeltGroupsContent(
                                 )
                             }
 
-                        val noteText =
+                        val exerciseNoteFlow =
                             remember(
                                 belt,
                                 rawItem,
                                 title,
                                 notesRefreshKey
                             ) {
-                                loadHardNote(
+                                observeHardNote(
                                     belt = belt,
                                     topic = title,
                                     rawItem = rawItem
                                 )
                             }
+
+                        val noteText by
+                        exerciseNoteFlow.collectAsState(
+                            initial = loadHardNote(
+                                belt = belt,
+                                topic = title,
+                                rawItem = rawItem
+                            )
+                        )
 
                         HardExerciseRowCard(
                             belt = belt,
@@ -3482,7 +3668,7 @@ private fun BeltGroupsContent(
                             },
                             onToggleFavorite = {
                                 FavoritesStore.toggle(
-                                    favoriteId
+                                    favoriteIdentity
                                 )
                             },
                             onToggleExclude = {
@@ -3539,26 +3725,35 @@ private fun BeltGroupsContent(
                 }
             }
 
-        val favoriteId =
-            hardFavoriteIdFor(
+        val favoriteIdentity =
+            hardFavoriteIdentityFor(
                 belt = selected.belt,
                 topic = selected.topic,
                 rawItem = selected.rawItem
             )
 
-        val selectedNoteText =
+        val selectedNoteFlow =
             remember(
                 selected.belt,
                 selected.topic,
                 selected.rawItem,
                 notesRefreshKey
             ) {
-                loadHardNote(
+                observeHardNote(
                     belt = selected.belt,
                     topic = selected.topic,
                     rawItem = selected.rawItem
                 )
             }
+
+        val selectedNoteText by
+        selectedNoteFlow.collectAsState(
+            initial = loadHardNote(
+                belt = selected.belt,
+                topic = selected.topic,
+                rawItem = selected.rawItem
+            )
+        )
 
         ExerciseExplanationDialog(
             title = selected.displayItem,
@@ -3569,22 +3764,21 @@ private fun BeltGroupsContent(
                 ),
             explanation = explanation,
             noteText = selectedNoteText,
-            isFavorite = favoriteId in favoriteIds,
+            isFavorite =
+                favoriteIds.isNotEmpty() &&
+                        FavoritesStore.isFavorite(
+                            favoriteIdentity
+                        ),
             accentColor = selected.belt.color,
             isEnglish = isEnglish,
             onDismiss = {
                 selectedExercise = null
             },
             onEditNote = {
+                noteDraft = selectedNoteText
+
                 noteEditorExercise =
                     selected
-
-                noteDraft =
-                    loadHardNote(
-                        belt = selected.belt,
-                        topic = selected.topic,
-                        rawItem = selected.rawItem
-                    )
             },
             onDeleteNote = {
                 deleteHardNote(
@@ -3597,7 +3791,7 @@ private fun BeltGroupsContent(
             },
             onToggleFavorite = {
                 FavoritesStore.toggle(
-                    favoriteId
+                    favoriteIdentity
                 )
             }
         )
@@ -3618,6 +3812,7 @@ private fun BeltGroupsContent(
                 noteDraft = value
             },
             onDismiss = {
+                noteDraft = ""
                 noteEditorExercise = null
             },
             onSave = {
@@ -3631,11 +3826,9 @@ private fun BeltGroupsContent(
                     note = cleanNote
                 )
 
-                noteDraft =
-                    cleanNote
+                noteDraft = ""
 
-                noteEditorExercise =
-                    null
+                noteEditorExercise = null
             },
             onDelete = {
                 deleteHardNote(
