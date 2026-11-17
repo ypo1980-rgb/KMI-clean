@@ -1,17 +1,21 @@
 package il.kmi.app
 
 import android.content.SharedPreferences
+import android.util.Log
 import androidx.compose.runtime.State
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.google.firebase.auth.FirebaseAuth
 import il.kmi.shared.domain.Belt
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import il.kmi.app.search.AppSearchHit
 import il.kmi.app.search.KmiSearchBridge
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.collect
 import il.kmi.app.data.training.TrainingSummaryLocalRepo
 import il.kmi.app.screens.BeltQuestions.ByTopic.SubjectTopicsUiLogic
 import kotlinx.coroutines.launch
@@ -84,6 +88,41 @@ class KmiViewModel(
     // ✅ NEW: כל שינוי סימון מגדיל גרסה כדי לרענן ProgressMeter בלי IO
     private val _marksVersion = MutableStateFlow(0L)
     val marksVersion: StateFlow<Long> = _marksVersion.asStateFlow()
+
+    private val _remoteExerciseMarks =
+        MutableStateFlow<Map<String, UserProgressRepository.ExerciseMark>>(emptyMap())
+    val remoteExerciseMarks = _remoteExerciseMarks.asStateFlow()
+
+    private val exerciseMarksAuth = FirebaseAuth.getInstance()
+    private var exerciseMarksUid: String? = null
+    private var exerciseMarksJob: Job? = null
+
+    private val exerciseMarksAuthListener = FirebaseAuth.AuthStateListener { auth ->
+        val uid = auth.currentUser?.uid
+        if (uid == exerciseMarksUid) return@AuthStateListener
+
+        exerciseMarksJob?.cancel()
+        exerciseMarksUid = uid
+        _remoteExerciseMarks.value = emptyMap()
+
+        exerciseMarksJob = uid?.let { activeUid ->
+            viewModelScope.launch {
+                UserProgressRepository.observeExerciseMarks(activeUid)
+                    .catch { error ->
+                        Log.w(
+                            "KMI_EXERCISE_MARKS",
+                            "Exercise mark listener failed",
+                            error
+                        )
+                    }
+                    .collect { marks ->
+                        if (exerciseMarksAuth.currentUser?.uid == activeUid) {
+                            _remoteExerciseMarks.value = marks
+                        }
+                    }
+            }
+        }
+    }
 
     fun setSelectedBelt(belt: Belt) {
         /*
@@ -1220,8 +1259,15 @@ class KmiViewModel(
     }
 
     init {
+        exerciseMarksAuth.addAuthStateListener(exerciseMarksAuthListener)
         preloadTopicsBySubjectCounts()
         preloadAllItemStatuses()
+    }
+
+    override fun onCleared() {
+        exerciseMarksAuth.removeAuthStateListener(exerciseMarksAuthListener)
+        exerciseMarksJob?.cancel()
+        super.onCleared()
     }
 }
 

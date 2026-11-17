@@ -52,7 +52,10 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.zIndex
 import androidx.core.content.edit
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.DocumentSnapshot
 import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.ListenerRegistration
+import com.google.firebase.firestore.MetadataChanges
 import il.kmi.app.attendance.data.AttendanceRepository
 import il.kmi.app.attendance.data.TrainingAttendanceForecast
 import il.kmi.app.database.KmiDatabaseProvider
@@ -832,6 +835,54 @@ internal data class HomeCoachAssignmentsState(
             branchType == "abroad"
 }
 
+internal object UserProfileSnapshots {
+    private class Subscription {
+        val observers = mutableSetOf<(DocumentSnapshot) -> Unit>()
+        var latest: DocumentSnapshot? = null
+        var registration: ListenerRegistration? = null
+    }
+
+    private val subscriptions = mutableMapOf<String, Subscription>()
+
+    fun observe(
+        uid: String,
+        onProfile: (DocumentSnapshot) -> Unit
+    ): () -> Unit {
+        val subscription = subscriptions.getOrPut(uid) { Subscription() }
+        subscription.observers.add(onProfile)
+
+        subscription.latest?.let(onProfile)
+
+        if (subscription.registration == null) {
+            subscription.registration = FirebaseFirestore.getInstance()
+                .collection("users")
+                .document(uid)
+                .addSnapshotListener(MetadataChanges.INCLUDE) { document, error ->
+                    if (
+                        error == null &&
+                        document != null &&
+                        !document.metadata.isFromCache &&
+                        !document.metadata.hasPendingWrites() &&
+                        FirebaseAuth.getInstance().currentUser?.uid == uid
+                    ) {
+                        subscription.latest = document
+                        subscription.observers.toList().forEach { observer ->
+                            observer(document)
+                        }
+                    }
+                }
+        }
+
+        return {
+            subscription.observers.remove(onProfile)
+            if (subscription.observers.isEmpty()) {
+                subscription.registration?.remove()
+                subscriptions.remove(uid)
+            }
+        }
+    }
+}
+
 @Composable
 internal fun rememberHomeCoachAssignmentsState(
     currentUid: String?,
@@ -847,6 +898,10 @@ internal fun rememberHomeCoachAssignmentsState(
 
     var branchesRefreshTick by remember {
         mutableIntStateOf(0)
+    }
+
+    var syncedCoachAssignments by remember(currentUid) {
+        mutableStateOf<List<CoachBranchAssignment>?>(null)
     }
 
     var coachName by remember(userSp) {
@@ -910,137 +965,91 @@ internal fun rememberHomeCoachAssignmentsState(
         }
     }
 
-    LaunchedEffect(
-        currentUid,
-        userSp
-    ) {
-        val uid =
-            currentUid
-                ?.trim()
-                .orEmpty()
+    DisposableEffect(currentUid, userSp) {
+        val uid = currentUid?.trim().orEmpty()
 
-        if (uid.isBlank()) {
-            return@LaunchedEffect
+        if (uid.isEmpty()) {
+            onDispose { }
+        } else {
+            val firestore = FirebaseFirestore.getInstance()
+            var coachAccessActive: Boolean? = null
+            var legacyAssignments: List<CoachBranchAssignment> = emptyList()
+            var selectedAssignments: List<CoachBranchAssignment>? = null
+            var selectionLoaded = false
+
+            fun decodeAssignments(value: Any?): List<CoachBranchAssignment> {
+                return (value as? List<*>).orEmpty().mapNotNull { entry ->
+                    val assignment = entry as? Map<*, *> ?: return@mapNotNull null
+                    val branch = (assignment["branch"] as? String)?.trim().orEmpty()
+
+                    if (branch.isEmpty()) {
+                        return@mapNotNull null
+                    }
+
+                    val groups = (assignment["groups"] as? List<*>).orEmpty()
+                        .mapNotNull { (it as? String)?.trim()?.takeIf { name -> name.isNotEmpty() } }
+                        .distinct()
+
+                    CoachBranchAssignment(branch = branch, groups = groups)
+                }
+            }
+
+            fun publishAssignments() {
+                val active = coachAccessActive ?: return
+
+                if (!active) {
+                    syncedCoachAssignments = emptyList()
+                    return
+                }
+
+                if (!selectionLoaded) return
+
+                syncedCoachAssignments = selectedAssignments ?: legacyAssignments
+            }
+
+            val authorizationListener = firestore.collection("authorizedCoaches")
+                .document(uid)
+                .addSnapshotListener { document, error ->
+                    if (error != null || document == null ||
+                        FirebaseAuth.getInstance().currentUser?.uid != uid
+                    ) {
+                        return@addSnapshotListener
+                    }
+
+                    val activeCoach = document.exists() &&
+                            document.getBoolean("active") == true &&
+                            document.getBoolean("accessRevokedByAdmin") != true &&
+                            document.getBoolean("canOpenCoachDrawer") == true &&
+                            document.getString("role").orEmpty().equals("coach", ignoreCase = true)
+
+                    coachAccessActive = activeCoach
+                    legacyAssignments = if (activeCoach) {
+                        decodeAssignments(document.get("coachBranchAssignments"))
+                    } else {
+                        emptyList()
+                    }
+
+                    val remoteCoachName = document.getString("fullName")?.trim().orEmpty()
+                    if (activeCoach && remoteCoachName.isNotEmpty()) {
+                        coachName = remoteCoachName
+                        userSp.edit { putString("coach_name", remoteCoachName) }
+                    }
+
+                    publishAssignments()
+                }
+
+            val stopObservingProfile = UserProfileSnapshots.observe(uid) { document ->
+                selectedAssignments = document.get("coachSelectedBranchAssignments")
+                    ?.let { decodeAssignments(it) }
+                selectionLoaded = true
+                publishAssignments()
+            }
+
+            onDispose {
+                authorizationListener.remove()
+                stopObservingProfile()
+            }
         }
-
-        FirebaseFirestore
-            .getInstance()
-            .collection("authorizedCoaches")
-            .document(uid)
-            .get()
-            .addOnSuccessListener { document ->
-
-                if (!document.exists()) {
-                    return@addOnSuccessListener
-                }
-
-                if (
-                    document.getBoolean("active") != true ||
-                    !document
-                        .getString("role")
-                        .orEmpty()
-                        .equals(
-                            "coach",
-                            ignoreCase = true
-                        )
-                ) {
-                    return@addOnSuccessListener
-                }
-
-                val remoteAssignments =
-                    (document.get("coachBranchAssignments")
-                            as? List<*>)
-                        .orEmpty()
-                        .mapNotNull { rawAssignment ->
-                            val assignment =
-                                rawAssignment as? Map<*, *>
-                                    ?: return@mapNotNull null
-
-                            val branch =
-                                assignment["branch"]
-                                    ?.toString()
-                                    ?.trim()
-                                    .orEmpty()
-
-                            if (branch.isBlank()) {
-                                return@mapNotNull null
-                            }
-
-                            val groups =
-                                (assignment["groups"] as? List<*>)
-                                    .orEmpty()
-                                    .mapNotNull { value ->
-                                        value
-                                            ?.toString()
-                                            ?.trim()
-                                            ?.takeIf {
-                                                it.isNotBlank()
-                                            }
-                                    }
-                                    .distinct()
-
-                            CoachBranchAssignment(
-                                branch = branch,
-                                groups = groups
-                            )
-                        }
-                        .distinctBy { assignment ->
-                            assignment.branch
-                        }
-
-                val remoteCoachName =
-                    document
-                        .getString("fullName")
-                        ?.trim()
-                        .orEmpty()
-
-                val localAssignmentsJson =
-                    userSp
-                        .getString(
-                            "coach_branch_assignments_json",
-                            ""
-                        )
-                        .orEmpty()
-                        .trim()
-
-                val shouldHydrateAssignmentsFromRemote =
-                    localAssignmentsJson.isBlank() &&
-                            remoteAssignments.isNotEmpty()
-
-                userSp.edit {
-                    if (shouldHydrateAssignmentsFromRemote) {
-                        putString(
-                            "coach_branch_assignments_json",
-                            CoachBranchAssignmentsCodec.encode(
-                                remoteAssignments
-                            )
-                        )
-                    }
-
-                    if (remoteCoachName.isNotBlank()) {
-                        putString(
-                            "coach_name",
-                            remoteCoachName
-                        )
-                    }
-                }
-
-                if (remoteCoachName.isNotBlank()) {
-                    coachName =
-                        remoteCoachName
-                }
-
-                if (shouldHydrateAssignmentsFromRemote) {
-                    branchesRefreshTick++
-                    groupsRefreshTick++
-                }
-            }
-            .addOnFailureListener {
-                /*
-                 * כשל זמני בטעינת הרשאת המאמן אינו
-                 * מוחק את המטמון המקומי האחרון.
-                 */
-            }
     }
 
     val branchType =
@@ -1161,6 +1170,7 @@ internal fun rememberHomeCoachAssignmentsState(
 
     val branchGroupPairs =
         remember(
+            syncedCoachAssignments,
             branchAssignments,
             selectedProfileBranches,
             context
@@ -1187,13 +1197,13 @@ internal fun rememberHomeCoachAssignmentsState(
                     }
                     .toSet()
 
-            branchAssignments
-                .filter { assignment ->
+            val effectiveAssignments = syncedCoachAssignments
+                ?: branchAssignments.filter { assignment ->
                     selectedBranchKeys.isEmpty() ||
-                            normalizeBranchName(
-                                assignment.branch
-                            ) in selectedBranchKeys
+                            normalizeBranchName(assignment.branch) in selectedBranchKeys
                 }
+
+            effectiveAssignments
                 .flatMap { assignment ->
                     assignment.groups.map { groupName ->
                         assignment.branch.trim() to

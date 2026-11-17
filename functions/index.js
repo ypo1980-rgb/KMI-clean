@@ -1718,6 +1718,200 @@ exports.onKamiContactRequestCreated =
  * The token is random. Only its SHA-256 hash
  * is stored in Firestore.
  */
+function canCoachGenerateAttendanceQr(
+  coachSnapshot,
+  userSnapshot,
+  catalogSnapshot,
+  branch,
+  group
+) {
+  const coach = coachSnapshot.data() || {};
+  if (
+    !coachSnapshot.exists ||
+    coach.active !== true ||
+    coach.accessRevokedByAdmin === true ||
+    String(coach.role || "").trim().toLowerCase() !== "coach" ||
+    coach.canManageAttendance !== true
+  ) {
+    return false;
+  }
+
+  const user = userSnapshot.data() || {};
+  const selected = user.coachSelectedBranchAssignments;
+  const catalog = catalogSnapshot.data() || {};
+  const branchKey = normalizeTrainingTargetText(branch);
+  const groupKey = normalizeTrainingTargetText(group);
+
+  if (
+    !branchKey ||
+    !groupKey ||
+    !Array.isArray(selected) ||
+    !Array.isArray(catalog.branches)
+  ) {
+    return false;
+  }
+
+  const isSelected = selected.some((assignment) =>
+    normalizeTrainingTargetText(assignment?.branch) === branchKey &&
+    Array.isArray(assignment?.groups) &&
+    assignment.groups.some((value) =>
+      normalizeTrainingTargetText(value) === groupKey
+    )
+  );
+
+  return isSelected && catalog.branches.some((entry) =>
+    entry?.active === true &&
+    normalizeTrainingTargetText(entry.nameHe) === branchKey &&
+    Array.isArray(entry.trainingDays) &&
+    entry.trainingDays.some((slot) =>
+      normalizeTrainingTargetText(slot?.groupHe) === groupKey
+    )
+  );
+}
+
+async function rebuildCoachAttendanceSelection(uid) {
+      const selectionField = "coachSelectedBranchAssignments";
+      const userRef = db.collection("users").doc(uid);
+      const selectionRef = db.collection("coachAttendanceSelections").doc(uid);
+      const catalogRef = db.collection("kmiCatalog").doc("current");
+
+      await db.runTransaction(async (transaction) => {
+        const [userSnapshot, catalogSnapshot] = await Promise.all([
+          transaction.get(userRef),
+          transaction.get(catalogRef),
+        ]);
+
+        const selected = userSnapshot.data()?.[selectionField];
+        const catalog = catalogSnapshot.data();
+
+        if (
+          !Array.isArray(selected) ||
+          !Number.isSafeInteger(catalog?.version) ||
+          !Array.isArray(catalog.branches)
+        ) {
+          transaction.delete(selectionRef);
+          return;
+        }
+
+        const activeCatalogPairs = new Map();
+
+        for (const branch of catalog.branches) {
+          if (branch?.active !== true || !Array.isArray(branch.trainingDays)) {
+            continue;
+          }
+
+          const branchKey = normalizeTrainingTargetText(branch.nameHe);
+          if (!branchKey) continue;
+
+          for (const slot of branch.trainingDays) {
+            const groupKey = normalizeTrainingTargetText(slot?.groupHe);
+            if (!groupKey) continue;
+
+            activeCatalogPairs.set(
+              JSON.stringify([branchKey, groupKey]),
+              { branch: branch.nameHe, group: slot.groupHe }
+            );
+          }
+        }
+
+        const branches = new Set();
+        const branchGroups = new Set();
+
+        for (const assignment of selected) {
+          const branchKey = normalizeTrainingTargetText(assignment?.branch);
+          if (!branchKey || !Array.isArray(assignment?.groups)) continue;
+
+          for (const group of assignment.groups) {
+            const groupKey = normalizeTrainingTargetText(group);
+            const pair = activeCatalogPairs.get(
+              JSON.stringify([branchKey, groupKey])
+            );
+
+            if (!pair) continue;
+
+            branches.add(pair.branch);
+            branchGroups.add(pair.branch + "||" + pair.group);
+          }
+        }
+
+        transaction.set(selectionRef, {
+          sourceSelection: selected,
+          catalogVersion: catalog.version,
+          branches: Array.from(branches).sort(),
+          branchGroups: Array.from(branchGroups).sort(),
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+      });
+}
+
+exports.syncCoachAttendanceSelection =
+  functions
+    .region("europe-west1")
+    .firestore
+    .document("users/{uid}")
+    .onWrite(async (change, context) => {
+      const field = "coachSelectedBranchAssignments";
+      const before = change.before.data()?.[field] ?? null;
+      const after = change.after.data()?.[field] ?? null;
+
+      if (
+        change.before.exists === change.after.exists &&
+        JSON.stringify(before) === JSON.stringify(after)
+      ) {
+        return null;
+      }
+
+      await rebuildCoachAttendanceSelection(context.params.uid);
+      return null;
+    });
+
+exports.rebuildCoachAttendanceSelectionsOnCatalogWrite =
+  functions
+    .region("europe-west1")
+    .runWith({ timeoutSeconds: 540 })
+    .firestore
+    .document("kmiCatalog/current")
+    .onWrite(async (change) => {
+      if (!change.after.exists) {
+        return null;
+      }
+
+      const baseQuery = db.collection("authorizedCoaches")
+        .where("active", "==", true)
+        .orderBy(admin.firestore.FieldPath.documentId());
+
+      const pageSize = 50;
+      const batchSize = 10;
+      let cursor = null;
+      let processed = 0;
+
+      while (true) {
+        const query = cursor ? baseQuery.startAfter(cursor) : baseQuery;
+        const page = await query.limit(pageSize).get();
+
+        if (page.empty) {
+          break;
+        }
+
+        for (let offset = 0; offset < page.docs.length; offset += batchSize) {
+          const batch = page.docs.slice(offset, offset + batchSize);
+          await Promise.all(
+            batch.map((coach) => rebuildCoachAttendanceSelection(coach.id))
+          );
+          processed += batch.length;
+        }
+
+        cursor = page.docs[page.docs.length - 1];
+
+        if (page.size < pageSize) {
+          break;
+        }
+      }
+
+      console.log("KMI_COACH_ATTENDANCE_SELECTIONS_REBUILT", { processed });
+      return null;
+    });
+
 exports.createKamiAttendanceQr =
   functions
     .region("europe-west1")
@@ -1750,14 +1944,21 @@ exports.createKamiAttendanceQr =
         );
       }
 
+      const userRef = db.collection("users").doc(uid);
+      const catalogRef = db.collection("kmiCatalog").doc("current");
+
       const [
         adminSnapshot,
         coachSnapshot,
+        userSnapshot,
+        catalogSnapshot,
         occurrenceSnapshot,
         overrideSnapshot,
       ] = await Promise.all([
         db.collection("admins").doc(uid).get(),
         db.collection("authorizedCoaches").doc(uid).get(),
+        userRef.get(),
+        catalogRef.get(),
         db.collection("trainingOccurrences")
           .doc(occurrenceId).get(),
         db.collection("trainingOverrides")
@@ -1798,59 +1999,19 @@ exports.createKamiAttendanceQr =
       const adminData =
         adminSnapshot.data() || {};
 
-      const coachData =
-        coachSnapshot.data() || {};
-
       const isAdmin =
         adminSnapshot.exists &&
         adminData.enabled === true;
 
-      const isCoach =
-        coachSnapshot.exists &&
-        coachData.active === true &&
-        String(coachData.role || "")
-          .trim()
-          .toLowerCase() === "coach" &&
-        coachData.canManageAttendance === true;
-
-      const requestedPair =
-        normalizeTrainingTargetText(branch) +
-        "||" +
-        normalizeTrainingTargetText(group);
-
-      const allowedPairs =
-        Array.isArray(coachData.authorizedBranchGroups)
-          ? coachData.authorizedBranchGroups
-          : [];
-
-      const hasGroupPermission =
-        allowedPairs.some((value) => {
-          const raw = String(value || "");
-          const separator = raw.indexOf("||");
-
-          if (separator <= 0) {
-            return false;
-          }
-
-          const pairBranch =
-            normalizeTrainingTargetText(
-              raw.substring(0, separator)
-            );
-
-          const pairGroup =
-            normalizeTrainingTargetText(
-              raw.substring(separator + 2)
-            );
-
-          return (
-            `${pairBranch}||${pairGroup}` ===
-            requestedPair
-          );
-        });
-
       if (
         !isAdmin &&
-        !(isCoach && hasGroupPermission)
+        !canCoachGenerateAttendanceQr(
+          coachSnapshot,
+          userSnapshot,
+          catalogSnapshot,
+          branch,
+          group
+        )
       ) {
         throw new functions.https.HttpsError(
           "permission-denied",
@@ -2118,6 +2279,8 @@ exports.createKamiAttendanceQr =
           currentOverrideSnapshot,
           currentAdminSnapshot,
           currentCoachSnapshot,
+          currentUserSnapshot,
+          currentCatalogSnapshot,
         ] = await Promise.all([
           transaction.get(occurrenceRef),
           transaction.get(overrideRef),
@@ -2127,6 +2290,8 @@ exports.createKamiAttendanceQr =
           transaction.get(
             db.collection("authorizedCoaches").doc(uid)
           ),
+          transaction.get(userRef),
+          transaction.get(catalogRef),
         ]);
 
         if (!currentOccurrenceSnapshot.exists) {
@@ -2152,54 +2317,19 @@ exports.createKamiAttendanceQr =
         const currentAdmin =
           currentAdminSnapshot.data() || {};
 
-        const currentCoach =
-          currentCoachSnapshot.data() || {};
-
         const currentlyAdmin =
           currentAdminSnapshot.exists &&
           currentAdmin.enabled === true;
 
-        const currentlyCoach =
-          currentCoachSnapshot.exists &&
-          currentCoach.active === true &&
-          String(currentCoach.role || "")
-            .trim()
-            .toLowerCase() === "coach" &&
-          currentCoach.canManageAttendance === true;
-
-        const currentAssignments =
-          Array.isArray(currentCoach.authorizedBranchGroups)
-            ? currentCoach.authorizedBranchGroups
-            : [];
-
-        const currentlyAssigned =
-          currentAssignments.some((value) => {
-            const raw = String(value || "");
-            const separator = raw.indexOf("||");
-
-            if (separator <= 0) {
-              return false;
-            }
-
-            const assignedBranch =
-              normalizeTrainingTargetText(
-                raw.substring(0, separator)
-              );
-
-            const assignedGroup =
-              normalizeTrainingTargetText(
-                raw.substring(separator + 2)
-              );
-
-            return (
-              `${assignedBranch}||${assignedGroup}` ===
-              requestedPair
-            );
-          });
-
         if (
           !currentlyAdmin &&
-          !(currentlyCoach && currentlyAssigned)
+          !canCoachGenerateAttendanceQr(
+            currentCoachSnapshot,
+            currentUserSnapshot,
+            currentCatalogSnapshot,
+            branch,
+            group
+          )
         ) {
           throw new functions.https.HttpsError(
             "permission-denied",

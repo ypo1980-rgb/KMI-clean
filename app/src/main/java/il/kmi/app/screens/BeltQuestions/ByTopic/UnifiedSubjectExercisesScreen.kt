@@ -10,7 +10,9 @@ import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.Typeface
 import android.graphics.pdf.PdfDocument
+import android.util.Log
 import android.widget.Toast
+import com.google.firebase.auth.FirebaseAuth
 import androidx.core.content.FileProvider
 import androidx.core.content.edit
 import java.io.File
@@ -86,6 +88,7 @@ import il.kmi.app.screens.BeltQuestions.Materials.MaterialsExerciseStatusCard
 import il.kmi.app.screens.BeltQuestions.Materials.TraineeMaterialStatus
 import il.kmi.app.screens.BeltQuestions.Materials.TraineeMaterialStatusSelector
 import il.kmi.app.favorites.FavoritesStore
+import il.kmi.app.progress.UserProgressRepository
 import il.kmi.app.ui.KmiTopBar
 import il.kmi.app.ui.KmiTypography
 import il.kmi.app.ui.dialogs.ExerciseExplanationDialog
@@ -103,6 +106,8 @@ import il.kmi.shared.localization.AppLanguage
 import il.kmi.shared.localization.LocalizationRuntime
 import il.yuval.ui.theme.kmiSectionHeaderBrush
 import il.yuval.ui.theme.kmiSectionHeaderContentColor
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -3030,6 +3035,40 @@ private fun BeltGroupsContent(
             }
         }
 
+    val remoteExerciseMarks by vm.remoteExerciseMarks.collectAsState()
+    val exerciseMarkTopicKey = normalizeStatusPart(title)
+
+    val markDocumentIds = remember(flatRows, exerciseMarkTopicKey) {
+        flatRows.filterIsInstance<HardBeltListRow.Exercise>()
+            .associateWith { row ->
+                UserProgressRepository.exerciseMarkDocumentId(
+                    belt = row.belt,
+                    canonicalTopicKey = exerciseMarkTopicKey,
+                    canonicalExerciseId = row.statusId
+                )
+            }
+    }
+
+    fun exerciseMarkFor(
+        row: HardBeltListRow.Exercise
+    ): UserProgressRepository.ExerciseMark {
+        val remoteMark = markDocumentIds[row]?.let { remoteExerciseMarks[it] }
+
+        return remoteMark ?: when {
+            hardPartiallyKnownStates[row.statusId] == true ->
+                UserProgressRepository.ExerciseMark.PARTIALLY_KNOWN
+
+            hardItemStates[row.statusId] == true ->
+                UserProgressRepository.ExerciseMark.MASTERED
+
+            hardItemStates[row.statusId] == false ->
+                UserProgressRepository.ExerciseMark.UNKNOWN
+
+            else ->
+                UserProgressRepository.ExerciseMark.UNMARKED
+        }
+    }
+
     val listState = rememberLazyListState()
 
     val currentStickyBelt by remember(flatRows, listState) {
@@ -3059,13 +3098,12 @@ private fun BeltGroupsContent(
 
     val currentGroupKnownCount =
         currentStickyExercises.count { row ->
-            hardItemStates[row.statusId] == true
+            exerciseMarkFor(row) == UserProgressRepository.ExerciseMark.MASTERED
         }
 
     val currentGroupUnknownCount =
         currentStickyExercises.count { row ->
-            hardItemStates[row.statusId] == false &&
-                    hardPartiallyKnownStates[row.statusId] != true
+            exerciseMarkFor(row) == UserProgressRepository.ExerciseMark.UNKNOWN
         }
 
     val currentGroupFavoriteCount =
@@ -3079,7 +3117,7 @@ private fun BeltGroupsContent(
 
     val currentGroupUnmarkedCount =
         currentStickyExercises.count { row ->
-            hardItemStates[row.statusId] == null
+            exerciseMarkFor(row) == UserProgressRepository.ExerciseMark.UNMARKED
         }
 
     val currentGroupTaughtCount =
@@ -3225,19 +3263,14 @@ private fun BeltGroupsContent(
 
                             val beltKnownCount =
                                 beltExercises.count { exercise ->
-                                    hardItemStates[
-                                        exercise.statusId
-                                    ] == true
+                                    exerciseMarkFor(exercise) ==
+                                            UserProgressRepository.ExerciseMark.MASTERED
                                 }
 
                             val beltUnknownCount =
                                 beltExercises.count { exercise ->
-                                    hardItemStates[
-                                        exercise.statusId
-                                    ] == false &&
-                                            hardPartiallyKnownStates[
-                                                exercise.statusId
-                                            ] != true
+                                    exerciseMarkFor(exercise) ==
+                                            UserProgressRepository.ExerciseMark.UNKNOWN
                                 }
 
                             val beltFavoriteCount =
@@ -3251,9 +3284,8 @@ private fun BeltGroupsContent(
 
                             val beltUnmarkedCount =
                                 beltExercises.count { exercise ->
-                                    hardItemStates[
-                                        exercise.statusId
-                                    ] == null
+                                    exerciseMarkFor(exercise) ==
+                                            UserProgressRepository.ExerciseMark.UNMARKED
                                 }
 
                             Spacer(
@@ -3290,8 +3322,13 @@ private fun BeltGroupsContent(
                                 rawItem = rawItem
                             )
 
-                        val mastered =
-                            hardItemStates[statusId]
+                        val exerciseMark = exerciseMarkFor(row)
+                        val mastered = when (exerciseMark) {
+                            UserProgressRepository.ExerciseMark.MASTERED -> true
+                            UserProgressRepository.ExerciseMark.PARTIALLY_KNOWN,
+                            UserProgressRepository.ExerciseMark.UNKNOWN -> false
+                            UserProgressRepository.ExerciseMark.UNMARKED -> null
+                        }
 
                         val displayItem =
                             if (isEnglish) {
@@ -3331,10 +3368,8 @@ private fun BeltGroupsContent(
                             item = displayItem,
                             isExcluded = isExcluded,
                             mastered = mastered,
-                            partiallyKnown =
-                                hardPartiallyKnownStates[
-                                    statusId
-                                ] == true,
+                            partiallyKnown = exerciseMark ==
+                                    UserProgressRepository.ExerciseMark.PARTIALLY_KNOWN,
                             isFavorite = isFavorite,
                             hasNote = noteText.isNotBlank(),
                             isEnglish = isEnglish,
@@ -3350,6 +3385,7 @@ private fun BeltGroupsContent(
                                 )
                             },
                             onTraineeStatusSelect = { selectedStatus ->
+                                Log.d("KMI_EXERCISE_MARKS", "Exercise mark tapped")
 
                                 val nextValue =
                                     when (selectedStatus) {
@@ -3404,6 +3440,44 @@ private fun BeltGroupsContent(
                                         partiallyKnown =
                                             isPartiallyKnown
                                     )
+                                }
+
+                                val uid = FirebaseAuth.getInstance().currentUser?.uid
+                                if (uid != null) {
+                                    val exerciseMark = when (selectedStatus) {
+                                        TraineeMaterialStatus.KNOWN ->
+                                            UserProgressRepository.ExerciseMark.MASTERED
+
+                                        TraineeMaterialStatus.PARTIALLY_KNOWN ->
+                                            UserProgressRepository.ExerciseMark.PARTIALLY_KNOWN
+
+                                        TraineeMaterialStatus.UNKNOWN ->
+                                            UserProgressRepository.ExerciseMark.UNKNOWN
+
+                                        null ->
+                                            UserProgressRepository.ExerciseMark.UNMARKED
+                                    }
+
+                                    persistenceScope.launch(start = CoroutineStart.UNDISPATCHED) {
+                                        try {
+                                            UserProgressRepository.saveExerciseMark(
+                                                uid = uid,
+                                                belt = belt,
+                                                canonicalTopicKey = normalizeStatusPart(title),
+                                                canonicalExerciseId = statusId,
+                                                mark = exerciseMark
+                                            )
+                                            Log.d("KMI_EXERCISE_MARKS", "Exercise mark saved")
+                                        } catch (cancelled: CancellationException) {
+                                            throw cancelled
+                                        } catch (error: Exception) {
+                                            Log.w(
+                                                "KMI_EXERCISE_MARKS",
+                                                "Exercise mark sync failed",
+                                                error
+                                            )
+                                        }
+                                    }
                                 }
                             },
                             onToggleFavorite = {

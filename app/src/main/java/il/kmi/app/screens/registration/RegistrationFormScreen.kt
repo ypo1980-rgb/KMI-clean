@@ -35,6 +35,7 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -69,6 +70,7 @@ import il.kmi.app.KmiCalendarSync
 import il.kmi.app.auth.GoogleAuthManager
 import il.kmi.app.database.KmiDatabaseProvider
 import il.kmi.app.hasCalendarPermission
+import il.kmi.app.screens.UserProfileSnapshots
 import il.kmi.app.training.TrainingAlarmReceiver
 import il.kmi.app.training.TrainingCatalog
 import il.kmi.app.ui.KmiTypography
@@ -1298,6 +1300,84 @@ fun RegistrationFormScreen(
         scrollToMissingField = null
     }
 
+    val profileSyncUserId = FirebaseAuth.getInstance().currentUser?.uid
+    val profileAssignmentsField =
+        if (isCoach) "coachSelectedBranchAssignments" else "traineeBranchAssignments"
+
+    DisposableEffect(
+        startAtProfile,
+        profileSyncUserId,
+        profileAssignmentsField,
+        branchesByRegion
+    ) {
+        if (!startAtProfile || profileSyncUserId.isNullOrBlank()) {
+            onDispose { }
+        } else {
+            var lastSyncedAssignments: List<CoachBranchAssignment>? = null
+
+            val stopObservingProfile = UserProfileSnapshots.observe(profileSyncUserId) { document ->
+                val savedAssignments = document.get(profileAssignmentsField) as? List<*>
+                    ?: return@observe
+
+                val assignments = savedAssignments.mapNotNull { entry ->
+                    val data = entry as? Map<*, *> ?: return@mapNotNull null
+                    val branch = (data["branch"] as? String)?.trim().orEmpty()
+                    if (branch.isEmpty()) return@mapNotNull null
+
+                    val groups = (data["groups"] as? List<*>).orEmpty()
+                        .mapNotNull { it as? String }
+
+                    CoachBranchAssignment(branch = branch, groups = groups).sanitized()
+                }
+
+                if (assignments == lastSyncedAssignments) return@observe
+                lastSyncedAssignments = assignments
+
+                val branches = assignments.map { it.branch }.distinct()
+                val groups = CoachBranchAssignmentsCodec.flattenGroups(assignments)
+                val regions = branchesByRegion.filterValues { catalogBranches ->
+                    catalogBranches.any { it in branches }
+                }.keys
+
+                didInitializeBranchAssignments = true
+
+                if (regions.isNotEmpty() || branches.isEmpty()) {
+                    selectedRegions.clear()
+                    selectedRegions.addAll(regions)
+                }
+
+                selectedBranches.clear()
+                selectedBranches.addAll(branches)
+                selectedGroups.clear()
+                selectedGroups.addAll(groups)
+
+                selectedGroupsByBranch.clear()
+                assignments.forEach { assignment ->
+                    selectedGroupsByBranch[assignment.branch] = assignment.groups
+                }
+
+                selectedBranch = branches.joinToString(", ")
+                selectedGroup = groups.joinToString(", ")
+
+                if (activeBranch !in branches) {
+                    activeBranch = branches.firstOrNull().orEmpty()
+                }
+
+                val groupsForActiveBranch = selectedGroupsByBranch[activeBranch].orEmpty()
+                if (activeGroup !in groupsForActiveBranch) {
+                    activeGroup = groupsForActiveBranch.firstOrNull().orEmpty()
+                }
+
+                regionError = false
+                branchError = false
+                groupError = false
+                scrollToMissingField = null
+            }
+
+            onDispose { stopObservingProfile() }
+        }
+    }
+
     // בחירה ידנית נשמרת רק כל עוד ההרשאה תקפה.
     LaunchedEffect(
         startAtProfile,
@@ -1740,6 +1820,42 @@ fun RegistrationFormScreen(
                             "Coach permission is no longer active."
                         } else {
                             "הרשאת המאמן אינה פעילה עוד."
+                        },
+                        Toast.LENGTH_LONG
+                    ).show()
+                    return
+                }
+
+                val selectedCoachBranches =
+                    if (selectedBranches.isNotEmpty()) {
+                        selectedBranches.toList()
+                    } else {
+                        selectedBranch.split(',', ';', '|', '\n')
+                    }
+                        .map { it.trim() }
+                        .filter { it.isNotEmpty() }
+                        .distinct()
+                        .take(10)
+
+                val hasInvalidCatalogSelection =
+                    selectedCoachBranches.any { branch ->
+                        val catalogGroups = groupsByBranch[branch].orEmpty()
+                        val chosenGroups = selectedGroupsByBranch[branch]
+                            .orEmpty()
+                            .map { it.trim() }
+                            .filter { it.isNotEmpty() }
+
+                        chosenGroups.isEmpty() ||
+                                chosenGroups.any { it !in catalogGroups }
+                    }
+
+                if (hasInvalidCatalogSelection) {
+                    Toast.makeText(
+                        ctx,
+                        if (isEnglish) {
+                            "Select a valid group from the catalog for each branch."
+                        } else {
+                            "בחר קבוצה תקפה מהקטלוג לכל סניף."
                         },
                         Toast.LENGTH_LONG
                     ).show()
@@ -2350,6 +2466,13 @@ fun RegistrationFormScreen(
                 "updatedAt" to System.currentTimeMillis()
             )
 
+            if (isCoach) {
+                firestoreData["coachSelectedBranchAssignments"] =
+                    CoachBranchAssignmentsCodec.toFirestoreList(
+                        branchAssignmentsFinal
+                    )
+            }
+
             // נתוני השתייכות המתאמן נשמרים בנפרד.
             if (!isCoach) {
                 firestoreData["traineeBranchAssignments"] =
@@ -2382,6 +2505,14 @@ fun RegistrationFormScreen(
                     firestoreData.remove(key)
                 }
             }
+
+            Log.d(
+                TAG_REG,
+                "stage=coach_assignments_payload " +
+                        "tabIsCoach=$isCoach " +
+                        "project=${FirebaseFirestore.getInstance().app.options.projectId} " +
+                        "assignments=${firestoreData["coachBranchAssignments"] ?: "FIELD_NOT_SENT"}"
+            )
 
             Log.e(
                 TAG_REG,

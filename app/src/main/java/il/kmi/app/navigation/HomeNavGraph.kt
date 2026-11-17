@@ -417,6 +417,11 @@ fun NavGraphBuilder.homeNavGraph(
                     launchSingleTop = true
                     restoreState = false
                 }
+
+                nav.currentBackStackEntry?.savedStateHandle?.let { state ->
+                    val revision = state.get<Int>("attendanceQrRefreshRevision") ?: 0
+                    state["attendanceQrRefreshRevision"] = revision + 1
+                }
             }
         )
     }

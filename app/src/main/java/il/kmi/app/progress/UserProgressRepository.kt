@@ -2,16 +2,110 @@ package il.kmi.app.progress
 
 import com.google.firebase.Timestamp
 import com.google.firebase.auth.FirebaseAuth
+import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.functions.FirebaseFunctions
 import il.kmi.app.KmiViewModel
 import il.kmi.shared.domain.Belt
 import il.kmi.shared.domain.ContentRepo
 import il.kmi.shared.domain.content.ExerciseIdentityRegistry
+import java.security.MessageDigest
+import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.tasks.await
-import kotlin.math.roundToInt
 
 object UserProgressRepository {
+
+    enum class ExerciseMark(val firestoreValue: String) {
+        MASTERED("mastered"),
+        PARTIALLY_KNOWN("partiallyKnown"),
+        UNKNOWN("unknown"),
+        UNMARKED("unmarked")
+    }
+
+    fun exerciseMarkDocumentId(
+        belt: Belt,
+        canonicalTopicKey: String,
+        canonicalExerciseId: String
+    ): String {
+        require(canonicalTopicKey.isNotBlank())
+        require(canonicalExerciseId.isNotBlank())
+        require('\u0000' !in canonicalTopicKey && '\u0000' !in canonicalExerciseId)
+
+        val key = "${belt.id}\u0000$canonicalTopicKey\u0000$canonicalExerciseId"
+        return MessageDigest.getInstance("SHA-256")
+            .digest(key.toByteArray(Charsets.UTF_8))
+            .joinToString("") { byte ->
+                (byte.toInt() and 0xff).toString(16).padStart(2, '0')
+            }
+    }
+
+    private fun exerciseMarksCollection(uid: String) =
+        FirebaseFirestore.getInstance()
+            .collection("users")
+            .document(uid)
+            .collection("exerciseMarks")
+
+    fun observeExerciseMarks(uid: String): Flow<Map<String, ExerciseMark>> =
+        callbackFlow {
+            val auth = FirebaseAuth.getInstance()
+            check(auth.currentUser?.uid == uid) {
+                "Exercise mark account changed"
+            }
+
+            val registration = exerciseMarksCollection(uid)
+                .addSnapshotListener { snapshot, error ->
+                    if (error != null) {
+                        close(error)
+                        return@addSnapshotListener
+                    }
+
+                    if (snapshot == null || auth.currentUser?.uid != uid) {
+                        return@addSnapshotListener
+                    }
+
+                    val marks = snapshot.documents.mapNotNull { document ->
+                        val status = document.getString("status")
+                        ExerciseMark.entries
+                            .firstOrNull { it.firestoreValue == status }
+                            ?.let { document.id to it }
+                    }.toMap()
+
+                    trySend(marks)
+                }
+
+            awaitClose { registration.remove() }
+        }
+
+    suspend fun saveExerciseMark(
+        uid: String,
+        belt: Belt,
+        canonicalTopicKey: String,
+        canonicalExerciseId: String,
+        mark: ExerciseMark
+    ) {
+        check(FirebaseAuth.getInstance().currentUser?.uid == uid) {
+            "Exercise mark account changed"
+        }
+
+        val documentId = exerciseMarkDocumentId(
+            belt = belt,
+            canonicalTopicKey = canonicalTopicKey,
+            canonicalExerciseId = canonicalExerciseId
+        )
+
+        exerciseMarksCollection(uid)
+            .document(documentId)
+            .set(
+                mapOf(
+                    "beltId" to belt.id,
+                    "status" to mark.firestoreValue,
+                    "updatedAt" to FieldValue.serverTimestamp()
+                )
+            )
+            .await()
+    }
 
     fun bucketForPercent(percent: Int): Int {
         val safePercent = percent.coerceIn(0, 100)
@@ -384,7 +478,7 @@ object UserProgressRepository {
                                 100f /
                                 totalCount
                         )
-                    .roundToInt()
+                    .toInt()
                     .coerceIn(
                         0,
                         100

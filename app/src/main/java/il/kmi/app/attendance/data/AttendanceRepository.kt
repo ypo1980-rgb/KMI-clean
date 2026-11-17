@@ -1717,6 +1717,20 @@ class AttendanceRepository private constructor(
             return null
         }
 
+        val occurrenceId =
+            recordDoc.getString("occurrenceId")?.trim().orEmpty()
+
+        val isVerifiedQrAttendance =
+            recordDoc.getBoolean("qrVerified") == true &&
+                    occurrenceId.isNotEmpty() &&
+                    recordDoc.getString("qrVerifiedOccurrenceId")?.trim() == occurrenceId &&
+                    recordDoc.getString("qrVerifiedTraineeUid") == cleanUid &&
+                    recordDoc.getString("coachStatus") == AttendanceStatus.PRESENT.name
+
+        if (isVerifiedQrAttendance) {
+            return AttendanceStatus.PRESENT
+        }
+
         val statusRaw =
             (
                     recordDoc.getString("traineeStatus")

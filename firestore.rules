@@ -152,6 +152,25 @@ function canManageAttendanceBranch(branch) {
     );
 }
 
+function hasCurrentCoachAttendanceSelection(branch, groupKey) {
+  let selectionDoc =
+    get(/databases/$(database)/documents/coachAttendanceSelections/$(request.auth.uid));
+  let userDoc =
+    get(/databases/$(database)/documents/users/$(request.auth.uid));
+  let catalogDoc =
+    get(/databases/$(database)/documents/kmiCatalog/current);
+
+  return selectionDoc != null
+    && userDoc != null
+    && catalogDoc != null
+    && selectionDoc.data.sourceSelection ==
+       userDoc.data.get("coachSelectedBranchAssignments", null)
+    && selectionDoc.data.catalogVersion ==
+       catalogDoc.data.get("version", null)
+    && selectionDoc.data.branchGroups is list
+    && (branch + "||" + groupKey) in selectionDoc.data.branchGroups;
+}
+
 function canManageAttendanceBranchGroup(branch, groupKey) {
   return isAdmin()
     || (
@@ -169,13 +188,9 @@ function canManageAttendanceBranchGroup(branch, groupKey) {
 
       && get(
         /databases/$(database)/documents/authorizedCoaches/$(request.auth.uid)
-      ).data.authorizedBranchGroups is list
+      ).data.get("accessRevokedByAdmin", false) != true
 
-      && (
-        branch + "||" + groupKey
-      ) in get(
-        /databases/$(database)/documents/authorizedCoaches/$(request.auth.uid)
-      ).data.authorizedBranchGroups
+      && hasCurrentCoachAttendanceSelection(branch, groupKey)
     );
 }
 
@@ -206,13 +221,9 @@ function canViewAttendanceBranchGroup(branch, groupKey) {
 
       && get(
         /databases/$(database)/documents/authorizedCoaches/$(request.auth.uid)
-      ).data.authorizedBranchGroups is list
+      ).data.get("accessRevokedByAdmin", false) != true
 
-      && (
-        branch + "||" + groupKey
-      ) in get(
-        /databases/$(database)/documents/authorizedCoaches/$(request.auth.uid)
-      ).data.authorizedBranchGroups
+      && hasCurrentCoachAttendanceSelection(branch, groupKey)
     );
 }
 
@@ -2543,6 +2554,36 @@ match /screen_views/{screenId} {
 
     // כתיבה מתבצעת רק בצד השרת דרך Admin SDK.
     allow create, update, delete: if false;
+  }
+
+  match /users/{uid}/exerciseMarks/{exerciseId} {
+    function ownsExerciseMarks() {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    function validExerciseMark() {
+      let data = request.resource.data;
+
+      return data.keys().hasAll(["beltId", "status", "updatedAt"])
+        && data.keys().hasOnly(["beltId", "status", "updatedAt"])
+        && data.beltId is string
+        && data.beltId.size() > 0
+        && data.beltId.size() <= 64
+        && data.status in [
+          "mastered",
+          "partiallyKnown",
+          "unknown",
+          "unmarked"
+        ]
+        && data.updatedAt == request.time;
+    }
+
+    allow get, list: if ownsExerciseMarks();
+    allow create: if ownsExerciseMarks() && validExerciseMark();
+    allow update: if ownsExerciseMarks()
+      && validExerciseMark()
+      && request.resource.data.beltId == resource.data.beltId;
+    allow delete: if false;
   }
 
   // =========================
