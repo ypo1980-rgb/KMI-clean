@@ -400,6 +400,11 @@ fun AttendanceQrScannerScreen(
                                         val serverMessage =
                                             error.message.orEmpty()
 
+                                        android.util.Log.w(
+                                            "KMI_ATTENDANCE_QR",
+                                            "Scan rejected: code=${error.code}, message=$serverMessage"
+                                        )
+
                                         when {
                                             serverMessage.contains(
                                                 "outside",
@@ -697,13 +702,15 @@ fun AttendanceQrScannerScreen(
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .weight(1f)
-                        .verticalScroll(rememberScrollState()),
+                        .weight(1f),
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.Center
                 ) {
                     Surface(
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .weight(1f, fill = false)
+                            .verticalScroll(rememberScrollState()),
                         shape = RoundedCornerShape(26.dp),
                         color = cardBackground,
                         tonalElevation = 2.dp,
@@ -718,12 +725,12 @@ fun AttendanceQrScannerScreen(
                                 .fillMaxWidth()
                                 .padding(
                                     horizontal = 22.dp,
-                                    vertical = 28.dp
+                                    vertical = 12.dp
                                 ),
                             horizontalAlignment =
                                 Alignment.CenterHorizontally,
                             verticalArrangement =
-                                Arrangement.spacedBy(14.dp)
+                                Arrangement.spacedBy(8.dp)
                         ) {
 
                             Box(
@@ -938,7 +945,7 @@ fun AttendanceQrScannerScreen(
                         }
                     }
 
-                    Spacer(Modifier.height(22.dp))
+                    Spacer(Modifier.height(8.dp))
 
                     Button(
                         onClick = onAttendanceRegistered,

@@ -149,6 +149,24 @@ class DataStoreManager(private val context: Context) {
         return Belt.fromId(v)
     }
 
+    private val legacyMarksOwnerKey =
+        stringPreferencesKey("legacy_marks_owner_uid")
+
+    suspend fun readLegacyMarksOwner(): String? =
+        context.kmiDataStore.data.first()[legacyMarksOwnerKey]
+
+    suspend fun confirmLegacyMarksOwner(uid: String): Boolean {
+        require(uid.isNotBlank())
+
+        val updatedPreferences = context.kmiDataStore.edit { prefs ->
+            if (prefs[legacyMarksOwnerKey] == null) {
+                prefs[legacyMarksOwnerKey] = uid
+            }
+        }
+
+        return updatedPreferences[legacyMarksOwnerKey] == uid
+    }
+
     // ---------- item mastery API ----------
     suspend fun setItemMastered(
         belt: Belt,

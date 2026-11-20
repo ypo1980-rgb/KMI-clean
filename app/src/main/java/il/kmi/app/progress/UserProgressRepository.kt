@@ -1,7 +1,9 @@
 package il.kmi.app.progress
 
+import android.content.Context
 import com.google.firebase.Timestamp
 import com.google.firebase.auth.FirebaseAuth
+import il.kmi.app.DataStoreManager
 import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.functions.FirebaseFunctions
@@ -66,9 +68,19 @@ object UserProgressRepository {
                 "Exercise mark account changed"
             }
 
-            val registration = exerciseMarksCollection(uid)
-                .addSnapshotListener { snapshot, error ->
+            val collection = exerciseMarksCollection(uid)
+            val projectId = com.google.firebase.FirebaseApp.getInstance().options.projectId
+
+            val registration = collection
+                .addSnapshotListener(com.google.firebase.firestore.MetadataChanges.INCLUDE) { snapshot, error ->
                     if (error != null) {
+                        Log.w(
+                            "KMI_EXERCISE_MARKS",
+                            "Trainee listener failed: project=$projectId " +
+                                    "path=${collection.path} " +
+                                    "authMatches=${auth.currentUser?.uid == uid} " +
+                                    "code=${error.code}"
+                        )
                         close(error)
                         return@addSnapshotListener
                     }
@@ -76,6 +88,13 @@ object UserProgressRepository {
                     if (snapshot == null || auth.currentUser?.uid != uid) {
                         return@addSnapshotListener
                     }
+
+                    Log.d(
+                        "KMI_EXERCISE_MARKS",
+                        "Trainee snapshot: project=$projectId " +
+                                "path=${collection.path} " +
+                                "fromCache=${snapshot.metadata.isFromCache}"
+                    )
 
                     val marks = snapshot.documents.mapNotNull { document ->
                         val status = document.getString("status")
@@ -132,6 +151,201 @@ object UserProgressRepository {
                     "path=${document.path} " +
                     "status=${mark.firestoreValue}"
         )
+    }
+
+    fun materialExerciseStatusIds(
+        belt: Belt,
+        topicTitle: String,
+        topicKey: String,
+        items: List<String>
+    ): List<String> {
+        val baseIds = items.mapIndexed { index, item ->
+            val cleanTitle = il.kmi.app.domain.CanonicalIds
+                .cleanItem(topicTitle, item)
+                .trim()
+
+            val identity = ExerciseIdentityRegistry.resolve(
+                belt = belt,
+                hebrewTitle = cleanTitle,
+                topicKey = topicKey
+            )
+
+            if (identity.isKnown) identity.id else "${identity.id}_row_$index"
+        }
+
+        val counts = baseIds.groupingBy { it }.eachCount()
+
+        return baseIds.mapIndexed { index, baseId ->
+            if (counts.getValue(baseId) > 1) {
+                "${baseId}__${topicKey}__row_$index"
+            } else {
+                baseId
+            }
+        }
+    }
+
+    suspend fun importLegacyMaterialMarks(
+        context: Context,
+        uid: String
+    ): Int {
+        val appContext = context.applicationContext
+        val auth = FirebaseAuth.getInstance()
+
+        check(auth.currentUser?.uid == uid)
+        check(DataStoreManager(appContext).readLegacyMarksOwner() == uid)
+
+        val preferences = appContext.getSharedPreferences(
+            "kmi_settings",
+            Context.MODE_PRIVATE
+        )
+
+        fun normalizePreferencePart(value: String): String =
+            value
+                .replace("\u200F", "")
+                .replace("\u200E", "")
+                .replace("\u00A0", " ")
+                .trim()
+
+        suspend fun importScope(
+            belt: Belt,
+            topicTitle: String,
+            topicKey: String,
+            rawItems: List<String>
+        ): Int {
+            val suffix = normalizePreferencePart(topicKey)
+            val mastered = preferences
+                .getStringSet("mastered_${belt.id}_$suffix", emptySet()).orEmpty()
+            val partial = preferences
+                .getStringSet("partially_known_${belt.id}_$suffix", emptySet()).orEmpty()
+            val unknown = preferences
+                .getStringSet("unknown_${belt.id}_$suffix", emptySet()).orEmpty()
+
+            if (mastered.isEmpty() && partial.isEmpty() && unknown.isEmpty()) {
+                return 0
+            }
+
+            val items = rawItems.map { it.trim() }
+                .filter { it.isNotBlank() }
+                .distinct()
+            val ids = materialExerciseStatusIds(belt, topicTitle, topicKey, items)
+            var imported = 0
+
+            fun localMark(id: String): ExerciseMark? = when (id) {
+                in mastered -> ExerciseMark.MASTERED
+                in partial -> ExerciseMark.PARTIALLY_KNOWN
+                in unknown -> ExerciseMark.UNKNOWN
+                else -> null
+            }
+
+            for ((index, item) in items.withIndex()) {
+                val statusId = ids[index]
+                val cleanItem = item
+                    .replace("\u200F", "")
+                    .replace("\u200E", "")
+                    .replace("\u00A0", " ")
+                    .replace(Regex("\\s+"), " ")
+                    .trim()
+                val legacyId = "status_${belt.id}_${topicKey}_${index}_$cleanItem"
+                val mark = localMark(statusId) ?: localMark(legacyId) ?: continue
+
+                if (importExerciseMarkIfMissing(uid, belt, topicKey, statusId, mark)) {
+                    imported++
+                }
+            }
+
+            return imported
+        }
+
+        var imported = 0
+
+        for ((belt, beltContent) in ContentRepo.data) {
+            for (topic in beltContent.topics) {
+                val root = topic.title.trim()
+                if (root.isBlank()) continue
+
+                imported += importScope(
+                    belt = belt,
+                    topicTitle = root,
+                    topicKey = root,
+                    rawItems = ContentRepo.getAllItemsFor(belt, root, null)
+                )
+
+                for (subTopic in topic.subTopics) {
+                    val parent = subTopic.title.trim()
+                    if (parent.isBlank()) continue
+
+                    val nestedTitles = ContentRepo
+                        .getNestedSubTopicTitles(belt, root, parent)
+                        .map { it.trim() }
+                        .filter { it.isNotBlank() }
+                        .distinct()
+
+                    val parentKey = "${root}__${parent}"
+                    val parentItems = if (nestedTitles.isEmpty()) {
+                        ContentRepo.getAllItemsFor(belt, root, parent)
+                    } else {
+                        nestedTitles.flatMap { nested ->
+                            ContentRepo.getNestedItemsFor(belt, root, parent, nested)
+                        }
+                    }
+
+                    imported += importScope(belt, root, parentKey, parentItems)
+
+                    for (nested in nestedTitles) {
+                        imported += importScope(
+                            belt = belt,
+                            topicTitle = root,
+                            topicKey = "${parentKey}__${nested}",
+                            rawItems = ContentRepo.getNestedItemsFor(belt, root, parent, nested)
+                        )
+                    }
+                }
+            }
+        }
+
+        return imported
+    }
+
+    suspend fun importExerciseMarkIfMissing(
+        uid: String,
+        belt: Belt,
+        canonicalTopicKey: String,
+        canonicalExerciseId: String,
+        mark: ExerciseMark
+    ): Boolean {
+        require(mark != ExerciseMark.UNMARKED)
+
+        val auth = FirebaseAuth.getInstance()
+        check(auth.currentUser?.uid == uid) {
+            "Exercise mark account changed"
+        }
+
+        val documentId = exerciseMarkDocumentId(
+            belt = belt,
+            canonicalTopicKey = canonicalTopicKey,
+            canonicalExerciseId = canonicalExerciseId
+        )
+        val document = exerciseMarksCollection(uid).document(documentId)
+
+        return FirebaseFirestore.getInstance().runTransaction { transaction ->
+            check(auth.currentUser?.uid == uid) {
+                "Exercise mark account changed"
+            }
+
+            if (transaction.get(document).exists()) {
+                return@runTransaction false
+            }
+
+            transaction.set(
+                document,
+                mapOf(
+                    "beltId" to belt.id,
+                    "status" to mark.firestoreValue,
+                    "updatedAt" to FieldValue.serverTimestamp()
+                )
+            )
+            true
+        }.await()
     }
 
     private fun coachExerciseMarksCollection(uid: String) =

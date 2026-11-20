@@ -800,6 +800,16 @@ class AttendanceViewModel(app: Application) : AndroidViewModel(app) {
         _refreshTick.update { it + 1 }
     }
 
+    suspend fun ensureSessionForTraining(
+        date: LocalDate,
+        branch: String,
+        groupKey: String
+    ) = repo.ensureSession(
+        date = date,
+        branch = branch,
+        groupKey = groupKey
+    )
+
     fun ensureSession() {
         val d = _date.value
         val b = _branch.value
@@ -823,7 +833,7 @@ class AttendanceViewModel(app: Application) : AndroidViewModel(app) {
 
         viewModelScope.launch {
             try {
-                val id = repo.ensureSession(
+                val id = ensureSessionForTraining(
                     date = d,
                     branch = b,
                     groupKey = g

@@ -100,6 +100,8 @@ import il.yuval.ui.theme.kmiSuccessColor
 import il.yuval.ui.theme.kmiSuccessContainerColor
 import il.yuval.ui.theme.kmiWarningColor
 import il.yuval.ui.theme.kmiWarningContainerColor
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -1096,6 +1098,55 @@ fun MaterialsScreen(
             selectedStatuses = selectedStatuses,
             updatedAtByStatus = updatedAtByStatus
         )
+    }
+
+    fun syncTraineeMarkToFirestore(
+        statusId: String,
+        selectedStatus: TraineeMaterialStatus?
+    ) {
+        val uid = FirebaseAuth.getInstance().currentUser?.uid ?: return
+
+        val mark = when (selectedStatus) {
+            TraineeMaterialStatus.KNOWN ->
+                UserProgressRepository.ExerciseMark.MASTERED
+
+            TraineeMaterialStatus.PARTIALLY_KNOWN ->
+                UserProgressRepository.ExerciseMark.PARTIALLY_KNOWN
+
+            TraineeMaterialStatus.UNKNOWN ->
+                UserProgressRepository.ExerciseMark.UNKNOWN
+
+            null ->
+                UserProgressRepository.ExerciseMark.UNMARKED
+        }
+
+        scope.launch(start = CoroutineStart.UNDISPATCHED) {
+            try {
+                UserProgressRepository.saveExerciseMark(
+                    uid = uid,
+                    belt = belt,
+                    canonicalTopicKey = topicKey,
+                    canonicalExerciseId = statusId,
+                    mark = mark
+                )
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (error: Exception) {
+                Log.w("KMI_EXERCISE_MARKS", "Trainee mark sync failed", error)
+
+                if (FirebaseAuth.getInstance().currentUser?.uid == uid) {
+                    Toast.makeText(
+                        context,
+                        if (isEnglish) {
+                            "The mark could not be saved to the server."
+                        } else {
+                            "שמירת הסימון בשרת נכשלה."
+                        },
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+            }
+        }
     }
 
     fun syncCoachProgressToFirestore(
@@ -4319,6 +4370,11 @@ fun MaterialsScreen(
                                                                             newVal
                                                                         itemStates[statusId] =
                                                                             newVal
+
+                                                                        syncTraineeMarkToFirestore(
+                                                                            statusId = statusId,
+                                                                            selectedStatus = selectedStatus
+                                                                        )
 
                                                                         /*
                                                                          * שומר את זמן השינוי של ✓ / ✗.

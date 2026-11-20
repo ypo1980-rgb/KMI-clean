@@ -72,7 +72,6 @@ import androidx.compose.material.icons.outlined.StarBorder
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
@@ -512,17 +511,10 @@ fun AttendanceScreen(
 
     // ✅ מקור אמת למסך: הבחירה הפעילה מתוך ה-ViewModel
 // לא חותכים יותר CSV ולא לוקחים אוטומטית רק את הסניף הראשון.
-    val effectiveBranchRaw = remember(
-        state.branch,
-        branch
-    ) {
-        (
-                state.branch
-                    .takeIf {
-                        it.isNotBlank()
-                    }
-                    ?: branch
-                ).trim()
+    val effectiveBranchRaw = if (openQrOnStart) {
+        branch.trim()
+    } else {
+        state.branch.ifBlank { branch }.trim()
     }
 
     /*
@@ -531,11 +523,13 @@ fun AttendanceScreen(
      * לא חוזרים לקבוצה שהגיעה מהניווט כאשר
      * הבחירה האוטומטית עדיין בודקת מתאמנים.
      */
-    val effectiveGroupRaw = remember(
-        state.groupKey
-    ) {
+    val effectiveGroupRaw = if (openQrOnStart) {
+        groupKey.trim()
+    } else {
         state.groupKey.trim()
     }
+
+    val attendanceQrDate = if (openQrOnStart) date else state.date
 
     fun String.nameKey(): String = this
         .trim()
@@ -618,26 +612,18 @@ fun AttendanceScreen(
     var name by remember { mutableStateOf("") }
     var pendingDelete by remember { mutableStateOf<Pair<Long, String>?>(null) } // (memberId, displayName)
 
-    var showAttendanceQrDialog by rememberSaveable {
-        mutableStateOf(false)
-    }
-
-    // בחירת מצב בדיקה זמני — ללא שינוי ברישום נוכחות.
-    var attendanceQrTestMode by remember {
-        mutableStateOf(false)
+    var showAttendanceQrDialog by rememberSaveable(
+        openQrOnStart,
+        date,
+        branch,
+        groupKey
+    ) {
+        mutableStateOf(openQrOnStart)
     }
 
     // משקף את סוג הקוד שהשרת הנפיק בפועל.
     var attendanceQrIssuedAsTest by remember {
         mutableStateOf(false)
-    }
-
-    // הרשאת QR מנהל נאכפת בשרת בלבד.
-    // אין להסתמך על קריאה ישירה ל-admins מתוך Android.
-    LaunchedEffect(showAttendanceQrDialog) {
-        if (!showAttendanceQrDialog) {
-            attendanceQrTestMode = false
-        }
     }
 
     var qrAutoOpenConsumed by rememberSaveable(
@@ -705,9 +691,8 @@ fun AttendanceScreen(
         showAttendanceQrDialog,
         effectiveBranchRaw,
         effectiveGroupRaw,
-        state.date,
-        selectedQrOccurrenceKey,
-        attendanceQrTestMode
+        attendanceQrDate,
+        selectedQrOccurrenceKey
     ) {
         attendanceQrPayload = null
         attendanceQrIssuedAsTest = false
@@ -726,7 +711,7 @@ fun AttendanceScreen(
         try {
             val selectedBranch = effectiveBranchRaw.trim()
             val selectedGroup = effectiveGroupRaw.trim()
-            val sessionDate = state.date.toString()
+            val sessionDate = attendanceQrDate.toString()
 
             require(
                 selectedBranch.isNotBlank() &&
@@ -841,20 +826,47 @@ fun AttendanceScreen(
                                     )
                         }
 
-                // השרת מאמת הרשאת מנהל לפני הנפקת הקוד.
-                val requestTestMode =
-                    attendanceQrTestMode
+                val occurrenceBranch =
+                    selectedOccurrence.getString("branch").orEmpty().trim()
+                val occurrenceGroup =
+                    selectedOccurrence.getString("group").orEmpty().trim()
 
-                val result = FirebaseFunctions
+                require(occurrenceBranch.isNotBlank() && occurrenceGroup.isNotBlank())
+
+                vm.ensureSessionForTraining(
+                    date = LocalDate.parse(sessionDate),
+                    branch = occurrenceBranch,
+                    groupKey = occurrenceGroup
+                )
+
+                val callable = FirebaseFunctions
                     .getInstance("europe-west1")
                     .getHttpsCallable("createKamiAttendanceQr")
-                    .call(
+
+                val (result, requestTestMode) = try {
+                    callable.call(
                         mapOf(
                             "occurrenceId" to occurrenceId,
-                            "testMode" to requestTestMode
+                            "testMode" to false
                         )
-                    )
-                    .await()
+                    ).await() to false
+                } catch (error: FirebaseFunctionsException) {
+                    val reason = (error.details as? Map<*, *>)?.get("reason")
+
+                    if (
+                        error.code != FirebaseFunctionsException.Code.FAILED_PRECONDITION ||
+                        reason != "outside_qr_window"
+                    ) {
+                        throw error
+                    }
+
+                    callable.call(
+                        mapOf(
+                            "occurrenceId" to occurrenceId,
+                            "testMode" to true
+                        )
+                    ).await() to true
+                }
 
                 val response = result.data as? Map<*, *>
 
@@ -922,17 +934,10 @@ fun AttendanceScreen(
 
                         FirebaseFunctionsException.Code.PERMISSION_DENIED,
                         FirebaseFunctionsException.Code.UNAUTHENTICATED ->
-                            if (attendanceQrTestMode) {
-                                tr(
-                                    "הפקת QR בכל שעה מותרת למנהל מאומת בלבד.",
-                                    "Only a verified administrator can generate a QR at any time."
-                                )
-                            } else {
-                                tr(
-                                    "אין הרשאה להפיק QR לאימון זה.",
-                                    "You are not authorized to generate a QR for this training."
-                                )
-                            }
+                            tr(
+                                "אין הרשאה להפיק QR לאימון זה.",
+                                "You are not authorized to generate a QR for this training."
+                            )
 
                         FirebaseFunctionsException.Code.FAILED_PRECONDITION -> {
                             val serverMessage = error.message.orEmpty()
@@ -1442,6 +1447,563 @@ fun AttendanceScreen(
                 )
             )
         }
+
+    @Composable
+    fun AttendanceQrDialogContent() {
+        // ===== חלון QR לנוכחות באימון =====
+        if (showAttendanceQrDialog) {
+            AlertDialog(
+                onDismissRequest = {
+                    showAttendanceQrDialog = false
+                    if (openQrOnStart) {
+                        onHomeClick()
+                    }
+                },
+                icon = {
+                    if (attendanceQrError == null) {
+                        Icon(
+                            imageVector = Icons.Filled.QrCode2,
+                            contentDescription = null,
+                            modifier = Modifier.size(
+                                KmiIconSize.medium
+                            )
+                        )
+                    }
+                },
+                title = {
+                    Text(
+                        text =
+                            if (attendanceQrIssuedAsTest) {
+                                tr(
+                                    "QR מנהל — רישום נוכחות",
+                                    "Admin QR — Attendance"
+                                )
+                            } else {
+                                tr(
+                                    "QR לנוכחות באימון",
+                                    "Training attendance QR"
+                                )
+                            },
+                        style = KmiTypography.sectionTitle,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                },
+                text = {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .verticalScroll(rememberScrollState())
+                            .padding(bottom = 4.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            text = effectiveBranchRaw,
+                            style = KmiTypography.cardTitle,
+                            textAlign = TextAlign.Center
+                        )
+
+                        if (attendanceQrPayload != null) {
+                            val trainingDateText =
+                                attendanceQrDate.format(
+                                    DateTimeFormatter.ofPattern(
+                                        "dd.MM.yyyy"
+                                    )
+                                )
+
+                            val timeFormatter =
+                                DateTimeFormatter
+                                    .ofPattern("HH:mm")
+                                    .withZone(
+                                        ZoneId.of("Asia/Jerusalem")
+                                    )
+
+                            val trainingTimeText =
+                                attendanceQrSelectedStartMillis
+                                    ?.let { startMillis ->
+                                        val startTime =
+                                            timeFormatter.format(
+                                                Instant.ofEpochMilli(
+                                                    startMillis
+                                                )
+                                            )
+
+                                        val endTime =
+                                            attendanceQrSelectedEndMillis
+                                                ?.let { endMillis ->
+                                                    timeFormatter.format(
+                                                        Instant.ofEpochMilli(
+                                                            endMillis
+                                                        )
+                                                    )
+                                                }
+
+                                        if (endTime != null) {
+                                            "$startTime–$endTime"
+                                        } else {
+                                            startTime
+                                        }
+                                    }
+
+                            Text(
+                                text = trainingDateText,
+                                style = KmiTypography.secondary,
+                                fontWeight = FontWeight.SemiBold,
+                                color =
+                                    MaterialTheme.colorScheme.onSurfaceVariant,
+                                textAlign = TextAlign.Center
+                            )
+
+                            Surface(
+                                modifier = Modifier.fillMaxWidth(),
+                                shape = RoundedCornerShape(12.dp),
+                                color =
+                                    MaterialTheme.colorScheme.primaryContainer,
+                                border = BorderStroke(
+                                    1.dp,
+                                    MaterialTheme.colorScheme.primary
+                                        .copy(alpha = 0.20f)
+                                )
+                            ) {
+                                Column(
+                                    modifier = Modifier.padding(
+                                        horizontal = 12.dp,
+                                        vertical = 10.dp
+                                    ),
+                                    horizontalAlignment =
+                                        Alignment.CenterHorizontally,
+                                    verticalArrangement =
+                                        Arrangement.spacedBy(4.dp)
+                                ) {
+                                    Text(
+                                        text = tr(
+                                            "האימון שאליו משויך הברקוד",
+                                            "Training linked to this QR"
+                                        ),
+                                        style = KmiTypography.caption,
+                                        fontWeight = FontWeight.Bold,
+                                        color =
+                                            MaterialTheme.colorScheme
+                                                .onPrimaryContainer,
+                                        textAlign = TextAlign.Center
+                                    )
+
+                                    Text(
+                                        text = effectiveGroupRaw,
+                                        style = KmiTypography.body,
+                                        fontWeight = FontWeight.Bold,
+                                        color =
+                                            MaterialTheme.colorScheme
+                                                .onPrimaryContainer,
+                                        textAlign = TextAlign.Center
+                                    )
+
+                                    if (trainingTimeText != null) {
+                                        Text(
+                                            text = trainingTimeText,
+                                            style = KmiTypography.cardTitle,
+                                            fontWeight = FontWeight.ExtraBold,
+                                            color =
+                                                MaterialTheme.colorScheme
+                                                    .onPrimaryContainer,
+                                            textAlign = TextAlign.Center
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
+                        when {
+                            attendanceQrLoading -> {
+                                Text(
+                                    text = tr(
+                                        "מפיק קוד QR מאובטח...",
+                                        "Generating secure QR..."
+                                    ),
+                                    style = KmiTypography.secondary,
+                                    textAlign = TextAlign.Center
+                                )
+                            }
+
+                            attendanceQrCandidates.size > 1 &&
+                                    attendanceQrPayload == null &&
+                                    attendanceQrError == null -> {
+
+                                Text(
+                                    text = tr(
+                                        "נמצאו מספר אימונים. בחר את האימון שעבורו יופק QR:",
+                                        "Multiple trainings found. Select the training for this QR:"
+                                    ),
+                                    style = KmiTypography.body,
+                                    textAlign = TextAlign.Center
+                                )
+
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .heightIn(max = 260.dp)
+                                        .verticalScroll(rememberScrollState()),
+                                    verticalArrangement =
+                                        Arrangement.spacedBy(8.dp)
+                                ) {
+                                    attendanceQrCandidates.forEachIndexed {
+                                            index, candidate ->
+
+                                        val occurrenceId = candidate.first
+                                        val startMillis = candidate.second
+
+                                        val timeText =
+                                            if (startMillis > 0L) {
+                                                runCatching {
+                                                    DateTimeFormatter
+                                                        .ofPattern("HH:mm")
+                                                        .withZone(
+                                                            ZoneId.of("Asia/Jerusalem")
+                                                        )
+                                                        .format(
+                                                            Instant.ofEpochMilli(
+                                                                startMillis
+                                                            )
+                                                        )
+                                                }.getOrNull()
+                                            } else {
+                                                null
+                                            }
+
+                                        OutlinedButton(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .heightIn(min = 48.dp),
+                                            onClick = {
+                                                val normalizedBranch =
+                                                    effectiveBranchRaw
+                                                        .trim()
+                                                        .replace('־', '-')
+                                                        .replace('–', '-')
+                                                        .replace('—', '-')
+                                                        .replace('\u00A0', ' ')
+                                                        .replace(Regex("\\s+"), " ")
+                                                        .lowercase(Locale.ROOT)
+
+                                                val normalizedGroup =
+                                                    effectiveGroupRaw
+                                                        .trim()
+                                                        .replace('־', '-')
+                                                        .replace('–', '-')
+                                                        .replace('—', '-')
+                                                        .replace('\u00A0', ' ')
+                                                        .replace(Regex("\\s+"), " ")
+                                                        .lowercase(Locale.ROOT)
+
+                                                selectedQrOccurrenceKey =
+                                                    "${attendanceQrDate}|" +
+                                                            "$normalizedBranch|" +
+                                                            "$normalizedGroup|" +
+                                                            occurrenceId
+                                            },
+                                            shape = RoundedCornerShape(14.dp)
+                                        ) {
+                                            Text(
+                                                text = buildString {
+                                                    append(
+                                                        tr(
+                                                            "אימון ${index + 1}",
+                                                            "Training ${index + 1}"
+                                                        )
+                                                    )
+
+                                                    if (timeText != null) {
+                                                        append(" · $timeText")
+                                                    }
+
+                                                    append(
+                                                        " · ${occurrenceId.takeLast(6)}"
+                                                    )
+                                                },
+                                                style = KmiTypography.action,
+                                                textAlign = TextAlign.Center,
+                                                maxLines = 2
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+
+                            attendanceQrError != null -> {
+                                Text(
+                                    text = attendanceQrError.orEmpty(),
+                                    style = KmiTypography.secondary,
+                                    color = MaterialTheme.colorScheme.error,
+                                    textAlign = TextAlign.Center
+                                )
+                            }
+
+                            attendanceQrPayload != null -> {
+                                if (attendanceQrIssuedAsTest) {
+                                    Surface(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        shape = RoundedCornerShape(12.dp),
+                                        color = MaterialTheme.colorScheme
+                                            .tertiaryContainer
+                                    ) {
+                                        Text(
+                                            text = tr(
+                                                "QR מנהל פעיל — סריקה מאושרת תרשום נוכחות בפועל. הקוד תקף ל־30 דקות מרגע יצירתו.",
+                                                "ADMIN QR — An approved scan records actual attendance. The code expires 30 minutes after creation."
+                                            ),
+                                            modifier = Modifier.padding(12.dp),
+                                            style = KmiTypography.caption,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme
+                                                .onTertiaryContainer,
+                                            textAlign = TextAlign.Center
+                                        )
+                                    }
+                                }
+
+                                val qrBitmap = remember(
+                                    attendanceQrPayload
+                                ) {
+                                    runCatching {
+                                        val matrix = MultiFormatWriter()
+                                            .encode(
+                                                attendanceQrPayload,
+                                                BarcodeFormat.QR_CODE,
+                                                840,
+                                                840,
+                                                mapOf(
+                                                    EncodeHintType.ERROR_CORRECTION to
+                                                            ErrorCorrectionLevel.H,
+                                                    EncodeHintType.MARGIN to 4
+                                                )
+                                            )
+
+                                        val width = matrix.width
+                                        val height = matrix.height
+
+                                        val pixels = IntArray(
+                                            width * height
+                                        )
+
+                                        for (y in 0 until height) {
+                                            for (x in 0 until width) {
+                                                pixels[y * width + x] =
+                                                    if (matrix[x, y]) {
+                                                        android.graphics.Color.BLACK
+                                                    } else {
+                                                        android.graphics.Color.WHITE
+                                                    }
+                                            }
+                                        }
+
+                                        createBitmap(
+                                            width,
+                                            height,
+                                            Bitmap.Config.ARGB_8888
+                                        ).apply {
+                                            setPixels(
+                                                pixels,
+                                                0,
+                                                width,
+                                                0,
+                                                0,
+                                                width,
+                                                height
+                                            )
+
+                                            val qrCanvas =
+                                                android.graphics.Canvas(this)
+
+                                            val centerX = width / 2f
+                                            val centerY = height / 2f
+
+                                            val logoWidth = width * 0.30f
+                                            val logoHeight = height * 0.13f
+
+                                            val logoRect = RectF(
+                                                centerX - logoWidth / 2f,
+                                                centerY - logoHeight / 2f,
+                                                centerX + logoWidth / 2f,
+                                                centerY + logoHeight / 2f
+                                            )
+
+                                            val backgroundPaint =
+                                                Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                                                    color =
+                                                        android.graphics.Color.rgb(
+                                                            226,
+                                                            221,
+                                                            233
+                                                        ) // granite / soft lilac-gray
+                                                    style = Paint.Style.FILL
+                                                }
+
+                                            val borderPaint =
+                                                Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                                                    color =
+                                                        android.graphics.Color.rgb(
+                                                            196,
+                                                            185,
+                                                            220
+                                                        )
+                                                    style = Paint.Style.STROKE
+                                                    strokeWidth = width * 0.004f
+                                                }
+
+                                            qrCanvas.drawRoundRect(
+                                                logoRect,
+                                                22f,
+                                                22f,
+                                                backgroundPaint
+                                            )
+
+                                            qrCanvas.drawRoundRect(
+                                                logoRect,
+                                                22f,
+                                                22f,
+                                                borderPaint
+                                            )
+
+                                            val logoPaint =
+                                                Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                                                    color =
+                                                        android.graphics.Color.rgb(
+                                                            88,
+                                                            63,
+                                                            148
+                                                        )
+                                                    textSize = width * 0.050f
+                                                    typeface =
+                                                        Typeface.create(
+                                                            Typeface.DEFAULT,
+                                                            Typeface.BOLD
+                                                        )
+                                                    textAlign = Paint.Align.CENTER
+                                                    letterSpacing = 0.04f
+                                                }
+
+                                            val logoBaseline =
+                                                centerY -
+                                                        (
+                                                                logoPaint.ascent() +
+                                                                        logoPaint.descent()
+                                                                ) / 2f
+
+                                            qrCanvas.drawText(
+                                                "KAMI",
+                                                centerX,
+                                                logoBaseline,
+                                                logoPaint
+                                            )
+                                        }.asImageBitmap()
+                                    }.getOrNull()
+                                }
+
+                                if (qrBitmap != null) {
+                                    Image(
+                                        bitmap = qrBitmap,
+                                        contentDescription = tr(
+                                            "קוד QR לנוכחות באימון",
+                                            "Training attendance QR code"
+                                        ),
+                                        modifier = Modifier
+                                            .fillMaxWidth(0.86f)
+                                            .aspectRatio(1f)
+                                            .background(
+                                                color = Color.White,
+                                                shape = RoundedCornerShape(16.dp)
+                                            )
+                                            .padding(10.dp)
+                                    )
+
+                                    if (!attendanceQrIssuedAsTest) {
+                                        TextButton(
+                                            onClick = {
+                                                printAttendanceQr(
+                                                    context = context,
+                                                    bitmap = qrBitmap.asAndroidBitmap(),
+                                                    branch = effectiveBranchRaw,
+                                                    group = effectiveGroupRaw,
+                                                    date = attendanceQrDate,
+                                                    isEnglish = isEnglish
+                                                )
+                                            },
+                                            modifier = Modifier.fillMaxWidth()
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Filled.Print,
+                                                contentDescription = null,
+                                                modifier = Modifier.size(
+                                                    KmiIconSize.medium
+                                                )
+                                            )
+
+                                            Spacer(Modifier.width(8.dp))
+
+                                            Text(
+                                                text = tr(
+                                                    "הדפס QR",
+                                                    "Print QR"
+                                                ),
+                                                style = KmiTypography.action
+                                            )
+                                        }
+                                    }
+
+                                    Text(
+                                        text =
+                                            if (attendanceQrIssuedAsTest) {
+                                                tr(
+                                                    "QR מנהל: סריקה מאושרת תירשם כנוכחות אמיתית באימון שנבחר.",
+                                                    "Admin QR: An approved scan records actual attendance for the selected training."
+                                                )
+                                            } else {
+                                                tr(
+                                                    "סריקת הקוד מתאפשרת רק בחלון הזמן המאושר של האימון.",
+                                                    "Scanning is allowed only during the approved training window."
+                                                )
+                                            },
+                                        style = KmiTypography.caption,
+                                        textAlign = TextAlign.Center
+                                    )
+                                } else {
+                                    Text(
+                                        text = tr(
+                                            "אירעה שגיאה ביצירת תמונת QR.",
+                                            "Could not render the QR image."
+                                        ),
+                                        style = KmiTypography.caption,
+                                        color = MaterialTheme.colorScheme.error,
+                                        textAlign = TextAlign.Center
+                                    )
+                                }
+                            }
+                        }
+                    }
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            showAttendanceQrDialog = false
+                            if (openQrOnStart) {
+                                onHomeClick()
+                            }
+                        }
+                    ) {
+                        Text(
+                            tr("סגור", "Close")
+                        )
+                    }
+                }
+            )
+        }
+    }
+
+    if (openQrOnStart) {
+        AttendanceQrDialogContent()
+        return
+    }
 
     Scaffold(
         snackbarHost = {
@@ -2298,611 +2860,7 @@ fun AttendanceScreen(
                 }
             }
 
-            // ===== חלון QR לנוכחות באימון =====
-            if (showAttendanceQrDialog) {
-                AlertDialog(
-                    onDismissRequest = {
-                        showAttendanceQrDialog = false
-                        if (openQrOnStart) {
-                            onHomeClick()
-                        }
-                    },
-                    icon = {
-                        if (attendanceQrError == null) {
-                            Icon(
-                                imageVector = Icons.Filled.QrCode2,
-                                contentDescription = null,
-                                modifier = Modifier.size(
-                                    KmiIconSize.medium
-                                )
-                            )
-                        }
-                    },
-                    title = {
-                        Text(
-                            text =
-                                if (attendanceQrTestMode) {
-                                    tr(
-                                        "QR מנהל — רישום נוכחות",
-                                        "Admin QR — Attendance"
-                                    )
-                                } else {
-                                    tr(
-                                        "QR לנוכחות באימון",
-                                        "Training attendance QR"
-                                    )
-                                },
-                            style = KmiTypography.sectionTitle,
-                            textAlign = TextAlign.Center,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                    },
-                    text = {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .verticalScroll(rememberScrollState())
-                                .padding(bottom = 4.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            // ההנפקה מותנית באימות מנהל בצד השרת.
-                            if (true) {
-                                Surface(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    shape = RoundedCornerShape(14.dp),
-                                    color = MaterialTheme.colorScheme
-                                        .primaryContainer
-                                        .copy(alpha = 0.55f),
-                                    border = BorderStroke(
-                                        1.dp,
-                                        MaterialTheme.colorScheme.primary
-                                            .copy(alpha = 0.25f)
-                                    )
-                                ) {
-                                    Column(
-                                        modifier = Modifier.padding(
-                                            horizontal = 12.dp,
-                                            vertical = 8.dp
-                                        ),
-                                        verticalArrangement =
-                                            Arrangement.spacedBy(4.dp)
-                                    ) {
-                                        Row(
-                                            modifier = Modifier.fillMaxWidth(),
-                                            verticalAlignment =
-                                                Alignment.CenterVertically
-                                        ) {
-                                            Checkbox(
-                                                checked = attendanceQrTestMode,
-                                                onCheckedChange = { checked ->
-                                                    attendanceQrTestMode = checked
-                                                }
-                                            )
-
-                                            Text(
-                                                text = tr(
-                                                    "QR מנהל — רישום נוכחות בכל שעה",
-                                                    "Admin QR — Attendance at any time"
-                                                ),
-                                                style = KmiTypography.action,
-                                                modifier = Modifier.weight(1f)
-                                            )
-                                        }
-
-                                        Text(
-                                            text = tr(
-                                                "מאפשר יצירת QR בכל שעה. סריקה מאושרת מעדכנת נוכחות אמיתית בקבוצה שנבחרה.",
-                                                "Generate a QR at any time. An approved scan records actual attendance in the selected group."
-                                            ),
-                                            style = KmiTypography.caption,
-                                            color = MaterialTheme.colorScheme
-                                                .onSurfaceVariant
-                                        )
-                                    }
-                                }
-                            }
-
-                            Text(
-                                text = effectiveBranchRaw,
-                                style = KmiTypography.cardTitle,
-                                textAlign = TextAlign.Center
-                            )
-
-                            if (attendanceQrPayload != null) {
-                                val trainingDateText =
-                                    state.date.format(
-                                        DateTimeFormatter.ofPattern(
-                                            "dd.MM.yyyy"
-                                        )
-                                    )
-
-                                val timeFormatter =
-                                    DateTimeFormatter
-                                        .ofPattern("HH:mm")
-                                        .withZone(
-                                            ZoneId.of("Asia/Jerusalem")
-                                        )
-
-                                val trainingTimeText =
-                                    attendanceQrSelectedStartMillis
-                                        ?.let { startMillis ->
-                                            val startTime =
-                                                timeFormatter.format(
-                                                    Instant.ofEpochMilli(
-                                                        startMillis
-                                                    )
-                                                )
-
-                                            val endTime =
-                                                attendanceQrSelectedEndMillis
-                                                    ?.let { endMillis ->
-                                                        timeFormatter.format(
-                                                            Instant.ofEpochMilli(
-                                                                endMillis
-                                                            )
-                                                        )
-                                                    }
-
-                                            if (endTime != null) {
-                                                "$startTime–$endTime"
-                                            } else {
-                                                startTime
-                                            }
-                                        }
-
-                                Text(
-                                    text = trainingDateText,
-                                    style = KmiTypography.secondary,
-                                    fontWeight = FontWeight.SemiBold,
-                                    color =
-                                        MaterialTheme.colorScheme.onSurfaceVariant,
-                                    textAlign = TextAlign.Center
-                                )
-
-                                Surface(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    shape = RoundedCornerShape(12.dp),
-                                    color =
-                                        MaterialTheme.colorScheme.primaryContainer,
-                                    border = BorderStroke(
-                                        1.dp,
-                                        MaterialTheme.colorScheme.primary
-                                            .copy(alpha = 0.20f)
-                                    )
-                                ) {
-                                    Column(
-                                        modifier = Modifier.padding(
-                                            horizontal = 12.dp,
-                                            vertical = 10.dp
-                                        ),
-                                        horizontalAlignment =
-                                            Alignment.CenterHorizontally,
-                                        verticalArrangement =
-                                            Arrangement.spacedBy(4.dp)
-                                    ) {
-                                        Text(
-                                            text = tr(
-                                                "האימון שאליו משויך הברקוד",
-                                                "Training linked to this QR"
-                                            ),
-                                            style = KmiTypography.caption,
-                                            fontWeight = FontWeight.Bold,
-                                            color =
-                                                MaterialTheme.colorScheme
-                                                    .onPrimaryContainer,
-                                            textAlign = TextAlign.Center
-                                        )
-
-                                        Text(
-                                            text = effectiveGroupRaw,
-                                            style = KmiTypography.body,
-                                            fontWeight = FontWeight.Bold,
-                                            color =
-                                                MaterialTheme.colorScheme
-                                                    .onPrimaryContainer,
-                                            textAlign = TextAlign.Center
-                                        )
-
-                                        if (trainingTimeText != null) {
-                                            Text(
-                                                text = trainingTimeText,
-                                                style = KmiTypography.cardTitle,
-                                                fontWeight = FontWeight.ExtraBold,
-                                                color =
-                                                    MaterialTheme.colorScheme
-                                                        .onPrimaryContainer,
-                                                textAlign = TextAlign.Center
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-
-                            when {
-                                attendanceQrLoading -> {
-                                    Text(
-                                        text = tr(
-                                            "מפיק קוד QR מאובטח...",
-                                            "Generating secure QR..."
-                                        ),
-                                        style = KmiTypography.secondary,
-                                        textAlign = TextAlign.Center
-                                    )
-                                }
-
-                                attendanceQrCandidates.size > 1 &&
-                                        attendanceQrPayload == null &&
-                                        attendanceQrError == null -> {
-
-                                    Text(
-                                        text = tr(
-                                            "נמצאו מספר אימונים. בחר את האימון שעבורו יופק QR:",
-                                            "Multiple trainings found. Select the training for this QR:"
-                                        ),
-                                        style = KmiTypography.body,
-                                        textAlign = TextAlign.Center
-                                    )
-
-                                    Column(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .heightIn(max = 260.dp)
-                                            .verticalScroll(rememberScrollState()),
-                                        verticalArrangement =
-                                            Arrangement.spacedBy(8.dp)
-                                    ) {
-                                        attendanceQrCandidates.forEachIndexed {
-                                                index, candidate ->
-
-                                            val occurrenceId = candidate.first
-                                            val startMillis = candidate.second
-
-                                            val timeText =
-                                                if (startMillis > 0L) {
-                                                    runCatching {
-                                                        DateTimeFormatter
-                                                            .ofPattern("HH:mm")
-                                                            .withZone(
-                                                                ZoneId.of("Asia/Jerusalem")
-                                                            )
-                                                            .format(
-                                                                Instant.ofEpochMilli(
-                                                                    startMillis
-                                                                )
-                                                            )
-                                                    }.getOrNull()
-                                                } else {
-                                                    null
-                                                }
-
-                                            OutlinedButton(
-                                                modifier = Modifier
-                                                    .fillMaxWidth()
-                                                    .heightIn(min = 48.dp),
-                                                onClick = {
-                                                    val normalizedBranch =
-                                                        effectiveBranchRaw
-                                                            .trim()
-                                                            .replace('־', '-')
-                                                            .replace('–', '-')
-                                                            .replace('—', '-')
-                                                            .replace('\u00A0', ' ')
-                                                            .replace(Regex("\\s+"), " ")
-                                                            .lowercase(Locale.ROOT)
-
-                                                    val normalizedGroup =
-                                                        effectiveGroupRaw
-                                                            .trim()
-                                                            .replace('־', '-')
-                                                            .replace('–', '-')
-                                                            .replace('—', '-')
-                                                            .replace('\u00A0', ' ')
-                                                            .replace(Regex("\\s+"), " ")
-                                                            .lowercase(Locale.ROOT)
-
-                                                    selectedQrOccurrenceKey =
-                                                        "${state.date}|" +
-                                                                "$normalizedBranch|" +
-                                                                "$normalizedGroup|" +
-                                                                occurrenceId
-                                                },
-                                                shape = RoundedCornerShape(14.dp)
-                                            ) {
-                                                Text(
-                                                    text = buildString {
-                                                        append(
-                                                            tr(
-                                                                "אימון ${index + 1}",
-                                                                "Training ${index + 1}"
-                                                            )
-                                                        )
-
-                                                        if (timeText != null) {
-                                                            append(" · $timeText")
-                                                        }
-
-                                                        append(
-                                                            " · ${occurrenceId.takeLast(6)}"
-                                                        )
-                                                    },
-                                                    style = KmiTypography.action,
-                                                    textAlign = TextAlign.Center,
-                                                    maxLines = 2
-                                                )
-                                            }
-                                        }
-                                    }
-                                }
-
-                                attendanceQrError != null -> {
-                                    Text(
-                                        text = attendanceQrError.orEmpty(),
-                                        style = KmiTypography.secondary,
-                                        color = MaterialTheme.colorScheme.error,
-                                        textAlign = TextAlign.Center
-                                    )
-                                }
-
-                                attendanceQrPayload != null -> {
-                                    if (attendanceQrIssuedAsTest) {
-                                        Surface(
-                                            modifier = Modifier.fillMaxWidth(),
-                                            shape = RoundedCornerShape(12.dp),
-                                            color = MaterialTheme.colorScheme
-                                                .tertiaryContainer
-                                        ) {
-                                            Text(
-                                                text = tr(
-                                                    "QR מנהל פעיל — סריקה מאושרת תרשום נוכחות בפועל. הקוד תקף ל־30 דקות מרגע יצירתו.",
-                                                    "ADMIN QR — An approved scan records actual attendance. The code expires 30 minutes after creation."
-                                                ),
-                                                modifier = Modifier.padding(12.dp),
-                                                style = KmiTypography.caption,
-                                                fontWeight = FontWeight.Bold,
-                                                color = MaterialTheme.colorScheme
-                                                    .onTertiaryContainer,
-                                                textAlign = TextAlign.Center
-                                            )
-                                        }
-                                    }
-
-                                    val qrBitmap = remember(
-                                        attendanceQrPayload
-                                    ) {
-                                        runCatching {
-                                            val matrix = MultiFormatWriter()
-                                                .encode(
-                                                    attendanceQrPayload,
-                                                    BarcodeFormat.QR_CODE,
-                                                    840,
-                                                    840,
-                                                    mapOf(
-                                                        EncodeHintType.ERROR_CORRECTION to
-                                                                ErrorCorrectionLevel.H,
-                                                        EncodeHintType.MARGIN to 4
-                                                    )
-                                                )
-
-                                            val width = matrix.width
-                                            val height = matrix.height
-
-                                            val pixels = IntArray(
-                                                width * height
-                                            )
-
-                                            for (y in 0 until height) {
-                                                for (x in 0 until width) {
-                                                    pixels[y * width + x] =
-                                                        if (matrix[x, y]) {
-                                                            android.graphics.Color.BLACK
-                                                        } else {
-                                                            android.graphics.Color.WHITE
-                                                        }
-                                                }
-                                            }
-
-                                            createBitmap(
-                                                width,
-                                                height,
-                                                Bitmap.Config.ARGB_8888
-                                            ).apply {
-                                                setPixels(
-                                                    pixels,
-                                                    0,
-                                                    width,
-                                                    0,
-                                                    0,
-                                                    width,
-                                                    height
-                                                )
-
-                                                val qrCanvas =
-                                                    android.graphics.Canvas(this)
-
-                                                val centerX = width / 2f
-                                                val centerY = height / 2f
-
-                                                val logoWidth = width * 0.30f
-                                                val logoHeight = height * 0.13f
-
-                                                val logoRect = RectF(
-                                                    centerX - logoWidth / 2f,
-                                                    centerY - logoHeight / 2f,
-                                                    centerX + logoWidth / 2f,
-                                                    centerY + logoHeight / 2f
-                                                )
-
-                                                val backgroundPaint =
-                                                    Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                                                        color =
-                                                            android.graphics.Color.rgb(
-                                                                226,
-                                                                221,
-                                                                233
-                                                            ) // granite / soft lilac-gray
-                                                        style = Paint.Style.FILL
-                                                    }
-
-                                                val borderPaint =
-                                                    Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                                                        color =
-                                                            android.graphics.Color.rgb(
-                                                                196,
-                                                                185,
-                                                                220
-                                                            )
-                                                        style = Paint.Style.STROKE
-                                                        strokeWidth = width * 0.004f
-                                                    }
-
-                                                qrCanvas.drawRoundRect(
-                                                    logoRect,
-                                                    22f,
-                                                    22f,
-                                                    backgroundPaint
-                                                )
-
-                                                qrCanvas.drawRoundRect(
-                                                    logoRect,
-                                                    22f,
-                                                    22f,
-                                                    borderPaint
-                                                )
-
-                                                val logoPaint =
-                                                    Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                                                        color =
-                                                            android.graphics.Color.rgb(
-                                                                88,
-                                                                63,
-                                                                148
-                                                            )
-                                                        textSize = width * 0.050f
-                                                        typeface =
-                                                            Typeface.create(
-                                                                Typeface.DEFAULT,
-                                                                Typeface.BOLD
-                                                            )
-                                                        textAlign = Paint.Align.CENTER
-                                                        letterSpacing = 0.04f
-                                                    }
-
-                                                val logoBaseline =
-                                                    centerY -
-                                                            (
-                                                                    logoPaint.ascent() +
-                                                                            logoPaint.descent()
-                                                                    ) / 2f
-
-                                                qrCanvas.drawText(
-                                                    "KAMI",
-                                                    centerX,
-                                                    logoBaseline,
-                                                    logoPaint
-                                                )
-                                            }.asImageBitmap()
-                                        }.getOrNull()
-                                    }
-
-                                    if (qrBitmap != null) {
-                                        Image(
-                                            bitmap = qrBitmap,
-                                            contentDescription = tr(
-                                                "קוד QR לנוכחות באימון",
-                                                "Training attendance QR code"
-                                            ),
-                                            modifier = Modifier
-                                                .fillMaxWidth(0.86f)
-                                                .aspectRatio(1f)
-                                                .background(
-                                                    color = Color.White,
-                                                    shape = RoundedCornerShape(16.dp)
-                                                )
-                                                .padding(10.dp)
-                                        )
-
-                                        if (!attendanceQrIssuedAsTest) {
-                                            TextButton(
-                                                onClick = {
-                                                    printAttendanceQr(
-                                                        context = context,
-                                                        bitmap = qrBitmap.asAndroidBitmap(),
-                                                        branch = effectiveBranchRaw,
-                                                        group = effectiveGroupRaw,
-                                                        date = state.date,
-                                                        isEnglish = isEnglish
-                                                    )
-                                                },
-                                                modifier = Modifier.fillMaxWidth()
-                                            ) {
-                                                Icon(
-                                                    imageVector = Icons.Filled.Print,
-                                                    contentDescription = null,
-                                                    modifier = Modifier.size(
-                                                        KmiIconSize.medium
-                                                    )
-                                                )
-
-                                                Spacer(Modifier.width(8.dp))
-
-                                                Text(
-                                                    text = tr(
-                                                        "הדפס QR",
-                                                        "Print QR"
-                                                    ),
-                                                    style = KmiTypography.action
-                                                )
-                                            }
-                                        }
-
-                                        Text(
-                                            text =
-                                                if (attendanceQrIssuedAsTest) {
-                                                    tr(
-                                                        "QR מנהל: סריקה מאושרת תירשם כנוכחות אמיתית באימון שנבחר.",
-                                                        "Admin QR: An approved scan records actual attendance for the selected training."
-                                                    )
-                                                } else {
-                                                    tr(
-                                                        "סריקת הקוד מתאפשרת רק בחלון הזמן המאושר של האימון.",
-                                                        "Scanning is allowed only during the approved training window."
-                                                    )
-                                                },
-                                            style = KmiTypography.caption,
-                                            textAlign = TextAlign.Center
-                                        )
-                                    } else {
-                                        Text(
-                                            text = tr(
-                                                "אירעה שגיאה ביצירת תמונת QR.",
-                                                "Could not render the QR image."
-                                            ),
-                                            style = KmiTypography.caption,
-                                            color = MaterialTheme.colorScheme.error,
-                                            textAlign = TextAlign.Center
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    },
-                    confirmButton = {
-                        TextButton(
-                            onClick = {
-                                showAttendanceQrDialog = false
-                                if (openQrOnStart) {
-                                    onHomeClick()
-                                }
-                            }
-                        ) {
-                            Text(
-                                tr("סגור", "Close")
-                            )
-                        }
-                    }
-                )
-            }
+            AttendanceQrDialogContent()
 
             // ===== דיאלוג תרגיל שנבחר מהחיפוש =====
             pickedKey?.let { key ->

@@ -1272,7 +1272,21 @@ class AttendanceRepository private constructor(
                                         .getString("markedBy")
                                         ?.trim() == "trainee"
 
+                                val occurrenceId =
+                                    document.getString("occurrenceId")
+                                        ?.trim()
+                                        .orEmpty()
+
+                                val isVerifiedQrAttendance =
+                                    document.getBoolean("qrVerified") == true &&
+                                            occurrenceId.isNotEmpty() &&
+                                            document.getString("qrVerifiedOccurrenceId")
+                                                ?.trim() == occurrenceId &&
+                                            document.getString("coachStatus")
+                                                ?.trim() == AttendanceStatus.PRESENT.name
+
                                 if (
+                                    !isVerifiedQrAttendance &&
                                     !hasTraineeChoice &&
                                     !isLegacyTraineeChoice
                                 ) {
@@ -1288,16 +1302,16 @@ class AttendanceRepository private constructor(
                                         ?: return@mapNotNull null
 
                                 val statusRaw =
-                                    (
-                                            document.getString(
-                                                "traineeStatus"
-                                            )
-                                                ?: document.getString(
-                                                    "status"
+                                    if (isVerifiedQrAttendance) {
+                                        AttendanceStatus.PRESENT.name
+                                    } else {
+                                        (
+                                                document.getString("traineeStatus")
+                                                    ?: document.getString("status")
                                                 )
-                                            )
-                                        ?.trim()
-                                        .orEmpty()
+                                            ?.trim()
+                                            .orEmpty()
+                                    }
 
                                 val status =
                                     when (statusRaw) {
