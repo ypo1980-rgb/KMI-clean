@@ -3209,6 +3209,7 @@ private fun BeltGroupsContent(
         }
 
     val remoteExerciseMarks by vm.remoteExerciseMarks.collectAsState()
+    val marksVersion by vm.marksVersion.collectAsState()
     val exerciseMarkTopicKey = normalizeStatusPart(title)
 
     val markDocumentIds = remember(flatRows, exerciseMarkTopicKey) {
@@ -3497,6 +3498,35 @@ private fun BeltGroupsContent(
                             )
 
                         val exerciseMark = exerciseMarkFor(row)
+                        val traineeDateText = remember(
+                            marksVersion,
+                            row,
+                            exerciseMarkTopicKey,
+                            exerciseMark,
+                            isCoach
+                        ) {
+                            if (
+                                isCoach ||
+                                exerciseMark == UserProgressRepository.ExerciseMark.UNMARKED
+                            ) {
+                                ""
+                            } else {
+                                vm.getRemoteExerciseMarkSnapshot(
+                                    belt = row.belt,
+                                    canonicalTopicKey = exerciseMarkTopicKey,
+                                    canonicalExerciseId = row.statusId
+                                )
+                                    ?.takeIf { it.mark == exerciseMark }
+                                    ?.updatedAtMillis
+                                    ?.takeIf { it > 0L }
+                                    ?.let { millis ->
+                                        SimpleDateFormat("dd/MM/yy", Locale.getDefault())
+                                            .format(Date(millis))
+                                    }
+                                    .orEmpty()
+                            }
+                        }
+
                         val mastered = when (exerciseMark) {
                             UserProgressRepository.ExerciseMark.MASTERED -> true
                             UserProgressRepository.ExerciseMark.PARTIALLY_KNOWN,
@@ -3556,6 +3586,7 @@ private fun BeltGroupsContent(
                             mastered = mastered,
                             partiallyKnown = exerciseMark ==
                                     UserProgressRepository.ExerciseMark.PARTIALLY_KNOWN,
+                            traineeDateText = traineeDateText,
                             isFavorite = isFavorite,
                             hasNote = noteText.isNotBlank(),
                             isEnglish = isEnglish,
@@ -4122,6 +4153,7 @@ private fun HardExerciseRowCard(
     isExcluded: Boolean,
     mastered: Boolean?,
     partiallyKnown: Boolean,
+    traineeDateText: String,
     isFavorite: Boolean,
     hasNote: Boolean,
     isEnglish: Boolean,
@@ -4767,7 +4799,7 @@ private fun HardExerciseRowCard(
                 TraineeMaterialStatusSelector(
                     selectedStatus =
                         traineeStatus,
-                    dateText = "",
+                    dateText = traineeDateText,
                     isEnglish = isEnglish,
                     showSymbols = false,
                     onSelect =

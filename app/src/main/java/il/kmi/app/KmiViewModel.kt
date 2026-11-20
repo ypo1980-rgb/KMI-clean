@@ -92,6 +92,9 @@ class KmiViewModel(
         MutableStateFlow<Map<String, UserProgressRepository.ExerciseMark>>(emptyMap())
     val remoteExerciseMarks = _remoteExerciseMarks.asStateFlow()
 
+    private var remoteExerciseMarkSnapshots:
+            Map<String, UserProgressRepository.ExerciseMarkSnapshot> = emptyMap()
+
     private val _remoteCoachExerciseMarks =
         MutableStateFlow<
                 Map<String, UserProgressRepository.CoachExerciseMark>
@@ -114,6 +117,7 @@ class KmiViewModel(
 
         exerciseMarksUid = uid
 
+        remoteExerciseMarkSnapshots = emptyMap()
         _remoteExerciseMarks.value = emptyMap()
         _remoteCoachExerciseMarks.value = emptyMap()
 
@@ -147,7 +151,7 @@ class KmiViewModel(
 
         exerciseMarksJob = uid?.let { activeUid ->
             viewModelScope.launch {
-                UserProgressRepository.observeExerciseMarks(activeUid)
+                UserProgressRepository.observeExerciseMarkSnapshots(activeUid)
                     .catch { error ->
                         Log.w(
                             "KMI_EXERCISE_MARKS",
@@ -157,8 +161,11 @@ class KmiViewModel(
                     }
                     .collect { marks ->
                         if (exerciseMarksAuth.currentUser?.uid == activeUid) {
-                            if (_remoteExerciseMarks.value != marks) {
-                                _remoteExerciseMarks.value = marks
+                            if (remoteExerciseMarkSnapshots != marks) {
+                                remoteExerciseMarkSnapshots = marks
+                                _remoteExerciseMarks.value = marks.mapValues { (_, snapshot) ->
+                                    snapshot.mark
+                                }
 
                                 _marksVersion.value =
                                     _marksVersion.value + 1L
@@ -180,8 +187,18 @@ class KmiViewModel(
         belt: Belt,
         canonicalTopicKey: String,
         canonicalExerciseId: String
-    ): UserProgressRepository.ExerciseMark? {
+    ): UserProgressRepository.ExerciseMark? =
+        getRemoteExerciseMarkSnapshot(
+            belt = belt,
+            canonicalTopicKey = canonicalTopicKey,
+            canonicalExerciseId = canonicalExerciseId
+        )?.mark
 
+    fun getRemoteExerciseMarkSnapshot(
+        belt: Belt,
+        canonicalTopicKey: String,
+        canonicalExerciseId: String
+    ): UserProgressRepository.ExerciseMarkSnapshot? {
         if (
             canonicalTopicKey.isBlank() ||
             canonicalExerciseId.isBlank()
@@ -196,7 +213,7 @@ class KmiViewModel(
                 canonicalExerciseId = canonicalExerciseId
             )
 
-        return _remoteExerciseMarks.value[documentId]
+        return remoteExerciseMarkSnapshots[documentId]
     }
 
     fun getRemoteCoachExerciseMark(

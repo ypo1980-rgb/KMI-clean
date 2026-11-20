@@ -16,6 +16,7 @@ import java.security.MessageDigest
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.tasks.await
 
 object UserProgressRepository {
@@ -61,7 +62,19 @@ object UserProgressRepository {
             .document(uid)
             .collection("exerciseMarks")
 
+    data class ExerciseMarkSnapshot(
+        val mark: ExerciseMark,
+        val updatedAtMillis: Long?
+    )
+
     fun observeExerciseMarks(uid: String): Flow<Map<String, ExerciseMark>> =
+        observeExerciseMarkSnapshots(uid).map { snapshots ->
+            snapshots.mapValues { (_, snapshot) -> snapshot.mark }
+        }
+
+    fun observeExerciseMarkSnapshots(
+        uid: String
+    ): Flow<Map<String, ExerciseMarkSnapshot>> =
         callbackFlow {
             val auth = FirebaseAuth.getInstance()
             check(auth.currentUser?.uid == uid) {
@@ -100,7 +113,15 @@ object UserProgressRepository {
                         val status = document.getString("status")
                         ExerciseMark.entries
                             .firstOrNull { it.firestoreValue == status }
-                            ?.let { document.id to it }
+                            ?.let { mark ->
+                                document.id to ExerciseMarkSnapshot(
+                                    mark = mark,
+                                    updatedAtMillis = document
+                                        .getTimestamp("updatedAt")
+                                        ?.toDate()
+                                        ?.time
+                                )
+                            }
                     }.toMap()
 
                     trySend(marks)

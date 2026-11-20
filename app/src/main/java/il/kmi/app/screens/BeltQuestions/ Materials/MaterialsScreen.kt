@@ -4258,10 +4258,30 @@ fun MaterialsScreen(
      * אין לקרוא מ-SharedPreferences
      * כאשר שורה נכנסת למסך בגלילה.
      */
+                                                            val serverUpdatedAt = remember(
+                                                                marksVersion,
+                                                                belt.id,
+                                                                topicKey,
+                                                                statusId
+                                                            ) {
+                                                                vm.getRemoteExerciseMarkSnapshot(
+                                                                    belt = belt,
+                                                                    canonicalTopicKey = topicKey,
+                                                                    canonicalExerciseId = statusId
+                                                                )?.updatedAtMillis
+                                                            }
+
+                                                            val localUpdatedAt =
+                                                                traineeUpdatedAtStates[statusId] ?: 0L
+
                                                             val traineeUpdatedAt =
-                                                                traineeUpdatedAtStates[
-                                                                    statusId
-                                                                ] ?: 0L
+                                                                if (pendingItemStates.containsKey(statusId)) {
+                                                                    localUpdatedAt
+                                                                } else {
+                                                                    serverUpdatedAt
+                                                                        ?.takeIf { it > 0L }
+                                                                        ?: localUpdatedAt
+                                                                }
 
                                                             val traineeDateText =
                                                                 if (
